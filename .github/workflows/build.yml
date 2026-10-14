@@ -1,0 +1,35 @@
+name: Build Resonance
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Lua
+        uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.1"
+
+      - name: Build dist
+        run: lua scripts/build.lua
+
+      - name: Commit dist
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dist/
+          git commit -m "Auto-build dist [skip ci]" || echo "No changes"
+          git push || echo "Nothing to push"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: resonance-lua
+          path: dist/resonance.lua

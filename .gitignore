@@ -1,0 +1,13 @@
+﻿*.tmp
+*.log
+*.bak
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+__pycache__/
+*.pyc
+*.luac
+config.json
