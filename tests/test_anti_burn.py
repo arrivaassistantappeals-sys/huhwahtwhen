@@ -70,7 +70,57 @@ CASES={
  cleanup();assert(not overlay.Visible)
  ''',
 }
-class AntiBurn(unittest.TestCase): pass
+class AntiBurn(unittest.TestCase):
+ def test_extinguisher_visuals_stay_hidden_and_restore_on_unload(self):
+  source=(ROOT/'dist/resonance.lua').read_text()
+  code=source.split('-- Extinguisher visuals stay hidden locally for the hub session.',1)[1].split('-- End extinguisher visual suppression',1)[0]
+  mocks=r'''
+local callbacks,cleanups={},{}
+local Hub={alive=true,connections={}}
+function Hub.connect(signal,fn)
+ local connection={Disconnect=function(self) self.off=true end,fn=fn}
+ callbacks[signal]=connection;Hub.connections[connection]=true;return connection
+end
+function Hub.cleanup(fn) table.insert(cleanups,fn) end
+local function emit(signal,...) local c=callbacks[signal];if c and not c.off then c.fn(...) end end
+local function node(name,class,parent)
+ local obj={Name=name,Parent=parent,children={},signals={}}
+ if parent then table.insert(parent.children,obj) end
+ function obj:IsA(kind) return kind==class end
+ function obj:GetPropertyChangedSignal(property) self.signals[property]=self.signals[property] or {};return self.signals[property] end
+ function obj:GetDescendants()
+  local result={}
+  for _,child in ipairs(self.children) do table.insert(result,child);for _,nested in ipairs(child:GetDescendants()) do table.insert(result,nested) end end
+  return result
+ end
+ function obj:FindFirstChild(name) for _,child in ipairs(self.children) do if child.Name==name then return child end end end
+ return obj
+end
+local Workspace=node("Workspace","Workspace");Workspace.DescendantAdded={};Workspace.DescendantRemoving={}
+local map=node("Map","Model",Workspace);local hole=node("Hole","Model",map)
+local small=node("PoisonSmallHole","Model",hole);local big=node("PoisonBigHole","Model",hole)
+local part=node("ExtinguishPart","BasePart",small);part.LocalTransparencyModifier=0
+local decal=node("Decal","Decal",part);decal.Transparency=0.2
+local image=node("Image","ImageLabel",part);image.ImageTransparency=0.3
+local unrelated=node("Other","BasePart",small);unrelated.LocalTransparencyModifier=0
+'''
+  body=r'''
+assert(part.LocalTransparencyModifier==1 and decal.Transparency==1 and image.ImageTransparency==1)
+assert(unrelated.LocalTransparencyModifier==0)
+part.LocalTransparencyModifier=0;emit(part.signals.LocalTransparencyModifier);assert(part.LocalTransparencyModifier==1)
+local late=node("ExtinguishPart","BasePart",big);late.LocalTransparencyModifier=0
+emit(Workspace.DescendantAdded,late);assert(late.LocalTransparencyModifier==1)
+local texture=node("Texture","Texture",late);texture.Transparency=0
+emit(Workspace.DescendantAdded,texture);assert(texture.Transparency==1)
+emit(Workspace.DescendantRemoving,texture);assert(texture.Transparency==0)
+for _,fn in ipairs(cleanups) do fn() end
+assert(part.LocalTransparencyModifier==0 and decal.Transparency==0.2 and image.ImageTransparency==0.3 and late.LocalTransparencyModifier==0)
+'''
+  with tempfile.TemporaryDirectory() as tmp:
+   path=Path(tmp)/'visuals.luau';path.write_text(mocks+code+body)
+   result=subprocess.run([os.environ.get('LUAU_BIN','luau'),str(path)],capture_output=True,text=True,timeout=15)
+   self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
 
 def case(body):
  def test(self):

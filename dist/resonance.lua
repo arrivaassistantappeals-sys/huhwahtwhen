@@ -2975,11 +2975,69 @@ DefenseGroup:AddToggle("AntiExplosionToggle", {
 })
 -- End explosion protection
 
+-- Extinguisher visuals stay hidden locally for the hub session.
+do
+    local records={}
+    local function belongs(object)
+        local part=object
+        while part and part~=Workspace do
+            if part.Name=="ExtinguishPart" and part:IsA("BasePart") then
+                local area=part.Parent
+                local hole=area and area.Parent
+                local map=hole and hole.Parent
+                if area and (area.Name=="PoisonSmallHole" or area.Name=="PoisonBigHole")
+                    and hole and hole.Name=="Hole" and map and map.Name=="Map" and map.Parent==Workspace then return true end
+            end
+            part=part.Parent
+        end
+        return false
+    end
+    local function hide(object)
+        if records[object] or not belongs(object) then return end
+        local property,value
+        if object:IsA("BasePart") then property,value="LocalTransparencyModifier",1
+        elseif object:IsA("Decal") or object:IsA("Texture") then property,value="Transparency",1
+        elseif object:IsA("ImageLabel") or object:IsA("ImageButton") then property,value="ImageTransparency",1
+        elseif object:IsA("SurfaceGui") or object:IsA("BillboardGui") then property,value="Enabled",false end
+        if not property then return end
+        local record={property=property,original=object[property]}
+        records[object]=record
+        object[property]=value
+        record.connection=Hub.connect(object:GetPropertyChangedSignal(property),function()
+            if Hub.alive and object.Parent and object[property]~=value then object[property]=value end
+        end)
+    end
+    local function inspect(object)
+        hide(object)
+        if object.Name=="Map" or object.Name=="Hole" or object.Name=="PoisonSmallHole"
+            or object.Name=="PoisonBigHole" or object.Name=="ExtinguishPart" then
+            for _,child in ipairs(object:GetDescendants()) do hide(child) end
+        end
+    end
+    Hub.connect(Workspace.DescendantAdded,inspect)
+    Hub.connect(Workspace.DescendantRemoving,function(object)
+        local record=records[object]
+        if not record then return end
+        record.connection:Disconnect();Hub.connections[record.connection]=nil
+        pcall(function() object[record.property]=record.original end)
+        records[object]=nil
+    end)
+    local map=Workspace:FindFirstChild("Map")
+    if map then inspect(map) end
+    Hub.cleanup(function()
+        for object,record in pairs(records) do
+            record.connection:Disconnect();Hub.connections[record.connection]=nil
+            pcall(function() object[record.property]=record.original end)
+        end
+        table.clear(records)
+    end)
+end
+-- End extinguisher visual suppression
+
 do
 	-- Anti Burn: local extinguisher visibility restoration.
 	local antiBurnEnabled = false
 	local burnThreadToken = 0
-	local burnVisuals = {}
 
 	local function getExtinguisher()
 		local map = workspace:FindFirstChild("Map")
@@ -2988,47 +3046,6 @@ do
 		local part = poison and poison:FindFirstChild("ExtinguishPart")
 
 		return part and part:IsA("BasePart") and part or nil
-	end
-
-	local function hideBurnPart(part)
-		if not part then return end
-
-		local function hideVisual(obj)
-			local property
-
-			if obj:IsA("BasePart") then
-				property = "LocalTransparencyModifier"
-			elseif obj:IsA("Decal") or obj:IsA("Texture") then
-				property = "Transparency"
-			end
-
-			if not property then return end
-
-			if not burnVisuals[obj] then
-				burnVisuals[obj] = {
-					property = property,
-					value = obj[property],
-				}
-			end
-
-			obj[property] = 1
-		end
-
-		hideVisual(part)
-
-		for _, obj in ipairs(part:GetDescendants()) do
-			hideVisual(obj)
-		end
-	end
-
-	local function restoreBurnVisuals()
-		for obj, saved in pairs(burnVisuals) do
-			pcall(function()
-				obj[saved.property] = saved.value
-			end)
-		end
-
-		table.clear(burnVisuals)
 	end
 
 	local function hookBurn(char)
@@ -3048,7 +3065,6 @@ do
 					or firePart and firePart:FindFirstChild("FireDebounce")
 
 				local extinguisher = getExtinguisher()
-				hideBurnPart(extinguisher)
 
 				if debounce and debounce.Value and firePart and extinguisher then
 					Hub.burnOriginal = Hub.burnOriginal or {
@@ -3080,7 +3096,6 @@ do
 			Hub.burnOriginal = nil
 		end
 
-		restoreBurnVisuals()
 	end
 
 	Hub.cleanup(restoreBurn)
@@ -3102,9 +3117,7 @@ do
 			if on then
 				local extinguisher = getExtinguisher()
 
-				if extinguisher then
-					hideBurnPart(extinguisher)
-				else
+                if not extinguisher then
 					notify("Anti Burn", "Extinguisher not found in this map.", 5)
 				end
 
