@@ -14293,7 +14293,7 @@ do
     end
     Hub.sampleCharacterFlight=update
     group:AddToggle("PackCharacterFlight",{Text="Flight",Default=false,Callback=function(on) enabled=on;if not on then stop() end end})
-    group:AddSlider("PackCharacterFlightSpeed",{Text="Flight speed",Default=50,Min=5,Max=250,Rounding=0,Callback=function(value) speed=value end})
+    group:AddSlider("PackCharacterFlightSpeed",{Text="Flight speed",Default=50,Min=5,Max=1000,Rounding=0,Callback=function(value) speed=value end})
     Hub.keybindGroups.actions:AddLabel("Flight"):AddKeyPicker("PackFlightKey",{Default="H",Text="Flight",Callback=function()
         if not UserInputService:GetFocusedTextBox() then Toggles.PackCharacterFlight:SetValue(not enabled) end
     end})
