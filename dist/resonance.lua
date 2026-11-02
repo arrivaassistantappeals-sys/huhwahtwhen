@@ -2029,7 +2029,6 @@ Hub.keybindDefinitions = {
     {id = "FreeMouseKey", label = "Toggle free mouse", default = "F"},
     {id = "AnchorObjectKey", label = "Anchor held object", default = "G"},
     {id = "CreativeQuickSpawnKey", label = "Quick-spawn selected toy", default = "P"},
-    {id = "MissileThrowKey", label = "Throw Bomb", default = "V"},
     {id = "ExplodeBombKey", label = "Explode Bomb", default = "J"},
     {id = "ExplodeFireworkKey", label = "Explode Firework", default = "N"},
     {id = "EmergencyUnloadKey", label = "Unload hub", default = "End"},
@@ -7645,8 +7644,14 @@ do
         if op.toy and reserved[op.toy]==op then reserved[op.toy]=nil end
         flights[op]=nil
     end
+    local function cancelWorker(worker)
+        if worker and coroutine.status(worker)~="dead" and worker~=coroutine.running() then
+            pcall(Hub.nativeTask.cancel,worker);Hub.threads[worker]=nil
+        end
+    end
     local function finish(op)
         disconnect(op.listener);op.listener=nil
+        cancelWorker(op.spawnWorker);op.spawnWorker=nil
         if active==op then active=nil end
         nextLoop=os.clock()+interval
     end
@@ -7655,9 +7660,8 @@ do
         local op=active;active=nil
         if op then
             disconnect(op.listener)
-            if op.worker and coroutine.status(op.worker)~="dead" and op.worker~=coroutine.running() then
-                pcall(Hub.nativeTask.cancel,op.worker);Hub.threads[op.worker]=nil
-            end
+            cancelWorker(op.worker)
+            cancelWorker(op.spawnWorker)
             releaseFlight(op)
             if op.mode=="Cache" and op.toy then Hub.missileKeptModels=Hub.missileKeptModels or {};Hub.missileKeptModels[op.toy]=true end
         end
@@ -7739,14 +7743,20 @@ do
         end
         op.listener=Hub.connect(folder.ChildAdded,capture)
         status:SetText("Spawning "..name.."...")
+        -- Replication can arrive before InvokeServer returns. Prepare that model immediately.
+        op.spawnWorker=task.spawn(function()
+            local ok,result=pcall(function() return Hub.invoke(spawn,name,spawnFrame,Vector3.zero) end)
+            if not current(op) then return end
+            if not ok then
+                Hub.lastMissileError=tostring(result):sub(1,240)
+                stop("Missile spawn failed: "..Hub.lastMissileError)
+                return
+            end
+            if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder
+                and result.Name==name and not op.before[result] then reserve(op,result) end
+        end)
         op.worker=task.spawn(function()
             local ok,err=xpcall(function()
-                local result=Hub.invoke(spawn,name,spawnFrame,Vector3.zero)
-                if not current(op) then return end
-                -- Prefer the returned model when the server exposes it. Otherwise
-                -- use a new own-folder child, never the moving global toy counter.
-                if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder
-                    and result.Name==name and not op.before[result] then reserve(op,result) end
                 local hit,body
                 repeat
                     if not current(op) then return end
@@ -7823,7 +7833,6 @@ do
     Hub.prepareExplosive=function(name,callback) return start(name,"Cache",callback) end
     Hub.missileWorkBusy=function() return active~=nil end
     Hub.cancelMissileWork=stop
-    shortcuts:AddLabel("Throw Bomb"):AddKeyPicker("MissileThrowKey",{Default="V",Text="Throw Bomb",Callback=Hub.throwMissile})
     shortcuts:AddLabel("Explode Bomb"):AddKeyPicker("ExplodeBombKey",{Default="J",Text="Explode Bomb",Callback=function(value) if type(value)~="string" then Hub.explodeMissile("BombMissile") end end})
     shortcuts:AddLabel("Explode Firework"):AddKeyPicker("ExplodeFireworkKey",{Default="N",Text="Explode Firework",Callback=function(value) if type(value)~="string" then Hub.explodeMissile("FireworkMissile") end end})
     shortcuts:AddToggle("MissileThrowEnabled",{Text="Enable missile actions",Default=true,Callback=function(on) enabled=on;if not on then stop("Missile actions disabled.") end end})
@@ -7958,7 +7967,7 @@ do
         pending={aim=isAim,time=os.clock()}
         local accepted=Hub.prepareExplosive(name,function(entry)
             if not enabled or ticket~=epoch then dispose(entry);return end
-            pending=nil;nextSpawn=os.clock()+0.15
+            pending=nil;nextSpawn=os.clock()
             Hub.lastMissileError=nil
             if isAim then aimEntry=entry else table.insert(cache,entry) end
             status:SetText(string.format("%d/%d %s cached, %s trigger, %s target.",#cache,amount,kind,trigger,targetMode))
@@ -7987,10 +7996,14 @@ do
             aimEntry.force.Position=Vector3.new(math.floor(now/0.05)%2==0 and 1000 or -1000,400,10000)
         end
         if pending and not Hub.missileWorkBusy() then pause(Hub.lastMissileError or "toy preparation failed or was cancelled");return end
-        if pending then return end
         if wantsAim() and not aimEntry then
-            if spawnBudget() and now>=nextSpawn then prepare("DiceSmall",true) end
+            if not pending and spawnBudget() and now>=nextSpawn and not Hub.missileWorkBusy() then prepare("DiceSmall",true) end
             return
+        end
+        -- Amount is a cache capacity, not a barrier: fire whatever is ready.
+        if #queue==0 and #cache>0 and readyToFire() and target() then
+            if trigger=="Key" or targetMode=="Mouse" then table.insert(queue,table.remove(cache,1))
+            else queue=cache;cache={} end
         end
         if #queue>0 and now>=nextFire and readyToFire() then
             local positionPart,position=target()
@@ -8010,14 +8023,7 @@ do
                 nextFire=now+delay
             end
         end
-        if #queue==0 and #cache>0 and readyToFire() and (#cache>=amount or not spawnBudget() or trigger=="Key" or targetMode=="Mouse") then
-            if target() then
-                if trigger=="Key" or targetMode=="Mouse" then table.insert(queue,table.remove(cache,1))
-                else queue=cache;cache={} end
-                nextFire=now
-            end
-        end
-        if #queue==0 and #cache+cooling<amount and now>=nextSpawn and not Hub.missileWorkBusy() and spawnBudget() then prepare(types[kind],false) end
+        if not pending and #cache+#queue+cooling<amount and now>=nextSpawn and not Hub.missileWorkBusy() and spawnBudget() then prepare(types[kind],false) end
         if now>=nextStatus and not pending then
             nextStatus=now+0.5
             local detail
@@ -8049,7 +8055,7 @@ do
     group:AddLabel("Trigger Bombs (hold)"):AddKeyPicker("BlitzTriggerBombsKey",{Default="F",Text="Trigger Bombs",Callback=function() end})
     group:AddDropdown("BlitzTriggerMode",{Text="Trigger Mode",Values={"Key","Automatic"},Default=2,Callback=function(value) trigger=value;held=false end})
     group:AddSlider("BlitzExplosionDelay",{Text="Delay (Automatic Trigger Mode)",Default=0,Min=0,Max=0.5,Rounding=3,Callback=function(value) delay=value end})
-    group:AddSlider("BlitzExplosionAmount",{Text="Amount to Explode",Default=1,Min=1,Max=20,Rounding=0,Callback=function(value) amount=value end})
+    group:AddSlider("BlitzExplosionAmount",{Text="Cache capacity",Default=1,Min=1,Max=20,Rounding=0,Callback=function(value) amount=value end})
     group:AddDropdown("BlitzExplosionTarget",{Text="Target",Values={"Spawn","Player","Mouse"},Default=1,Callback=function(value) targetMode=value;held=false end})
     picker=group:AddDropdown("BlitzExplosionPlayer",{Text="Select Player",Values={},Callback=function(value) selected=type(value)=="string" and Players:FindFirstChild(value) or nil end})
     group:AddToggle("BlitzPredictPlayer",{Text="Predict Player Movement",Default=false,Callback=function(on) predict=on end})
@@ -8073,7 +8079,7 @@ do
     end})
     help:AddLabel("Mouse targeting uses Press/Hold Trigger Bombs, even in Automatic mode, matching Blitz. Player targeting needs Target = Player and a selected unprotected player outside a plot.")
     help:AddLabel("The cache is created from your own toys and parked at height 10000 after ownership is confirmed. Prediction and mouse aiming use an owned DiceSmall as Blitz's replicated aim reference. This tool does not buy toys.")
-    help:AddLabel("Zero delay fires the ready batch together. Spawning is serialized with a short preparation interval, rather than running five independent polling loops. Failures pause instead of switching Explode off. Stop and unload keep toys; deletion needs the explicit delete button.")
+    help:AddLabel("Ready explosives fire immediately, even while another toy is being prepared. Cache capacity sets the number of reusable explosives to keep, without requiring a full cache. Spawning remains serialized and respects server cooldowns and toy limits. Stop and unload keep toys.")
     Hub.connect(UserInputService.InputBegan,function(input,processed)
         if processed or not enabled or UserInputService:GetFocusedTextBox() or Hub.keybindCaptureActive then return end
         if Hub.matchesKeybind("BlitzTriggerBombsKey",input,"F") then held=true end
