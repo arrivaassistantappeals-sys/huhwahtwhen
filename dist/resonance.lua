@@ -1412,6 +1412,30 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			if self.fitWindow then self.fitWindow() end
 		end
 		function UI:Destroy() if self.destroyed then return end;self.destroyed=true;self.pointerAction=nil;if self.gui then self.gui:Destroy() end;if self.noticeGui then self.noticeGui:Destroy();self.noticeGui=nil end;if self.metricsConnection then self.metricsConnection:Disconnect();Hub.connections[self.metricsConnection]=nil end;if self.metricsGui then self.metricsGui:Destroy();self.metricsGui=nil end end
+		-- BEGIN NOTICE STYLE
+		function UI:RefreshNoticeStyle(frame)
+			if not frame.Parent then return end
+			local kind=frame:GetAttribute("NoticeKind") or "info"
+			local defaults={info=Color3.fromRGB(106,177,255),warning=Color3.fromRGB(255,202,105),success=Color3.fromRGB(111,224,160),danger=Color3.fromRGB(255,115,125)}
+			local accent=self["noticeColor_"..kind] or defaults[kind] or defaults.info
+			frame.BackgroundColor3=self.noticeBackground or colors.card
+			frame.BackgroundTransparency=self.noticeBackgroundTransparency or 0
+			local newHex=string.format("#%02X%02X%02X",math.floor(accent.R*255+0.5),math.floor(accent.G*255+0.5),math.floor(accent.B*255+0.5))
+			local oldHex=frame:GetAttribute("NoticeAccentHex")
+			for _,object in ipairs(frame:GetDescendants()) do
+				if object:IsA("UIStroke") then object.Color=accent;object.Thickness=self.noticeBorderThickness or 1.2
+				elseif object:IsA("UICorner") then object.CornerRadius=UDim.new(0,self.noticeCornerRadius or 10)
+				elseif object.Name=="NotificationHeading" then object.TextColor3=accent
+				elseif object.Name=="NotificationIcon" then object.ImageColor3=accent
+				elseif object.Name=="NotificationBody" then
+					object.TextColor3=self.noticeBodyColor or colors.noticeText
+					if oldHex and oldHex~=newHex then object.Text=object.Text:gsub(oldHex,newHex) end
+				end
+			end
+			frame:SetAttribute("NoticeAccentHex",newHex)
+		end
+		-- END NOTICE STYLE
+
 		function UI:SetNoticePreference(key,value)
 			self[key]=value
 			if key=="noticeLimit" and self.notices then
@@ -1426,6 +1450,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			for _,frame in ipairs(self.notices or {}) do
 				local scale=frame:FindFirstChild("NotificationScale")
 				if scale then scale.Scale=self.noticeScale or 1 end
+				self:RefreshNoticeStyle(frame)
 			end
 		end
 		Hub.setNoticePreference=function(key,value) UI:SetNoticePreference(key,value) end
@@ -1487,11 +1512,13 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			elseif category:find("error",1,true) or category:find("fail",1,true) then iconName="circle-alert"
 			elseif iconName=="settings" then iconName="info" end
 			if category:find("[protected]",1,true) then accent=Color3.fromRGB(111,224,160) end
+			local noticeKind=Hub.notificationKind and Hub.notificationKind(info) or (bad and "danger" or "info")
+			frame:SetAttribute("NoticeKind",noticeKind)
 			local headerRow=make("Frame",frame,{BackgroundTransparency=1,
 				Position=UDim2.fromOffset(16,12),Size=UDim2.new(1,-32,0,24)})
-			icon(headerRow,iconName,{AnchorPoint=Vector2.new(0,0.5),Position=UDim2.new(0,0,0.5,0),
+			icon(headerRow,iconName,{Name="NotificationIcon",AnchorPoint=Vector2.new(0,0.5),Position=UDim2.new(0,0,0.5,0),
 				Size=UDim2.fromOffset(20,20),ImageColor3=accent})
-			local heading=text(headerRow,title,{Position=UDim2.fromOffset(30,0),Size=UDim2.new(1,-30,1,0),
+			local heading=text(headerRow,title,{Name="NotificationHeading",Position=UDim2.fromOffset(30,0),Size=UDim2.new(1,-30,1,0),
 				Font=Enum.Font.GothamBold,TextSize=15,TextColor3=accent,TextWrapped=true,LineHeight=1.2,
 				TextYAlignment=Enum.TextYAlignment.Center,TextTruncate=Enum.TextTruncate.None})
 			local function escape(value)
@@ -1534,10 +1561,12 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			end
 			local readable=table.concat(pieces)
 			readable=readable:gsub("%[Protected%]",'<font color="#6FE0A0">[Protected]</font>')
-			local body=text(frame,readable,{Position=UDim2.fromOffset(16,44),Size=UDim2.new(1,-32,0,24),
+			frame:SetAttribute("NoticeAccentHex",hex)
+			local body=text(frame,readable,{Name="NotificationBody",Position=UDim2.fromOffset(16,44),Size=UDim2.new(1,-32,0,24),
 				RichText=true,TextWrapped=true,TextSize=15,LineHeight=1.15,TextColor3=Color3.fromRGB(245,245,245),
 				TextYAlignment=Enum.TextYAlignment.Top,TextTruncate=Enum.TextTruncate.None})
 			body.Visible=content~=""
+			self:RefreshNoticeStyle(frame)
 			local function fitNotice()
 				if not frame.Parent then return end
 				local function measuredHeight(value,label,font,lineHeight)
@@ -1624,7 +1653,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				end
 			end
 		end
-		Hub.setSidebarTheme=function(name) UI:SetTheme(name);UI:RefreshAccentGlow() end
+		Hub.setSidebarTheme=function(name) UI:SetTheme(name);UI:RefreshAccentGlow();for _,frame in ipairs(UI.notices or {}) do UI:RefreshNoticeStyle(frame) end end
 		Hub.setCustomThemeColor=function(key,value)
 			if custom[key]==nil or not hex(value) then return false end
 			custom[key]=tostring(value):gsub("#","")
@@ -1654,7 +1683,8 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 		return ok,err
 	end
 	function Library:Notify(info)
-		Rayfield:Notify({Title = info.Title or "Arriva", Content = info.Description or info.Content or "",
+		if Hub.playNotificationSound then pcall(Hub.playNotificationSound,info) end
+		Rayfield:Notify({Type = info.Type or info.Kind, Title = info.Title or "Arriva", Content = info.Description or info.Content or "",
 			Duration = info.Time or info.Duration or 5})
 	end
 	function Library:OnUnload(callback) table.insert(self.callbacks, callback) end
@@ -2145,12 +2175,13 @@ Hub.cleanup(function()
 end)
 
 -- Helper Functions
-local function notify(title, content, duration)
+local function notify(title, content, duration, kind)
 	-- Legacy calls use notify(message, seconds).
 	if type(content) == "number" and duration == nil then
 		duration, content = content, ""
 	end
 	Library:Notify({
+		Type = kind,
 		Title = title or "Notification",
 		Description = content or "",
 		Time = duration or 5,
@@ -5103,8 +5134,8 @@ do
         local now = os.clock()
         if now < (Hub.loopNoticeTimes[token] or -math.huge) then return end
         Hub.loopNoticeTimes[token] = now + (kind == "warnings" and 15 or 3)
-        Library:Notify({Title = title, Description = message, Time = kind == "warnings" and 6 or 4})
-        if Hub.loopNoticePrefs.sounds then
+        Library:Notify({Title = title, Description = message, Type = kind == "warnings" and "warning" or kind == "ready" and "success" or "info", Time = kind == "warnings" and 6 or 4})
+        if Hub.loopNoticePrefs.sounds and not Hub.playNotificationSound then
             local sound = Hub.new("Sound", Workspace)
             sound.SoundId = "rbxassetid://4590662766"
             sound.Volume = 0.4
@@ -14175,7 +14206,8 @@ Hub.cleanup(function() setWeldLag(false) end)
         if repeated and phase~="Retrying" then return end
         if now-(notices[phase] or -math.huge)<cooldown then return end
         notices[phase]=now
-        notify("Gucci",message or messages[phase] or ("Gucci: "..phase),4)
+        notify("Gucci",message or messages[phase] or ("Gucci: "..phase),4,
+            phase=="Active" and "success" or phase=="Error" and "danger" or phase=="Retrying" and "warning" or "info")
     end
     Hub.updateGucciStatus=function()
         if tbl8.GucciAntiGrab then Hub.reportGucciStatus(Hub.gucciStage or "Starting") end
@@ -15469,6 +15501,190 @@ end})
 Hub.keybindGroups.interface:AddLabel("Toggle menu"):AddKeyPicker("MenuKeybind", { Default = "M", NoUI = true, Text = "Menu keybind" })
 Library.ToggleKeybind = Options.MenuKeybind
 
+-- BEGIN CAMERA CLIP FADE
+do
+(function()
+    local group=Tabs.Visual:AddRightGroupbox("Camera clipping")
+    local enabled=false
+    local originalMode
+    local faded={}
+    local beforeName="ArrivaCameraClipRestore"
+    local afterName="ArrivaCameraClipFade"
+    local function restore()
+        for part,value in pairs(faded) do
+            pcall(function() part.LocalTransparencyModifier=value end)
+            faded[part]=nil
+        end
+    end
+    local function setMode(value)
+        local ok=pcall(function() Player.DevCameraOcclusionMode=value end)
+        if not ok and type(sethiddenproperty)=="function" then
+            ok=pcall(sethiddenproperty,Player,"DevCameraOcclusionMode",value)
+        end
+        return ok and Player.DevCameraOcclusionMode==value
+    end
+    local function stop()
+        enabled=false
+        RunService:UnbindFromRenderStep(beforeName)
+        RunService:UnbindFromRenderStep(afterName)
+        restore()
+        if originalMode~=nil then setMode(originalMode);originalMode=nil end
+    end
+    local function fade(part)
+        if not part:IsA("BasePart") or not part.Parent then return end
+        local char=Player.Character
+        if char and part:IsDescendantOf(char) then return end
+        if faded[part]~=nil then return end
+        faded[part]=part.LocalTransparencyModifier
+        -- Effective transparency = 1 - (1 - Transparency) * (1 - modifier).
+        -- Already more-transparent surfaces stay at their original transparency.
+        local base=part.Transparency
+        part.LocalTransparencyModifier=base<0.6 and (0.6-base)/(1-base) or 0
+    end
+    local function update()
+        if not enabled or not Hub.alive then return end
+        local cam=Workspace.CurrentCamera
+        if not cam then return end
+        local char=Player.Character
+        local ignore=char and {char} or {}
+        local ok,parts=pcall(function() return cam:GetPartsObscuringTarget({cam.Focus.Position},ignore) end)
+        if ok then for _,part in ipairs(parts) do fade(part) end end
+        -- Also catch walls containing the camera itself, including after a teleport.
+        local overlap=OverlapParams.new()
+        overlap.FilterType=Enum.RaycastFilterType.Exclude
+        overlap.FilterDescendantsInstances=ignore
+        local found,inside=pcall(function() return Workspace:GetPartBoundsInBox(cam.CFrame,Vector3.new(0.5,0.5,0.5),overlap) end)
+        if found then for _,part in ipairs(inside) do fade(part) end end
+    end
+    group:AddToggle("CameraClipFade",{Text="Camera noclip + surface fade",Default=false,Callback=function(on)
+        stop()
+        if not on then return end
+        originalMode=Player.DevCameraOcclusionMode
+        if not setMode(Enum.DevCameraOcclusionMode.Invisicam) then
+            stop()
+            notify("Camera warning","Camera occlusion mode could not be changed in this environment.",5,"warning")
+            if Toggles.CameraClipFade then Toggles.CameraClipFade:SetValue(false) end
+            return
+        end
+        enabled=true
+        -- Restore before Roblox updates occlusion; apply our exact fade afterward.
+        RunService:BindToRenderStep(beforeName,Enum.RenderPriority.Camera.Value-1,restore)
+        RunService:BindToRenderStep(afterName,Enum.RenderPriority.Camera.Value+1,update)
+    end})
+    group:AddLabel("Obstructing surfaces fade to 0.6 transparency locally and restore when clear.")
+    Hub.connect(Player.CharacterRemoving,restore)
+    Hub.cleanup(stop)
+end)()
+end
+-- END CAMERA CLIP FADE
+
+-- BEGIN NOTIFICATION SOUND LIBRARY
+do
+(function()
+    local group=Tabs.Notifications:AddRightGroupbox("Sound library")
+    local presets={
+        Pop="rbxassetid://124815381429574",
+        ["Bubble Pop"]="rbxassetid://106994752352532",
+        Steam="rbxassetid://18317665126",
+        Loaded="rbxassetid://71450094482101",
+        Classic="rbxassetid://97643101798871",
+    }
+    local kinds={"info","warning","success","danger"}
+    local defaults={info="Pop",warning="Steam",success="Loaded",danger="Classic"}
+    local settings={}
+    local voices={}
+    local last={}
+    local enabled=true
+    local function asset(value)
+        value=tostring(value or ""):match("^%s*(.-)%s*$")
+        local id=value:match("^(%d+)$") or value:match("^rbxassetid://(%d+)$")
+        if not id and value:match("^https?://") then id=value:match("[?&]id=(%d+)") or value:match("/library/(%d+)") or value:match("/store/asset/(%d+)") end
+        if id and tonumber(id) and tonumber(id)>0 then return "rbxassetid://"..id end
+    end
+    local function classify(info)
+        local explicit=tostring(info.Type or info.Kind or ""):lower()
+        if explicit=="error" then explicit="danger" end
+        if settings[explicit] then return explicit end
+        local text=(tostring(info.Title or "").." "..tostring(info.Description or info.Content or "")):lower()
+        for _,word in ipairs({"error","failed","failure","died","danger","respawn","blackhole","black hole","kicked","disconnected","lost"}) do if text:find(word,1,true) then return "danger" end end
+        for _,word in ipairs({"warning","retry","retrying","unavailable","could not","couldn't","not confirmed","not active","waiting"}) do if text:find(word,1,true) then return "warning" end end
+        for _,word in ipairs({"success","complete","loaded","saved","restored","ready","active","joined","[protected]"}) do if text:find(word,1,true) then return "success" end end
+        return "info"
+    end
+    Hub.notificationKind=classify
+    Hub.playNotificationSound=function(info,preview)
+        if not Hub.alive or (not preview and not enabled) then return end
+        local kind=classify(info)
+        local config=settings[kind]
+        local id=config.preset=="Custom" and config.custom or presets[config.preset]
+        if not id or config.volume<=0 then return end
+        local now=os.clock()
+        if not preview and now-(last[kind] or -math.huge)<0.7 then return end
+        last[kind]=now
+        local voice=voices[kind]
+        if not voice or not voice.Parent then voice=Hub.new("Sound",game:GetService("SoundService"));voices[kind]=voice end
+        voice:Stop();voice.SoundId=id;voice.Volume=config.volume;voice.TimePosition=0
+        pcall(function() voice:Play() end)
+    end
+    group:AddToggle("NotificationSoundsEnabled",{Text="Notification sounds",Default=true,Callback=function(on)
+        enabled=on
+        if not on then for _,voice in pairs(voices) do voice:Stop() end end
+    end})
+    for _,kind in ipairs(kinds) do
+        local key=kind:sub(1,1):upper()..kind:sub(2)
+        local config={preset=defaults[kind],volume=0.4}
+        settings[kind]=config
+        group:AddDropdown("Notice"..key.."Sound",{Text=key.." sound",Values={"Off","Pop","Bubble Pop","Steam","Loaded","Classic","Custom"},Default=defaults[kind],Callback=function(value) config.preset=value end})
+        group:AddInput("Notice"..key.."Asset",{Text=key.." custom sound ID",Default="",Finished=true,Callback=function(value)
+            local id=asset(value)
+            if tostring(value or ""):match("^%s*$") then config.custom=nil
+            elseif id then config.custom=id
+            else notify("Sound warning","Use a numeric sound ID, rbxassetid:// ID, or Roblox asset link.",4,"warning") end
+        end})
+        group:AddSlider("Notice"..key.."Volume",{Text=key.." volume",Default=0.4,Min=0,Max=2,Rounding=2,Callback=function(value) config.volume=value end})
+        group:AddButton({Text="Preview "..kind.." sound",Func=function() Hub.playNotificationSound({Type=kind},true) end})
+    end
+    group:AddLabel("Custom sounds need Roblox permission in this experience. Off mutes a category.")
+    Hub.cleanup(function()
+        Hub.playNotificationSound=nil;Hub.notificationKind=nil
+        for _,voice in pairs(voices) do
+            voice:Stop();Hub.instances[voice]=nil;Hub.assetTargets[voice]=nil;voice:Destroy()
+        end
+    end)
+end)()
+end
+-- END NOTIFICATION SOUND LIBRARY
+
+do
+(function()
+    local group=Tabs.Notifications:AddRightGroupbox("Notification theme")
+    local function color(id,label,key,default)
+        group:AddInput(id,{Text=label,Default=default,Finished=true,Callback=function(value)
+            local hex=tostring(value or ""):gsub("#","")
+            if not hex:match("^%x%x%x%x%x%x$") then
+                notify("Theme warning","Enter a six-digit HEX color, for example #6AB1FF.",4,"warning");return
+            end
+            Hub.setNoticePreference(key,Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16)))
+        end})
+    end
+    color("NoticeInfoColor","Info HEX","noticeColor_info","#6AB1FF")
+    color("NoticeWarningColor","Warning HEX","noticeColor_warning","#FFCA69")
+    color("NoticeSuccessColor","Success HEX","noticeColor_success","#6FE0A0")
+    color("NoticeDangerColor","Danger HEX","noticeColor_danger","#FF737D")
+    color("NoticeBackgroundColor","Background HEX","noticeBackground","#212121")
+    color("NoticeBodyColor","Message text HEX","noticeBodyColor","#DCE0E8")
+    group:AddSlider("NoticeBackgroundTransparency",{Text="Background transparency",Default=0,Min=0,Max=0.8,Rounding=2,Callback=function(value) Hub.setNoticePreference("noticeBackgroundTransparency",value) end})
+    group:AddSlider("NoticeBorderThickness",{Text="Border thickness",Default=1.2,Min=0,Max=4,Rounding=1,Callback=function(value) Hub.setNoticePreference("noticeBorderThickness",value) end})
+    group:AddSlider("NoticeCornerRadius",{Text="Corner radius",Default=10,Min=0,Max=24,Rounding=0,Callback=function(value) Hub.setNoticePreference("noticeCornerRadius",value) end})
+    for _,kind in ipairs({"info","warning","success","danger"}) do
+        group:AddButton({Text="Preview "..kind.." notification",Func=function()
+            notify(kind:sub(1,1):upper()..kind:sub(2).." preview","Preview of your notification colors, border and sound.",5,kind)
+        end})
+    end
+end)()
+end
+
+
 -- Register every saved control before loading settings.
 MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
 -- Session customization does not require executor file-storage support.
@@ -15569,6 +15785,9 @@ end)
 
 -- Autosave is scheduled after setting changes; no permanent polling loop.
 
+
+
+
 -- Keep sidebar order fixed; arrange existing rows by purpose after construction.
 do
     local layouts = {
@@ -15588,13 +15807,13 @@ do
             rename={["Line Texture & Gradient"]="Line Appearance"}},
         Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
             rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
-        Visual={sections={"Player ESP","World ESP","Camera and cursor","Camera Effects","Lighting","Local environment","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance","Local sound filters"}},
+        Visual={sections={"Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Local environment","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance","Local sound filters"}},
         Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Toy Audio"},
             rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
         Whitelist={sections={"Protected Players"}},
         Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
         KeyBinds={sections={"Menu & emergency","Action shortcuts","Missile throw"}},
-        Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Position & Appearance"}},
+        Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Sound library","Notification theme","Position & Appearance"}},
         Customization={sections={"Hub Theme","Appearance","Custom Theme Colors","On-screen FPS & Ping","Anchor Appearance","Touch Action Buttons"}},
         ["UI Settings"]={sections={"Menu","Saved settings"}},
     }
@@ -15607,3 +15826,4 @@ end
 -- Send loaded message
 
 notify("Arriva Core Hub 2.0", "Hub loaded. Your saved settings and controls are ready.", 5)
+
