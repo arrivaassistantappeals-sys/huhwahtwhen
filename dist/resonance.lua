@@ -13202,34 +13202,61 @@ Hub.connect(Workspace.ChildAdded,function(part)
     end)
 end)
 
--- Source extinguisher positioning; resolve lazily and restore position on disable/death.
-local extinguisher,extinguishFrame,fireOverlay,fireOverlayVisible
-local suppressedFire={}
+-- Anti Burn: suppress the screen effect independently of extinguisher availability.
+local extinguisher,extinguishFrame
+local suppressedFire,fireOverlays={},{}
+local function restoreExtinguisher()
+    if extinguisher and extinguisher.Parent and extinguishFrame then
+        pcall(function() extinguisher.CFrame=extinguishFrame end)
+    end
+    extinguisher,extinguishFrame=nil,nil
+end
+local function currentBurn()
+    local char,root,hum,alive=charAlive()
+    return char,root,alive,root and root:FindFirstChild("FireParticleEmitter")
+end
 local function restoreBurn()
-    if extinguisher and extinguisher.Parent and extinguishFrame then extinguisher.CFrame=extinguishFrame end
-    if fireOverlay and fireOverlay.Parent and fireOverlayVisible~=nil then fireOverlay.Visible=fireOverlayVisible end
-    for emitter,value in pairs(suppressedFire) do pcall(function() if emitter.Parent then emitter.Enabled=value end end);suppressedFire[emitter]=nil end
-    extinguisher,extinguishFrame,fireOverlay,fireOverlayVisible=nil,nil,nil,nil
+    restoreExtinguisher()
+    local _,_,alive,fire=currentBurn()
+    for overlay,record in pairs(fireOverlays) do
+        pcall(function()
+            if overlay.Parent then
+                -- Never resurrect an overlay captured during a fire that has ended.
+                overlay.Visible=alive and fire~=nil and Player.Character==record.character and record.visible or false
+            end
+        end)
+        fireOverlays[overlay]=nil
+    end
+    for emitter,value in pairs(suppressedFire) do
+        pcall(function() if emitter.Parent then emitter.Enabled=value end end)
+        suppressedFire[emitter]=nil
+    end
 end
 bind("AntiBurnToggle","AntiBurn",0.03,function()
-    local char,root,hum,alive=charAlive()
-    local fire=root and root:FindFirstChild("FireParticleEmitter")
-    if not alive or not fire then restoreBurn();return end
+    local char,root,alive,fire=currentBurn()
+    local playerGui=Player:FindFirstChildOfClass("PlayerGui")
+    local screen=playerGui and playerGui:FindFirstChild("ScreenOverlayGui")
+    local overlay=screen and screen:FindFirstChild("FireFade")
+    if overlay and overlay:IsA("GuiObject") then
+        if not fireOverlays[overlay] then fireOverlays[overlay]={visible=overlay.Visible,character=char} end
+        overlay.Visible=false
+    end
+    -- Destroyed/replaced GUI instances must not accumulate across respawns.
+    for old in pairs(fireOverlays) do if not old.Parent then fireOverlays[old]=nil end end
+    for old in pairs(suppressedFire) do if not old.Parent then suppressedFire[old]=nil end end
+    if not alive or not fire then restoreExtinguisher();return end
+    if suppressedFire[fire]==nil then suppressedFire[fire]=fire.Enabled end
+    fire.Enabled=false
     if not extinguisher or not extinguisher.Parent then
         local map=Workspace:FindFirstChild("Map")
         local hole=map and map:FindFirstChild("Hole")
-        local small=hole and hole:FindFirstChild("PoisonSmallHole")
-        extinguisher=small and small:FindFirstChild("ExtinguishPart")
-        if not extinguisher then return end
-        extinguishFrame=extinguisher.CFrame
+        for _,name in ipairs({"PoisonSmallHole","PoisonBigHole"}) do
+            local area=hole and hole:FindFirstChild(name)
+            local part=area and area:FindFirstChild("ExtinguishPart")
+            if part and part:IsA("BasePart") then extinguisher=part;extinguishFrame=part.CFrame;break end
+        end
     end
-    if suppressedFire[fire]==nil then suppressedFire[fire]=fire.Enabled end
-    fire.Enabled=false
-    local playerGui=Player:FindFirstChildOfClass("PlayerGui")
-    local overlay=playerGui and playerGui:FindFirstChild("ScreenOverlayGui")
-    overlay=overlay and overlay:FindFirstChild("FireFade")
-    if overlay then if fireOverlay~=overlay then fireOverlay=overlay;fireOverlayVisible=overlay.Visible end;overlay.Visible=false end
-    extinguisher.CFrame=root.CFrame
+    if extinguisher then extinguisher.CFrame=root.CFrame end
 end,restoreBurn)
 
 -- Source manual Anti Lag also disables the sticky-touch script. Preserve original enabled values.
