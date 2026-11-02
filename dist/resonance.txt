@@ -10346,7 +10346,7 @@ do
     local oldSkies={}
     local function remove(instance) if instance then Hub.instances[instance]=nil;Hub.assetTargets[instance]=nil;instance:Destroy() end end
     local function updateShader()
-        if not shaderOn then remove(shader);shader=nil;return end
+        if not shaderOn then return end
         if not shader then
             shader=Hub.new("Folder",lighting);shader.Name="ArrivaLocalShaders"
             local correction=Hub.new("ColorCorrectionEffect",lighting);correction.Name="ArrivaLocalCorrection"
@@ -10371,7 +10371,7 @@ do
             for _,child in ipairs(lighting:GetChildren()) do
                 if child:IsA("Sky") and child~=sky then oldSkies[child]=lighting;child.Parent=nil end
             end
-            if not sky then sky=Hub.new("Sky",lighting);sky.Name="ArrivaLocalSky" end
+            if not sky or sky.Parent~=lighting then remove(sky);sky=Hub.new("Sky");sky.Name="ArrivaLocalSky";sky.Parent=lighting end
             for _,property in ipairs({"SkyboxBk","SkyboxDn","SkyboxFt","SkyboxLf","SkyboxRt","SkyboxUp"}) do sky[property]=image end
         else
             remove(sky);sky=nil
@@ -10396,17 +10396,68 @@ do
         group:AddSlider("Private"..property,{Text=option[1],Default=water[property],Min=option[3],Max=option[4],Rounding=option[5],Callback=function(v) water[property]=v;updateWater();Hub.requestSave() end})
     end
     local cover,density=0.5,0.5
+    local cloudsOn=false
+    local ownedCloud=false
+    local savedCloud
+    local cloudConnections={}
+    local applyingCloud=false
+    local function releaseCloud()
+        for _,connection in ipairs(cloudConnections) do connection:Disconnect();Hub.connections[connection]=nil end
+        table.clear(cloudConnections)
+        local previous=clouds
+        clouds=nil
+        if ownedCloud then remove(previous)
+        elseif previous and savedCloud then
+            for key,value in pairs(savedCloud) do pcall(function() previous[key]=value end) end
+        end
+        ownedCloud=false;savedCloud=nil
+    end
     local function updateClouds()
-        if clouds then clouds.Cover=cover;clouds.Density=density end
+        if not cloudsOn then releaseCloud();return end
+        terrain=Workspace:FindFirstChildOfClass("Terrain")
+        if not terrain then return end
+        if clouds and clouds.Parent~=terrain then releaseCloud() end
+        if not clouds then
+            clouds=terrain:FindFirstChildOfClass("Clouds")
+            if clouds then
+                savedCloud={Cover=clouds.Cover,Density=clouds.Density,Enabled=clouds.Enabled}
+            else
+                clouds=Hub.new("Clouds");clouds.Name="ArrivaLocalClouds";ownedCloud=true
+                clouds.Parent=terrain
+            end
+            for _,property in ipairs({"Enabled","Cover","Density"}) do
+                table.insert(cloudConnections,Hub.connect(clouds:GetPropertyChangedSignal(property),function()
+                    if applyingCloud or not cloudsOn or not clouds then return end
+                    local desired=property=="Enabled" and true or property=="Cover" and cover or density
+                    if clouds[property]~=desired then
+                        if savedCloud then savedCloud[property]=clouds[property] end
+                        applyingCloud=true;clouds[property]=desired;applyingCloud=false
+                    end
+                end))
+            end
+        end
+        applyingCloud=true
+        clouds.Enabled=true;clouds.Cover=cover;clouds.Density=density
+        applyingCloud=false
     end
     group:AddToggle("PrivateClouds",{Text="Local clouds",Default=false,Callback=function(on)
-        if on and terrain then if not clouds then clouds=Hub.new("Clouds",terrain);clouds.Name="ArrivaLocalClouds" end;updateClouds()
-        else remove(clouds);clouds=nil end;Hub.requestSave()
+        cloudsOn=on;updateClouds();Hub.requestSave()
     end})
     group:AddSlider("PrivateCloudCover",{Text="Cloud cover",Default=0.5,Min=0,Max=1,Rounding=2,Callback=function(v) cover=v;updateClouds();Hub.requestSave() end})
     group:AddSlider("PrivateCloudDensity",{Text="Cloud density",Default=0.5,Min=0,Max=1,Rounding=2,Callback=function(v) density=v;updateClouds();Hub.requestSave() end})
+    if terrain then
+        Hub.connect(terrain.ChildAdded,function(child)
+            if cloudsOn and child:IsA("Clouds") and child~=clouds then
+                if ownedCloud then releaseCloud() end
+                updateClouds()
+            end
+        end)
+        Hub.connect(terrain.ChildRemoved,function(child)
+            if cloudsOn and child==clouds then task.defer(function() if Hub.alive and cloudsOn then updateClouds() end end) end
+        end)
+    end
     Hub.connect(lighting.ChildAdded,function(child) if skyOn and child:IsA("Sky") and child~=sky then oldSkies[child]=lighting;child.Parent=nil end end)
-    Hub.cleanup(function() clearShader();skyOn=false;updateSky();waterOn=false;updateWater();remove(clouds) end)
+    Hub.cleanup(function() clearShader();skyOn=false;updateSky();waterOn=false;updateWater();cloudsOn=false;releaseCloud() end)
 end)()
 end
 -- END LOCAL ENVIRONMENT OPTIONS
@@ -14798,60 +14849,112 @@ end
 do
 (function()
     local group=Tabs.Visual:AddRightGroupbox("Blackhole Appearance")
+    local audio=Tabs.Sound:AddRightGroupbox("Blackhole Audio")
     local imageOn,soundOn=false,false
     local imageAsset,soundAsset="",""
     local tint=Color3.new(1,1,1)
-    local saved={};local watcher;local epoch=0
+    local saved={};local watchers={};local epoch=0;local disposed=false
     local function asset(value)
-        local text=tostring(value):match("^%s*(.-)%s*$")
+        local text=tostring(value or ""):match("^%s*(.-)%s*$")
         if text=="" then return "" end
-        local id=text:match("^(%d+)$") or text:match("^rbxassetid://(%d+)$") or text:match("[?&]id=(%d+)") or text:match("roblox.com/library/(%d+)")
-        return id and "rbxassetid://"..id or nil
+        local id=text:match("^(%d+)$") or text:match("^rbxassetid://(%d+)$")
+            or text:match("[?&]id=(%d+)") or text:match("roblox.com/library/(%d+)")
+            or text:match("roblox.com/store/asset/(%d+)") or text:match("roblox.com/catalog/(%d+)")
+        return id and tonumber(id)>0 and "rbxassetid://"..id or nil
     end
     local function inHole(object)
-        local parent=object.Parent
+        local parent=object
         while parent and parent~=Workspace do
             if parent.Name=="BlackHoleKick" or parent.Name=="StayedBH" then return true end
             parent=parent.Parent
         end
         return false
     end
+    local function write(object,key,value)
+        if object[key]==value then return end
+        local playing=key=="SoundId" and object.IsPlaying
+        if playing then object:Stop() end
+        object[key]=value
+        if playing then object:Play() end
+    end
     local function restore(object)
         local record=saved[object];if not record then return end;saved[object]=nil
-        for key,entry in pairs(record) do pcall(function() if object.Parent and object[key]==entry.applied then object[key]=entry.original end end) end
+        for key,entry in pairs(record) do
+            if entry.connection then entry.connection:Disconnect();Hub.connections[entry.connection]=nil end
+            pcall(function() if object.Parent and object[key]==entry.applied then write(object,key,entry.original) end end)
+        end
     end
     local function set(object,key,value)
         saved[object]=saved[object] or {}
-        if not saved[object][key] then saved[object][key]={original=object[key]} end
-        object[key]=value;saved[object][key].applied=value
+        local entry=saved[object][key]
+        if not entry then
+            entry={original=object[key]};saved[object][key]=entry
+            if type(object.GetPropertyChangedSignal)=="function" then
+                entry.connection=Hub.connect(object:GetPropertyChangedSignal(key),function()
+                    if disposed or not saved[object] then return end
+                    if not inHole(object) then restore(object);return end
+                    if object[key]~=entry.applied then write(object,key,entry.applied) end
+                end)
+            end
+        end
+        entry.applied=value
+        write(object,key,value)
     end
     local function inspect(object)
-        if not inHole(object) then return end
-        if imageOn and imageAsset~="" and object:IsA("ImageLabel") and object.Name=="Large" then
-            set(object,"Image",imageAsset);set(object,"ImageColor3",tint)
-        elseif soundOn and soundAsset~="" and object:IsA("Sound") then set(object,"SoundId",soundAsset) end
+        if disposed or not object.Parent or not inHole(object) then return end
+        if imageOn and imageAsset~="" then
+            if (object:IsA("ImageLabel") or object:IsA("ImageButton")) and object.Name=="Large" then
+                set(object,"Image",imageAsset);set(object,"ImageColor3",tint)
+                set(object,"Visible",true);set(object,"ImageTransparency",0)
+            elseif (object:IsA("ImageLabel") or object:IsA("ImageButton")) and object.Name=="Small" then
+                set(object,"Visible",false)
+            elseif object:IsA("BasePart") and object.Name=="Hole" then set(object,"Transparency",1) end
+        end
+        if soundOn and soundAsset~="" and object:IsA("Sound") then set(object,"SoundId",soundAsset) end
+    end
+    local function inspectTree(object)
+        inspect(object)
+        if object.Name=="BlackHoleKick" or object.Name=="StayedBH" then
+            for _,child in ipairs(object:GetDescendants()) do inspect(child) end
+        end
     end
     local function refresh()
         epoch+=1;local ticket=epoch
-        if watcher then watcher:Disconnect();Hub.connections[watcher]=nil;watcher=nil end
+        for _,watcher in ipairs(watchers) do watcher:Disconnect();Hub.connections[watcher]=nil end
+        table.clear(watchers)
         for object in pairs(saved) do restore(object) end
-        if imageOn or soundOn then
-            watcher=Hub.connect(Workspace.DescendantAdded,inspect)
-            Hub.scanDescendants(Workspace,inspect,function() return epoch==ticket and (imageOn or soundOn) end)
-        end
+        if disposed or not (imageOn or soundOn) then return end
+        table.insert(watchers,Hub.connect(Workspace.DescendantAdded,function(object)
+            -- DescendantAdded can fire before the game has set its image, name or sound ID.
+            task.defer(function() if not disposed and epoch==ticket then inspectTree(object) end end)
+        end))
+        table.insert(watchers,Hub.connect(Workspace.DescendantRemoving,function(object) restore(object) end))
+        Hub.scanDescendants(Workspace,inspect,function() return not disposed and epoch==ticket and (imageOn or soundOn) end)
     end
-    group:AddInput("PackBlackholeImage",{Text="Blackhole image ID",Default="",Finished=true,Callback=function(value) local parsed=asset(value);if parsed then imageAsset=parsed;refresh() end end})
+    local function input(value,kind)
+        local parsed=asset(value)
+        if parsed==nil then
+            notify("Blackhole asset warning","Use a Roblox image/audio asset ID or asset link. Web image and MP3 links are not Roblox asset IDs.",5,"warning");return
+        end
+        if kind=="image" then imageAsset=parsed else soundAsset=parsed end
+        refresh()
+    end
+    group:AddInput("PackBlackholeImage",{Text="Blackhole image ID",Default="",Finished=true,Callback=function(value) input(value,"image") end})
     group:AddToggle("PackBlackholeImageOn",{Text="Custom blackhole image",Default=false,Callback=function(on) imageOn=on;refresh() end})
     group:AddInput("PackBlackholeTint",{Text="Blackhole image color hex",Default="FFFFFF",Finished=true,Callback=function(value)
         local hex=tostring(value):gsub("#","")
-        if #hex==6 and hex:match("^%x+$") then tint=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16));refresh() end
+        if hex:match("^%x%x%x%x%x%x$") then tint=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16));refresh()
+        else notify("Blackhole color warning","Use a six-digit HEX color.",4,"warning") end
     end})
-    group:AddInput("PackBlackholeSound",{Text="Blackhole sound ID",Default="",Finished=true,Callback=function(value) local parsed=asset(value);if parsed then soundAsset=parsed;refresh() end end})
-    group:AddToggle("PackBlackholeSoundOn",{Text="Custom blackhole sound",Default=false,Callback=function(on) soundOn=on;refresh() end})
-    Hub.cleanup(function() imageOn,soundOn=false,false;epoch+=1;for object in pairs(saved) do restore(object) end end)
+    audio:AddInput("PackBlackholeSound",{Text="Blackhole sound ID",Default="",Finished=true,Callback=function(value) input(value,"sound") end})
+    audio:AddToggle("PackBlackholeSoundOn",{Text="Custom blackhole sound",Default=false,Callback=function(on) soundOn=on;refresh() end})
+    group:AddLabel("Applies when a blackhole exists. Use an image asset, not a decal or model ID.")
+    audio:AddLabel("Audio must be permitted in this experience; muted game audio can hide playback.")
+    Hub.cleanup(function() disposed=true;imageOn=false;soundOn=false;refresh() end)
 end)()
 end
 -- End blackhole cosmetic feature pack
+
 
 -- UI Settings
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
