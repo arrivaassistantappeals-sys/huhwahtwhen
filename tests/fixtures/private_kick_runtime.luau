@@ -28,7 +28,8 @@ end
 local frameMeta={}
 local function frame(position) return setmetatable({Position=position},frameMeta) end
 frameMeta.__mul=function(a,b) return frame(a.Position+b.Position) end
-frameMeta.__index=function(self,key) if key=="Rotation" then return frame(Vector3.zero) end end
+frameMeta.Inverse=function(self) return frame(Vector3.new(-self.Position.X,-self.Position.Y,-self.Position.Z)) end
+frameMeta.__index=function(self,key) if key=="Rotation" then return frame(Vector3.zero) end;return frameMeta[key] end
 CFrame.new=function(x,y,z)
     if type(x)=="table" then return frame(x) end
     return frame(Vector3.new(x or 0,y or 0,z or 0))
@@ -48,6 +49,9 @@ targetRoot.FindFirstChild=function(_,name) if name=="RootAttachment" then return
 local motor={Parent=targetCharacter,Enabled=true,IsA=function(_,kind) return kind=="Motor6D" end}
 targetCharacter.GetDescendants=function() return {targetRoot,motor} end
 targetCharacter.Parent=Workspace
+local pivotCalls=0
+function targetCharacter:GetPivot() return targetRoot.CFrame end
+function targetCharacter:PivotTo(destination) pivotCalls+=1;targetRoot.CFrame=destination end
 local isFriend,blockFriend=true,false
 Player.IsFriendsWithAsync=function()
     while blockFriend do task.wait() end
