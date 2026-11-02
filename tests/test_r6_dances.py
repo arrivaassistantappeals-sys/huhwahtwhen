@@ -32,6 +32,22 @@ Hub.requestSave=function() end
 local function warn() end
 '''
 CASES={
+'custom_presets_load_and_reject_r15':r'''
+    for name,id in pairs({["Happy Dance"]="248335946",["Moon Dance 2"]="27789359"}) do
+        hum.RigType=Enum.HumanoidRigType.R6
+        assert(table.find(controls.PrivateAnimationPreset.Values,name))
+        controls.PrivateAnimationPreset:SetValue(name)
+        controls.PrivateAnimationEnabled:SetValue(true)
+        local t=tracks[#tracks]
+        assert(t.id=="rbxassetid://"..id and t.Looped and t.played and t.Priority=="Action")
+        hum.RigType=Enum.HumanoidRigType.R15
+        local count=#tracks
+        controls.PrivateAnimationPreset:SetValue(name)
+        assert(#tracks==count and t.stopped and t.destroyed)
+        assert(notices[#notices].Title=="R6 character required")
+        controls.PrivateAnimationEnabled:SetValue(false)
+    end
+''',
 'all_nine_classic_variants_load_with_r6_loop_and_action_priority':r'''
     local expected={
         ["R6 Dance 1"]="182435998",["R6 Dance 1 (Alt 1)"]="182491037",["R6 Dance 1 (Alt 2)"]="182491065",
