@@ -189,6 +189,7 @@ Tabs.Grab={AddRightGroupbox=function() return group end}
 Color3.fromHSV=function(...) return {...} end
 Tabs.Misc={AddLeftGroupbox=function() return group end,AddRightGroupbox=function() return group end}
 Tabs.Visual=Tabs.Misc
+Tabs.Sound=Tabs.Misc
 Tabs.Player=Tabs.Misc
 Color3.new=function(...) return {...} end
 Enum.CameraMode={LockFirstPerson="FirstPerson"}
@@ -348,3 +349,4 @@ local function resume(index) local ok,err=coroutine.resume(workers[index]);asser
 local function lastCreated(class,parent)
     for index=#created,1,-1 do local object=created[index];if object.ClassName==class and (not parent or object.Parent==parent) then return object end end
 end
+
