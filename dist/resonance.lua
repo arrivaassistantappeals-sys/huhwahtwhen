@@ -10438,6 +10438,20 @@ do
 				["Arm Detach"] = "rbxassetid://33169583",
 				["Insane Arms"] = "rbxassetid://27432691",
     }
+    -- Classic R6 dance families and their Animate-script variants.
+    -- Source: https://devforum.roblox.com/t/r6-to-r15-animation-list-from-roblox/4079574
+    local r6Dances={
+        ["R6 Dance 1"]="rbxassetid://182435998",
+        ["R6 Dance 1 (Alt 1)"]="rbxassetid://182491037",
+        ["R6 Dance 1 (Alt 2)"]="rbxassetid://182491065",
+        ["R6 Dance 2"]="rbxassetid://182436842",
+        ["R6 Dance 2 (Alt 1)"]="rbxassetid://182491248",
+        ["R6 Dance 2 (Alt 2)"]="rbxassetid://182491277",
+        ["R6 Dance 3"]="rbxassetid://182436935",
+        ["R6 Dance 3 (Alt 1)"]="rbxassetid://182491368",
+        ["R6 Dance 3 (Alt 2)"]="rbxassetid://182491423",
+    }
+    for name,id in pairs(r6Dances) do animations[name]=id end
     local names={};for name in pairs(animations) do table.insert(names,name) end;table.sort(names)
     local selected=names[1]
     local speed,enabled=1,false
@@ -10452,9 +10466,15 @@ do
         local humanoid=character and character:FindFirstChildOfClass("Humanoid")
         local animator=humanoid and humanoid:FindFirstChildOfClass("Animator")
         if not animator or humanoid.Health<=0 then return end
+        if r6Dances[selected] and humanoid.RigType~=Enum.HumanoidRigType.R6 then
+            notify("R6 character required","Select an R6 character to play this dance.",5)
+            return
+        end
         local ok,message=pcall(function()
             asset=Hub.new("Animation");asset.AnimationId=animations[selected]
-            track=animator:LoadAnimation(asset);track.Looped=true;track:Play(0.15);track:AdjustSpeed(speed)
+            track=animator:LoadAnimation(asset);track.Looped=true
+            if r6Dances[selected] then track.Priority=Enum.AnimationPriority.Action end
+            track:Play(0.15);track:AdjustSpeed(speed)
         end)
         if not ok then stop();notify("Animation unavailable","This animation could not be loaded for your character.",5);warn(tostring(message)) end
     end
