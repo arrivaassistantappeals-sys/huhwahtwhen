@@ -9924,7 +9924,7 @@ end)();
             local key=tostring(id):lower()
             if (key:find("loop",1,true) and id~="AutoReseatBlobLoops") or key:find("aura",1,true)
                 or id=="ToolAutoSpin" or id=="ToolAutoSaveHouse" or id=="PackCharacterFlight"
-                or id=="PackAimAssist" or id=="PackAutoServerHop" or id=="PackAutoClaimPlot" then table.insert(ids,id) end
+                or id=="PackAimAssist" or id=="PackAutoClaimPlot" then table.insert(ids,id) end
         end
         for _,id in ipairs(ids) do
             local toggle=Toggles[id]
@@ -14566,115 +14566,7 @@ end)()
 end
 -- End own-group feature pack
 
--- Feature pack: bounded public-server browsing and optional rejoin.
-do
-(function()
-    local group=Tabs.Misc:AddRightGroupbox("Servers")
-    local teleport=game:GetService("TeleportService")
-    local http=game:GetService("HttpService")
-    local status=group:AddLabel("Ready.")
-    local minimum,maximum,sortMode=0,Players.MaxPlayers or 30,"Lowest Players"
-    local autoHop,autoRejoin,loadScript=false,false,false
-    local hopDelay,nextHop,lastRejoin=300,math.huge,-math.huge
-    local epoch,busy=0,false
-    local visited={}
-    function Hub.choosePublicServer(records,config)
-        local candidates={}
-        for _,server in ipairs(records) do
-            if type(server)=="table" and type(server.id)=="string" and server.id~=config.current
-                and not (config.visited and config.visited[server.id]) and type(server.playing)=="number"
-                and type(server.maxPlayers)=="number" and server.playing<server.maxPlayers
-                and server.playing>=config.minimum and server.playing<=config.maximum then table.insert(candidates,server) end
-        end
-        if #candidates==0 then return nil end
-        if config.mode=="Random" then return candidates[math.random(1,#candidates)] end
-        table.sort(candidates,function(a,b)
-            local av,bv=a.playing,b.playing
-            if config.mode=="Highest FPS" then av,bv=-(tonumber(a.fps) or 0),-(tonumber(b.fps) or 0)
-            elseif config.mode=="Lowest Ping" then av,bv=tonumber(a.ping) or math.huge,tonumber(b.ping) or math.huge
-            elseif config.mode=="Highest Players" then av,bv=-a.playing,-b.playing end
-            if av==bv then return a.id<b.id end
-            return av<bv
-        end)
-        return candidates[1]
-    end
-    local function queue()
-        if Hub.flushSettings then
-            local ok,err=Hub.flushSettings()
-            if not ok then status:SetText("Settings could not save before teleport: "..tostring(err));return false end
-        end
-        if not loadScript then return true end
-        local enqueue=queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
-        if type(enqueue)~="function" then status:SetText("Queue-on-teleport is unavailable; disable Keep script.");return false end
-        local loader="loadstring(game:HttpGet('https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/codex/resonance-feature-port/dist/resonance.lua'))()"
-        local ok=pcall(enqueue,loader)
-        if not ok then status:SetText("Could not queue the script.") end
-        return ok
-    end
-    local function cancel()
-        epoch+=1;busy=false;nextHop=os.clock()+hopDelay;status:SetText("Server search cancelled.")
-    end
-    function Hub.hopPublicServer()
-        if busy or not Hub.alive then return false end
-        if minimum>maximum then status:SetText("Minimum players exceeds maximum.");return false end
-        epoch+=1;local ticket=epoch;busy=true
-        local snapshot={minimum=minimum,maximum=maximum,mode=sortMode,current=game.JobId,visited=visited}
-        status:SetText("Searching public servers...")
-        task.spawn(function()
-            local ok,err=xpcall(function()
-                local records,cursor={},nil
-                for _=1,4 do
-                    if not Hub.alive or ticket~=epoch then return end
-                    local url="https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
-                    if cursor then url..="&cursor="..http:UrlEncode(cursor) end
-                    local data=http:JSONDecode(game:HttpGet(url))
-                    if type(data)~="table" or type(data.data)~="table" then error("Server list was not returned") end
-                    for _,server in ipairs(data.data) do table.insert(records,server) end
-                    cursor=type(data.nextPageCursor)=="string" and data.nextPageCursor or nil
-                    if not cursor then break end
-                    task.wait(0.25)
-                end
-                if not Hub.alive or ticket~=epoch then return end
-                local server=Hub.choosePublicServer(records,snapshot)
-                if not server then status:SetText("No matching available server found.");return end
-                if not queue() or ticket~=epoch then return end
-                visited[server.id]=true
-                status:SetText(string.format("Joining server with %d players...",server.playing))
-                teleport:TeleportToPlaceInstance(game.PlaceId,server.id,Player)
-            end,debug.traceback)
-            if ticket==epoch then
-                busy=false;nextHop=os.clock()+hopDelay
-                if not ok then status:SetText("Server hop failed: "..tostring(err)) end
-            end
-        end)
-        return true
-    end
-    group:AddButton({Text="Server-hop",Func=Hub.hopPublicServer})
-    group:AddButton({Text="Cancel server search",Func=cancel})
-    group:AddButton({Text="Rejoin",Func=function() if queue() then teleport:Teleport(game.PlaceId,Player) end end})
-    group:AddDropdown("PackServerSort",{Text="Server selection",Values={"Lowest Players","Highest Players","Highest FPS","Lowest Ping","Random"},Default=1,Callback=function(value) sortMode=value end})
-    group:AddSlider("PackServerMinimum",{Text="Minimum players",Default=0,Min=0,Max=Players.MaxPlayers or 30,Rounding=0,Callback=function(value) minimum=value end})
-    group:AddSlider("PackServerMaximum",{Text="Maximum players",Default=Players.MaxPlayers or 30,Min=0,Max=Players.MaxPlayers or 30,Rounding=0,Callback=function(value) maximum=value end})
-    group:AddToggle("PackKeepScript",{Text="Keep script on teleport",Default=false,Callback=function(on) loadScript=on end})
-    group:AddSlider("PackServerHopDelay",{Text="Server-hop interval (seconds)",Default=300,Min=30,Max=3600,Rounding=0,Callback=function(value) hopDelay=value;nextHop=os.clock()+value end})
-    group:AddToggle("PackAutoServerHop",{Text="Auto server-hop",Default=false,Callback=function(on) autoHop=on;nextHop=on and os.clock()+hopDelay or math.huge end})
-    group:AddToggle("PackAutoRejoin",{Text="Auto rejoin after disconnect",Default=false,Callback=function(on) autoRejoin=on end})
-    Hub.connect(RunService.Heartbeat,function()
-        if autoHop and not busy and os.clock()>=nextHop then nextHop=os.clock()+hopDelay;Hub.hopPublicServer() end
-    end)
-    local ok,signal=pcall(function() return game:GetService("GuiService").ErrorMessageChanged end)
-    if ok and signal then Hub.connect(signal,function(message)
-        if not autoRejoin or type(message)~="string" or message=="" or os.clock()-lastRejoin<15 then return end
-        lastRejoin=os.clock()
-        task.spawn(function() if Hub.alive and autoRejoin and queue() then pcall(function() teleport:Teleport(game.PlaceId,Player) end) end end)
-    end) end
-    if teleport.TeleportInitFailed then Hub.connect(teleport.TeleportInitFailed,function(player)
-        if player==Player then busy=false;nextHop=os.clock()+hopDelay;status:SetText("Teleport failed. Choose another server or retry.") end
-    end) end
-    Hub.cleanup(function() autoHop,autoRejoin=false,false;epoch+=1;busy=false;Hub.hopPublicServer,Hub.choosePublicServer=nil,nil end)
-end)()
-end
--- End server feature pack
+
 
 -- Feature pack: visible camera aim assistance, without a global remote hook.
 do
@@ -15505,40 +15397,6 @@ do
 	end})
 end
 do
-	local queued,busy=false,false
-	MenuGroup:AddButton({Text="Rejoin + Auto Execute",Func=function()
-		if busy then return end
-		local queue=queue_on_teleport or queueonteleport
-		if type(queue)~="function" then
-			notify("Rejoin warning","Your executor does not expose teleport queuing.",6)
-			return
-		end
-		if not queued then
-			local loader=[=[
-if not game:IsLoaded() then game.Loaded:Wait() end
-task.wait(2)
-local ok,err=pcall(function()
-    local source=game:HttpGet("https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/codex/resonance-feature-port/dist/resonance.lua")
-    local run,compileError=loadstring(source)
-    if not run then error(compileError) end
-    run()
-end)
-if not ok then warn("[Arriva auto execute] " .. tostring(err)) end
-]=]
-			local okQueue,err=pcall(queue,loader)
-			if not okQueue then notify("Rejoin error",tostring(err),6);return end
-			queued=true
-		end
-		busy=true
-		local saved,saveError=Hub.flushSettings()
-		if not saved then busy=false;notify("Save error","Rejoin stopped because settings could not be saved: "..tostring(saveError),8);return end
-		local ok,err=pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId,Player) end)
-		if not ok then busy=false;notify("Rejoin error",tostring(err),6) end
-		task.delay(10,function() busy=false end)
-	end})
-end
-
-do
 	local events=Tabs.Notifications:AddLeftGroupbox("Player Events")
 	local preferences={joins=true,leaves=true,respawns=true,self=true}
 	local roster={}
@@ -15601,40 +15459,6 @@ do
 	end)
 end
 
-do
-	local reloading=false
-	MenuGroup:AddButton({Text="Reload Hub",Func=function()
-		if reloading then return end
-		reloading=true
-		notify("Reload Hub","Checking the latest hub version...",3)
-		local ok,compiled=pcall(function()
-			local source=game:HttpGet("https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/codex/resonance-feature-port/dist/resonance.lua")
-			local run,err=loadstring(source)
-			if not run then error(err) end
-			return run
-		end)
-		if not ok then
-			reloading=false
-			notify("Reload error","Download or compilation failed. Your current hub is still running. " .. tostring(compiled),8)
-			return
-		end
-		if not Hub.alive or Library.unloaded then return end
-		-- A native task survives the old hub's managed-worker cancellation.
-		Hub.nativeTask.defer(function()
-			if not Hub.alive or Library.unloaded then return end
-			Library:Unload()
-			local success,err=pcall(compiled)
-			if not success then
-				warn("[Arriva reload] " .. tostring(err))
-				pcall(function()
-					game:GetService("StarterGui"):SetCore("SendNotification",{
-						Title="Arriva reload failed",Text="The new hub could not start. Check the console for details.",Duration=8,
-					})
-				end)
-			end
-		end)
-	end})
-end
 MenuGroup:AddButton("Unload", function() Library:Unload() end)
 Hub.connect(UserInputService.InputBegan, function(input, processed)
 	if processed or UserInputService:GetFocusedTextBox() then return end
@@ -15770,7 +15594,7 @@ do
         Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
             rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
         Visual={sections={"Player ESP","World ESP","Camera and cursor","Camera Effects","Lighting","Local environment","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance","Local sound filters"}},
-        Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Servers","Toy Audio"},
+        Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Toy Audio"},
             rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
         Whitelist={sections={"Protected Players"}},
         Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
