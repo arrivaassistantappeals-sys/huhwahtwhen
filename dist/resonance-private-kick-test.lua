@@ -15529,7 +15529,7 @@ Hub.keybindGroups.interface:AddLabel("Toggle menu"):AddKeyPicker("MenuKeybind", 
 Library.ToggleKeybind = Options.MenuKeybind
 
 -- BEGIN PRIVATE KICK TEST METHODS
--- Experimental adaptations of the supplied Grab-Drop, Grab-Release and ownership methods.
+-- Experimental adaptations of the supplied Grab-Drop, Grab-Release, ownership and Void methods.
 do
 (function()
     local group=Tabs.Blob:AddRightGroupbox("Private Kick Tests")
@@ -15565,7 +15565,7 @@ do
             pcall(function() if record.object.Parent then record.object[record.key]=record.value end end)
         end
         -- Never move a replacement character or an object we no longer own.
-        if op.target.Character==op.character and op.root.Parent==op.character
+        if not op.voidFinished and op.target.Character==op.character and op.root.Parent==op.character
             and type(CheckNetworkOwnerShipOnPart)=="function" and CheckNetworkOwnerShipOnPart(op.root) then
             pcall(function()
                 op.root.CFrame=op.position
@@ -15591,7 +15591,7 @@ do
             and Player.Character==op.selfCharacter and op.selfRoot.Parent==op.selfCharacter
             and op.selfHumanoid.Health>0 and op.target.Character==op.character
             and op.root.Parent==op.character and Hub.loopTargetReady(op.target,op.character)
-            and (op.root.Position-op.selfRoot.Position).Magnitude<=40
+            and (op.voidDispatched or (op.root.Position-op.selfRoot.Position).Magnitude<=40)
     end
     local function owned(op)
         return type(CheckNetworkOwnerShipOnPart)=="function" and CheckNetworkOwnerShipOnPart(op.root)
@@ -15632,7 +15632,7 @@ do
         if humanoid.SeatPart then status:SetText("Your friend must leave their seat before this test.");return false end
         local op={target=target,character=character,root=root,humanoid=humanoid,position=root.CFrame,
             selfCharacter=selfCharacter,selfRoot=selfRoot,selfHumanoid=selfHumanoid,method=method,
-            seconds=duration,saved={},restore={},created={}}
+            seconds=duration,blobMethod=method=="Grab-Drop" or method=="Grab-Release",saved={},restore={},created={}}
         active=op
         status:SetText("Checking friendship...")
         -- Includes the yielding friendship lookup and ownership setup, not just the loop.
@@ -15646,7 +15646,7 @@ do
                 local owner=grabs and grabs:FindFirstChild("SetNetworkOwner")
                 local dropLine=grabs and grabs:FindFirstChild("DestroyGrabLine")
                 if not owner or not dropLine then error("Ownership remotes are unavailable.") end
-                if op.method~="Ownership" then
+                if op.blobMethod then
                     local seat=Hub.getLoopBlobSeat()
                     local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
                     local blob=seat and seat.Parent
@@ -15684,7 +15684,22 @@ do
                 end
                 if not valid(op) then return end
                 if not owned(op) then error("Network ownership was not confirmed; test stopped.") end
-                if op.method~="Ownership" then
+                if op.method=="Void" then
+                    -- The upload's Void and direct Kick->Void paths share this one-shot protocol.
+                    -- Unlike looped methods, a completed Void deliberately leaves the target displaced.
+                    local destination=CFrame.new(0,9e9,0)
+                    op.voidDispatched=true
+                    op.character:PivotTo(destination*op.root.CFrame:Inverse()*op.character:GetPivot())
+                    op.root.CFrame=destination
+                    op.root.AssemblyLinearVelocity=Vector3.new(0,9e9,0)
+                    status:SetText("Void action sent; releasing ownership in 0.35 seconds.")
+                    task.wait(0.35)
+                    if not valid(op) then return end
+                    Hub.fire(dropLine,op.root)
+                    op.voidFinished=true
+                    return
+                end
+                if op.blobMethod then
                     local attachment=op.root:FindFirstChild("RootAttachment")
                     if not attachment then error("Target RootAttachment is missing.") end
                     save(op,attachment,"Parent",op.character)
@@ -15720,7 +15735,7 @@ do
     local picker=group:AddDropdown("PrivateKickTestTarget",{Text="Friend to test with",Values={},Callback=function(value)
         stop();selected=type(value)=="string" and Players:FindFirstChild(value) or nil
     end})
-    group:AddDropdown("PrivateKickTestMethod",{Text="Kick method",Values={"Grab-Drop","Grab-Release","Ownership"},Default=1,Callback=function(value) stop();method=value end})
+    group:AddDropdown("PrivateKickTestMethod",{Text="Kick method",Values={"Grab-Drop","Grab-Release","Ownership","Void"},Default=1,Callback=function(value) stop();method=value end})
     group:AddSlider("PrivateKickTestDuration",{Text="Test duration (seconds)",Default=3,Min=1,Max=10,Rounding=0,Callback=function(value) stop();duration=value end})
     group:AddButton({Text="Run selected kick test",Func=run})
     group:AddButton({Text="Stop kick test",Func=function() stop("Test cancelled; cleanup complete.") end})
@@ -15730,6 +15745,7 @@ do
     end
     group:AddButton({Text="Refresh test players",Func=refresh})
     group:AddLabel("Friends only, private servers only. Existing player protections still apply. No automatic start or server-wide mode.")
+    group:AddLabel("Void is one action and releases ownership after 0.35 seconds. Duration applies to the other methods.")
     group:AddLabel("A completed attempt does not guarantee a disconnect. Test results depend on the server's current physics and validation.")
     Hub.connect(Player.CharacterRemoving,function() stop("Respawn cancelled the test.") end)
     Hub.connect(Players.PlayerRemoving,function(person) if active and active.target==person then stop("Friend left; test ended.") end;Hub.queueRefresh("privateKickPlayers",refresh) end)
