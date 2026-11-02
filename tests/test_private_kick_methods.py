@@ -18,6 +18,37 @@ CASES={
         restored()
     end
 ''',
+'void_uses_the_uploaded_one_shot_protocol_and_no_blobman':r'''
+    select("Void");seated=false
+    assert(buttons["Run selected kick test"]());step()
+    assert(pivotCalls==1 and targetRoot.CFrame.Position.Y==9e9)
+    targetRoot.Position=targetRoot.CFrame.Position -- emulate the engine updating Position after PivotTo
+    assert(targetRoot.AssemblyLinearVelocity.Y==9e9)
+    assert(#created==0 and motor.Enabled and targetHum.RequiresNeck)
+    assert(#sent==0,"ownership should not be released before the delay")
+    runFor(0.4)
+    assert(#sent==1 and sent[1].remote==dropLine and sent[1].args[1]==targetRoot)
+    assert(targetRoot.CFrame.Position.Y==9e9,"successful Void must not immediately teleport the target back")
+    noForces()
+''',
+'cancelled_void_restores_target_without_a_delayed_drop':r'''
+    select("Void");assert(buttons["Run selected kick test"]());step()
+    assert(targetRoot.CFrame.Position.Y==9e9)
+    buttons["Stop kick test"]();runFor(0.5)
+    assert(targetRoot.CFrame.Position.Y==0 and targetRoot.AssemblyLinearVelocity.Magnitude==0)
+    assert(#sent==0);restored()
+''',
+'void_ownership_failure_never_moves_the_target':r'''
+    select("Void");ownership=false
+    assert(buttons["Run selected kick test"]());runFor(3)
+    assert(pivotCalls==0 and targetRoot.CFrame.Position.Y==0 and #created==0)
+    for _,request in ipairs(sent) do assert(request.remote==ownerRemote) end
+''',
+'void_respawn_never_releases_or_moves_the_replacement_character':r'''
+    select("Void");assert(buttons["Run selected kick test"]());step()
+    a.Character={};runFor(0.5)
+    assert(#sent==0 and pivotCalls==1)
+''',
 'public_servers_and_unknown_server_state_send_no_actions':r'''
     select();game.PrivateServerId="";assert(not buttons["Run selected kick test"]())
     game.PrivateServerId=nil;assert(not buttons["Run selected kick test"]())
