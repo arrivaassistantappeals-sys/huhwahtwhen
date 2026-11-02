@@ -2714,6 +2714,7 @@ do
     local frozenAt, nextAttempt = 0, 0
     local heldValue
     local freezeUsed = false
+    local releasedCharacter, releasedUntil
 
     local function disconnect(list)
         for _, connection in ipairs(list) do connection:Disconnect(); Hub.connections[connection] = nil end
@@ -2768,7 +2769,7 @@ do
         local ragdoll = events and events:FindFirstChild("RagdollRemote")
         local correction = ReplicatedStorage:FindFirstChild("GameCorrectionEvents")
         local stop = correction and correction:FindFirstChild("StopAllVelocity")
-        for _, request in ipairs({{struggle, Player}, {ragdoll, root, 0}, {stop}}) do
+        for _, request in ipairs({{struggle}, {ragdoll, root, 0}, {stop}}) do
             if request[1] then pcall(function() Hub.fire(table.unpack(request)) end) end
         end
         if freezeUsed then return end
@@ -2793,6 +2794,8 @@ do
         local ticket = bindGeneration
         disconnect(characterConnections)
         freezeUsed = false
+        releasedCharacter, releasedUntil = nil, nil
+        nextAttempt = 0
         release()
         if not enabled or not char then return end
         local observedOwners = {}
@@ -2822,12 +2825,17 @@ do
             if not enabled then return end
             local held = heldValue.Value
             if held then
+                releasedCharacter, releasedUntil = nil, nil
                 if not previous then freezeUsed = false; generation += 1 end
                 detect()
             else
                 freezeUsed = false
                 release()
-                if previous then recover(Player.Character) end
+                if previous then
+                    -- A throw can replicate just after IsHeld becomes false.
+                    releasedCharacter, releasedUntil = Player.Character, os.clock() + 0.3
+                    recover(Player.Character)
+                end
             end
             previous = held
         end)
@@ -2843,6 +2851,18 @@ do
         if not on then return end
         listen(featureConnections, RunService.Heartbeat, function()
             if heldValue and heldValue.Value then detect() end
+            if releasedCharacter then
+                local char = releasedCharacter
+                local root = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if os.clock() >= releasedUntil or Player.Character ~= char or not root or not root.Parent
+                    or not hum or hum.Health <= 0 or hum.SeatPart or Hub.safeZoneLoopActive then
+                    releasedCharacter, releasedUntil = nil, nil
+                else
+                    root.AssemblyLinearVelocity = Vector3.zero
+                    root.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
         end)
         listen(featureConnections, Player.CharacterAdded, bindCharacter)
         listen(featureConnections, Player.CharacterRemoving, function() bindCharacter(nil) end)
@@ -2853,7 +2873,7 @@ do
     end})
     DefenseGroup:AddToggle("RecoverMovementAfterGrab", {Text = "Recover movement after Anti Grab releases", Default = false,
         Callback = function(on) recoverMovement = on end})
-    DefenseGroup:AddButton({Text = "Release local grab freeze", Func = function() freezeUsed = true; release() end})
+    DefenseGroup:AddButton({Text = "Release local grab freeze", Func = function() freezeUsed = true; releasedCharacter, releasedUntil = nil, nil; release() end})
     Hub.cleanup(function()
         enabled, recoverMovement = false, false
         disconnect(featureConnections)
@@ -12895,150 +12915,8 @@ end
 tbl12.LightPhysicalProperties=PhysicalProperties.new(0.01,0.01,0.01,0.01,0.01)
 tbl7.States={}
 tbl7.LimbOffsetsRL={Head=CFrame.new(0,1.5,0),["Left Arm"]=CFrame.new(-1.5,0,0),["Right Arm"]=CFrame.new(1.5,0,0),["Left Leg"]=CFrame.new(-0.5,-2,0),["Right Leg"]=CFrame.new(0.5,-2,0),Torso=CFrame.new()}
-tbl9.AGType="Normal"
-local currentCamera=setmetatable({},{__index=function(_,key) local camera=Workspace.CurrentCamera;return camera and camera[key] end})
-local v22
-					tbl12.AntiGrab = function()
-						if flag11 then
-							return
-						end
-
-						if isHeld.Value and tbl8.AntiGrab and not tbl7.States["Anti Grab"] then
-							tbl11.Struggle:FireServer()
-							local v23, v24, v25 = tbl12.Char()
-							local torso = v23 and v23:FindFirstChild("Torso")
-							local neck = torso and torso:FindFirstChild("Neck")
-							if not (v25 and torso) then
-								return
-							end
-							v25.RequiresNeck = false
-							v25.AutoRotate = false
-							tbl12.ResetVelocity(v24 or torso)
-							local position = torso.Position
-							local lookVector = torso.CFrame.LookVector
-							local unit = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
-							tbl7.States["Anti Grab"] = true
-							local flag12 = tbl9.AGType == "Escapes Anything, but buggy"
-							local sit = tbl9.AGType == "Anti-Kill"
-							local flag13 = tbl9.AGType == "No Ragdoll"
-
-							if flag12 then
-								task.spawn(tbl12.ExtraEscape)
-							end
-
-							local now3 = tick()
-							local connection = nil
-							local n36 = tick() + 0.033333333333333333
-							local n37 = 0
-
-							connection = RunService.RenderStepped:Connect(function(deltaTime)
-								local now4 = tick()
-
-								if now4 >= n36 then
-									tbl11.Struggle:FireServer()
-									n36 = now4 + 0.033333333333333333
-								end
-
-								if v24 and not flag12 and not flag13 and now4 >= n37 then
-									local ragdollRemote = tbl11.RagdollRemote
-									local fireServer = ragdollRemote.FireServer
-									local n38
-
-									if sit then
-										n38 = 0.11
-									else
-										n38 = 0
-									end
-
-									fireServer(ragdollRemote, v24, n38)
-									n37 = now4 + 0.033333333333333333
-								end
-
-								if flag12 and tick() - now3 > 2 then
-									task.spawn(tbl12.ExtraEscape)
-									now3 = tick()
-								end
-
-								local moveDirection = v25.MoveDirection
-								local walkSpeed
-
-								if tbl8.WalkSpeed and tbl9.WalkSpeed > 16 then
-									walkSpeed = tbl9.WalkSpeed
-								else
-									walkSpeed = 16
-								end
-
-								if moveDirection.Magnitude > 0 then
-									position += moveDirection * walkSpeed * deltaTime
-								end
-
-								if (currentCamera.CFrame.Position - currentCamera.Focus.Position).Magnitude < 1 then
-									moveDirection = currentCamera.CFrame.LookVector
-								end
-
-								local vector = Vector3.new(moveDirection.X, 0, moveDirection.Z)
-
-								if vector.Magnitude > 0 then
-									unit = unit:Lerp(vector.Unit, math.min(deltaTime * 12, 1)).Unit
-								end
-
-								tbl12.ResetVelocity(v24 or torso)
-
-								if v22 then
-									local v26 = torso
-									local v27 = v22
-									position = v22.Position
-									v26.CFrame = v27
-									v22 = nil
-								else
-									torso.CFrame = CFrame.lookAt(position, position + unit)
-								end
-
-								v25.Sit = sit
-
-								if not neck or not neck.Enabled then
-									tbl12.ToggleCollisions(v23, false)
-									tbl12.RepositionLimbs(v23, true)
-								end
-
-								for _, v26 in ipairs(v25:GetPlayingAnimationTracks()) do
-									if v26.Animation.AnimationId == "rbxassetid://7047322890" then
-										v26:Stop()
-									end
-								end
-
-								if v24 and v24:FindFirstChild("Scream") then
-									v24.Scream.Playing = false
-								end
-
-								if not isHeld.Value or not tbl8.AntiGrab then
-									tbl7.States["Anti Grab"] = false
-
-									if sit then
-										task.delay(0.1, function()
-											if not v25.SeatPart then
-												v25.Sit = false
-												v25:ChangeState(Enum.HumanoidStateType.Running)
-											end
-										end)
-									end
-
-									v25.AutoRotate = true
-									connection:Disconnect()
-								end
-							end)
-						end
-					end
-local originalAG=tbl12.AntiGrab
-tbl12.AntiGrab=function()
-    local char,_,hum=tbl12.Char()
-    if char and hum and tbl8.AntiGrab then remember(hum,"RequiresNeck");remember(hum,"AutoRotate") end
-    return originalAG()
-end
-if Toggles.AntiGrabObsidian then Toggles.AntiGrabObsidian.Callback=function(on) tbl8.AntiGrab=on;tbl12.AntiGrab();if not on then restoreCollision() end;Hub.requestSave() end end
-local held=Player:FindFirstChild("IsHeld")
-if held then Hub.connect(held:GetPropertyChangedSignal("Value"),tbl12.AntiGrab) end
-settings:AddDropdown("SourceAntiGrabMode",{Text="Anti Grab method",Values={"Normal","No Ragdoll","Anti-Kill","Escapes Anything, but buggy"},Default=1,Callback=function(value) tbl9.AGType=value;Hub.requestSave() end})
+-- Anti Grab keeps its lifecycle-aware Defense callback. Do not replace it
+-- here: imported render loops bypass held-flag replacement and respawn cleanup.
 
 -- RootAttachment replacement and root mass repair, as used by the supplied Anti Blobman.
 local removedAttachment,attachmentRoot,replacement
