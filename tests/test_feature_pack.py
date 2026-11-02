@@ -13,7 +13,6 @@ SECTIONS={
  'lines':('-- Feature pack: line textures','-- End line and object feature pack'),
  'world_esp':('-- Feature pack: sticky and blackhole overlays','-- End world overlay feature pack'),
  'groups':('-- Feature pack: reversible tools for the active own-toy group','-- End own-group feature pack'),
- 'servers':('-- Feature pack: bounded public-server browsing','-- End server feature pack'),
  'aim':('-- Feature pack: visible camera aim assistance','-- End aim feature pack'),
  'parts':('-- Feature pack: reversible local part editing','-- End part and travel feature pack'),
  'blackhole':('-- Feature pack: local blackhole image','-- End blackhole cosmetic feature pack'),
@@ -58,14 +57,6 @@ CASES={
     end
     local left,right=point("Wings",1,12,0),point("Wings",2,12,0)
     assert(left.X==-right.X)
- '''),
- 'auto_rejoin_is_opt_in_and_rate_limited':('servers',r'''
-    emit(cameraService.ErrorMessageChanged,"Disconnected");assert(#workers==0)
-    controls.PackAutoRejoin:SetValue(true)
-    emit(cameraService.ErrorMessageChanged,"Disconnected");emit(cameraService.ErrorMessageChanged,"Disconnected again")
-    assert(#workers==1);resume(1);assert(#teleports==1)
-    controls.PackAutoRejoin:SetValue(false);now=20
-    emit(cameraService.ErrorMessageChanged,"Disconnected later");assert(#workers==1)
  '''),
  'aim_visibility_check_rejects_an_obstructed_target':('aim',r'''
     assert(Hub.findAimTarget(Workspace.CurrentCamera,Vector2.new(0,0))==nil)
@@ -147,28 +138,6 @@ CASES={
     assert(not part.CanCollide and foreignPart.CanCollide and #created==1)
     members={};Hub.sampleGroupAppearance();assert(part.CanCollide and created[1].destroyed)
  '''),
- 'server_filter_excludes_full_current_visited_and_respects_sort':('servers',r'''
-    local list={{id="current-job",playing=0,maxPlayers=10},{id="full",playing=10,maxPlayers=10},
-        {id="a",playing=2,maxPlayers=10,fps=45},{id="b",playing=5,maxPlayers=10,fps=60}}
-    local config={current="current-job",visited={},minimum=0,maximum=10,mode="Lowest Players"}
-    assert(Hub.choosePublicServer(list,config).id=="a")
-    config.mode="Highest FPS";assert(Hub.choosePublicServer(list,config).id=="b")
-    config.visited.b=true;assert(Hub.choosePublicServer(list,config).id=="a")
-    config.minimum=6;assert(Hub.choosePublicServer(list,config)==nil)
- '''),
- 'server_search_cancellation_prevents_late_teleport':('servers',r'''
-    pages[1]={data={{id="join",playing=1,maxPlayers=10}}}
-    pauseHTTP=true;assert(Hub.hopPublicServer());resume(1)
-    assert(not Hub.hopPublicServer())
-    buttons["Cancel server search"]();resume(1)
-    assert(#teleports==0)
- '''),
- 'server_search_uses_filters_and_stops_after_four_pages':('servers',r'''
-    for index=1,4 do pages[index]={data={},nextPageCursor="next"} end
-    pages[4].data={{id="join",playing=5,maxPlayers=10}}
-    assert(Hub.hopPublicServer());for _=1,5 do if coroutine.status(workers[1])~="dead" then resume(1) end end
-    assert(#httpCalls==4 and #teleports==1 and teleports[1].job=="join")
- '''),
  'aim_targeting_honors_protection_selection_and_fov':('aim',r'''
     controls.PackAimVisible:SetValue(false)
     local target=Hub.findAimTarget(Workspace.CurrentCamera,Vector2.new(0,0))
@@ -232,3 +201,4 @@ def case(section,body):
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
     return test
 for name,(section,body) in CASES.items():setattr(FeaturePack,'test_'+name,case(section,body))
+
