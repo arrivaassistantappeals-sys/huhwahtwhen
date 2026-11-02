@@ -10794,10 +10794,13 @@ do
 						local function fn24()
 							local character = localPlayer.Character
 							local n36 = 0
+                            local attempts=0
 							local v23 = nil
 							local v24, v25, v26, gucciType, ragdolled, object, v27, seat
 
 							while tbl8.GucciAntiGrab do
+                                attempts+=1
+                                if attempts>1 and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end
 								local exitTo = nil
 								local vehicle, root, flag13, fn25, flag14, now3, cFrame2, n37, connection, flag15, flag16, now4, flag17, parent2, v28, bodyPosition, random, parent3, seatPart, flag18, occupant, playerFromCharacter
 
@@ -10959,6 +10962,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
+                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11139,6 +11143,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
+                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11342,6 +11347,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
+                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11522,6 +11528,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
+                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11718,6 +11725,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
+                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11898,6 +11906,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
+                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -12089,6 +12098,7 @@ do
 													v26.Sit = false
 													now4 = os.clock()
 													n37 = now4 + 0.15
+                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 
 													if now4 < n36 then
 														tbl12.Teleport(v25, cFrame2)
@@ -12632,6 +12642,7 @@ do
 
 								if not ok then
 									warn("[GUCCI Anti Grab] " .. tostring(result))
+                                    if Hub.reportGucciStatus then Hub.reportGucciStatus("Error","Gucci controller error: "..tostring(result):sub(1,160)) end
 
 									if not flag11 then
 										toggles.GucciAntiGrab:SetValue(false)
@@ -14186,13 +14197,45 @@ Hub.cleanup(function() setWeldLag(false) end)
         end)
     end end
     Hub.sourceGucci={remove=tbl12.RemoveGucci,set=tbl12.SetGucciAntiGrab,state=tbl8,settings=tbl9,helpers=tbl12}
-    Hub.updateGucciStatus=function() end
     DefenseExtra:AddToggle("SourceRagdollOnRemoveGucci",{Text="Ragdoll target during Remove Gucci",Default=false,Callback=function(on) tbl8.RagdollInRG=on;Hub.requestSave() end})
     local status=DefenseExtra:AddLabel("Gucci: supplied seat/weld controller, off")
+    -- GUCCI NOTIFICATION STATES BEGIN
+    local previousStatus=Hub.updateGucciStatus
+    local lastPhase
+    local notices={}
+    local messages={
+        Starting="Gucci starting; preparing the seat/weld controller.",
+        Retrying="Gucci retrying; waiting for seat/weld confirmation.",
+        Active="Gucci active; the seat/weld sequence is running.",
+        ["Waiting for respawn"]="Gucci is waiting for your character to respawn.",
+        Disabled="Gucci disabled.",
+        Error="Gucci stopped because its controller encountered an error.",
+    }
+    Hub.reportGucciStatus=function(phase,message)
+        if not Hub.alive then return end
+        Hub.gucciStage=phase
+        status:SetText("Gucci: "..phase)
+        if previousStatus then previousStatus() end
+        local now=os.clock()
+        local repeated=lastPhase==phase
+        lastPhase=phase
+        -- Retry reminders are useful, but never emit a toast every controller frame.
+        local cooldown=phase=="Retrying" and 10 or 2
+        if repeated and phase~="Retrying" then return end
+        if now-(notices[phase] or -math.huge)<cooldown then return end
+        notices[phase]=now
+        notify("Gucci",message or messages[phase] or ("Gucci: "..phase),4)
+    end
+    Hub.updateGucciStatus=function()
+        if tbl8.GucciAntiGrab then Hub.reportGucciStatus(Hub.gucciStage or "Starting") end
+    end
+    -- GUCCI NOTIFICATION STATES END
     local function setGucci(on)
         if on and Hub.stopBlobFlight then Hub.stopBlobFlight() end
+        local wasEnabled=tbl8.GucciAntiGrab==true
+        if on and not wasEnabled then Hub.reportGucciStatus("Starting") end
         tbl12.SetGucciAntiGrab(on)
-        status:SetText(on and "Gucci: supplied controller running, awaiting seat and weld confirmation" or "Gucci: off")
+        if not on and wasEnabled then Hub.reportGucciStatus("Disabled") end
         Hub.requestSave()
     end
     -- Replace the old callbacks, not a second competing controller.
@@ -14216,6 +14259,7 @@ Hub.cleanup(function() setWeldLag(false) end)
         for connection in pairs(sourceConnections) do connection:Disconnect() end
         Hub.sourceDefense=nil
         Hub.sourceGucci=nil
+        Hub.reportGucciStatus=nil
     end)
 end)()
 end
