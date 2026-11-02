@@ -14,6 +14,7 @@ class GucciNotifications(unittest.TestCase):
             local now=0
             local os={clock=function() return now end}
             local Hub={alive=true,requestSave=function() end}
+            local Player={Character={}}
             local tbl8={GucciAntiGrab=false}
             local tbl12={SetGucciAntiGrab=function(on) tbl8.GucciAntiGrab=on end}
             local status={SetText=function(self,text) self.text=text end}
@@ -33,16 +34,20 @@ class GucciNotifications(unittest.TestCase):
             for _=1,100 do now+=0.01;Hub.reportGucciStatus("Retrying") end
             assert(#emitted==2,"retry frames must not flood notifications")
             now=10;Hub.reportGucciStatus("Retrying");assert(#emitted==3)
-            Hub.reportGucciStatus("Active");assert(#emitted==4 and emitted[4]:find("active",1,true))
-            Hub.reportGucciStatus("Active");assert(#emitted==4)
+            Hub.reportGucciStatus("Active");assert(#emitted==4 and status.text=="Gucci: Verifying")
+            Hub.gucciVerifiedRun={Confirmed=true,Char=Player.Character}
+            Hub.reportGucciStatus("Active");assert(#emitted==5 and emitted[5]:find("active",1,true))
+            Hub.reportGucciStatus("Active");assert(#emitted==5)
             assert(status.text=="Gucci: Active" and legacyUpdates>0)
+            Hub.gucciVerifiedRun={Confirmed=true,Char={}}
+            Hub.reportGucciStatus("Active");assert(status.text=="Gucci: Verifying" and #emitted==5)
             Hub.gucciStage="Waiting for respawn";Hub.updateGucciStatus()
-            assert(#emitted==5 and emitted[5]:find("respawn",1,true))
+            assert(#emitted==6 and emitted[6]:find("respawn",1,true))
             Hub.reportGucciStatus("Error","custom controller error")
-            assert(emitted[6]=="custom controller error")
-            setGucci(false);assert(#emitted==7 and emitted[7]=="Gucci disabled.")
-            Hub.gucciStage="Waiting for respawn";Hub.updateGucciStatus();assert(#emitted==7)
-            Hub.alive=false;now=30;Hub.reportGucciStatus("Retrying");assert(#emitted==7)
+            assert(emitted[7]=="custom controller error")
+            setGucci(false);assert(#emitted==8 and emitted[8]=="Gucci disabled.")
+            Hub.gucciStage="Waiting for respawn";Hub.updateGucciStatus();assert(#emitted==8)
+            Hub.alive=false;now=30;Hub.reportGucciStatus("Retrying");assert(#emitted==8)
         '''
         with tempfile.TemporaryDirectory() as directory:
             path=Path(directory)/'notifications.luau'
@@ -55,8 +60,8 @@ class GucciNotifications(unittest.TestCase):
         a=source.index('local function fn24()')
         b=source.index('-- Additional supplied defense behaviors',a)
         controller=source[a:b]
-        self.assertEqual(controller.count('n37 = now4 + 0.15'),controller.count('Hub.reportGucciStatus("Active")'))
-        self.assertGreater(controller.count('Hub.reportGucciStatus("Active")'),0)
+        self.assertEqual(controller.count('n37 = now4 + 0.15'),controller.count('beginGucciConfirmation(v27,fn25,flag14)'))
+        self.assertGreater(controller.count('beginGucciConfirmation(v27,fn25,flag14)'),0)
         self.assertIn('if attempts>1 and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end',controller)
         self.assertIn('Hub.reportGucciStatus("Error",',controller)
         self.assertNotIn('Hub.updateGucciStatus=function() end',source)
