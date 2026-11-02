@@ -8197,15 +8197,16 @@ Hub.clickTeleport=function()
             filter.RespectCanCollide=true
             filter.IgnoreWater=true
             local hit=Workspace:Raycast(ray.Origin,ray.Direction*512,filter)
-            if not hit or hit.Normal.Y<0.5 then return end
+            if not hit then return end
             local position=hit.Position
             for _,value in ipairs({position.X,position.Y,position.Z}) do
                 if value~=value or math.abs(value)==math.huge then return end
             end
             if (position-root.Position).Magnitude>512 or position.Y<=Workspace.FallenPartsDestroyHeight+8 then return end
-            -- A real collidable toy is a valid landing surface, regardless of anchoring or ownership.
+            -- Any real collidable surface is valid, including walls and ceilings.
+            -- Offset toward the exposed side of the hit so the character stays outside it.
             local clearance=math.max(3,hum.HipHeight+root.Size.Y/2+0.5)
-            local destination=CFrame.new(position+Vector3.new(0,clearance,0))*root.CFrame.Rotation
+            local destination=CFrame.new(position+hit.Normal*clearance)*root.CFrame.Rotation
             if Hub.smoothTeleport and Hub.smoothTeleport(root,destination) then return end
             root.CFrame=destination
             root.AssemblyLinearVelocity=Vector3.zero
