@@ -37,6 +37,20 @@ CASES={
     assert(manualOn,"manual Anti Lag must activate before saved feature delay")
     assert(Hub.restoreProgress.done and Hub.restoreProgress.failed==0)
 ''',
+'saved_shuriken_rainbow_restores_before_gameplay_startup_delay':r'''
+    newControls();Library.Options.StartupFeatureDelay:SetValue(9)
+    local states={}
+    for _,id in ipairs({"SourceAntiKickHighlight","SourceAntiKickRainbowFill","SourceAntiKickRainbowOutline","SlowGameplay"}) do
+        local key=id
+        group:AddToggle(id,{Default=false,Callback=function(value) states[key]=value end}):SetValue(true)
+    end
+    assert(Hub.persistSettings())
+    for _,id in ipairs({"SourceAntiKickHighlight","SourceAntiKickRainbowFill","SourceAntiKickRainbowOutline","SlowGameplay"}) do Library.Toggles[id]:SetValue(false) end
+    assert(SaveManager:Load("AutoSave"));advance(0.01)
+    assert(states.SourceAntiKickHighlight and states.SourceAntiKickRainbowFill and states.SourceAntiKickRainbowOutline)
+    assert(not states.SlowGameplay)
+    advance(10);assert(states.SlowGameplay)
+''',
 'flush_persists_latest_change_before_debounced_save':r'''
     newControls();Hub.ready=true
     Library.Toggles.AntiLagToggle:SetValue(true)
