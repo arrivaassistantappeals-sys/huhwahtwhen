@@ -116,6 +116,7 @@ function Hub.queueSavedCallbacks(records,invoke)
     Hub.restoreEpoch=(Hub.restoreEpoch or 0)+1
     local ticket=Hub.restoreEpoch
     local delayed={}
+    local immediate={AntiLagToggle=true,SourceAntiKickHighlight=true,SourceAntiKickRainbowFill=true,SourceAntiKickRainbowOutline=true}
     local progress={total=#records,started=0,completed=0,failed=0,skipped=0,done=#records==0,errors={}}
     Hub.restoreProgress=progress
     local function run(record)
@@ -136,8 +137,8 @@ function Hub.queueSavedCallbacks(records,invoke)
         progress.done=progress.completed==progress.total
     end
     for _,record in ipairs(records) do
-        -- Restore manual line protection without the optional startup feature delay.
-        if record.control.Type=="Toggle" and record.value==true and record.control.Id~="AntiLagToggle" then
+        -- Restore manual line protection and passive shuriken appearance without the gameplay startup delay.
+        if record.control.Type=="Toggle" and record.value==true and not immediate[record.control.Id] then
             table.insert(delayed,record)
         else task.defer(function() run(record) end) end
     end
@@ -13463,6 +13464,7 @@ Hub.cleanup(function()
 end)
 
 -- Supplied PCLD assignment tracking and shuriken anti-kick.
+local updateAntiKickAppearance
 local v18
 local antiKickRunning=false
 local antiKickStart
@@ -13811,71 +13813,7 @@ end
 													tbl12.DestroyToy(v18)
 													v18 = nil
 												else
-													shurHighlight = v18:FindFirstChild("ShurHighlight")
-
-													if not shurHighlight then
-														shurHighlight = Instance.new("Highlight")
-														shurHighlight.Name = "ShurHighlight"
-														shurHighlight.Adornee = v18
-														shurHighlight.Parent = v18
-													end
-
-													if shurHighlight.Enabled ~= antiKickSettings.Highlight then
-														shurHighlight.Enabled = antiKickSettings.Highlight
-													end
-
-													if shurHighlight.FillColor ~= antiKickSettings.HighlightFill then
-														shurHighlight.FillColor = antiKickSettings.HighlightFill
-													end
-
-													if shurHighlight.OutlineColor ~= antiKickSettings.HighlightOutl then
-														shurHighlight.OutlineColor = antiKickSettings.HighlightOutl
-													end
-
-													if shurHighlight.FillTransparency ~= antiKickSettings.HighlightFT then
-														shurHighlight.FillTransparency = antiKickSettings.HighlightFT
-													end
-
-													if shurHighlight.OutlineTransparency ~= antiKickSettings.HighlightOT then
-														shurHighlight.OutlineTransparency = antiKickSettings.HighlightOT
-													end
-
-													highlight2 = antiKickSettings.Highlight
-
-													if highlight2 then
-														antiKick = highlight2
-													else
-														forcefieldChar = tbl8.ForcefieldChar
-														antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
-													end
-
-													if antiKick then
-														transparency = 0
-													else
-														transparency = antiKickSettings.Transparency
-													end
-
-													for _, child in ipairs(v18:GetChildren()) do
-														if child:IsA("BasePart") then
-															if tbl12.ApplyCharacterHighlightPart then
-																tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
-															end
-
-															isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
-
-															if isMeshPart then
-																child.Transparency = transparency
-															end
-
-															if child.CanCollide then
-																child.CanCollide = false
-															end
-
-															if child.CanQuery then
-																child.CanQuery = false
-															end
-														end
-													end
+													if updateAntiKickAppearance then updateAntiKickAppearance() end
 												end
 											end
 										end
@@ -13910,71 +13848,7 @@ end
 												tbl12.DestroyToy(v18)
 												v18 = nil
 											else
-												shurHighlight = v18:FindFirstChild("ShurHighlight")
-
-												if not shurHighlight then
-													shurHighlight = Instance.new("Highlight")
-													shurHighlight.Name = "ShurHighlight"
-													shurHighlight.Adornee = v18
-													shurHighlight.Parent = v18
-												end
-
-												if shurHighlight.Enabled ~= antiKickSettings.Highlight then
-													shurHighlight.Enabled = antiKickSettings.Highlight
-												end
-
-												if shurHighlight.FillColor ~= antiKickSettings.HighlightFill then
-													shurHighlight.FillColor = antiKickSettings.HighlightFill
-												end
-
-												if shurHighlight.OutlineColor ~= antiKickSettings.HighlightOutl then
-													shurHighlight.OutlineColor = antiKickSettings.HighlightOutl
-												end
-
-												if shurHighlight.FillTransparency ~= antiKickSettings.HighlightFT then
-													shurHighlight.FillTransparency = antiKickSettings.HighlightFT
-												end
-
-												if shurHighlight.OutlineTransparency ~= antiKickSettings.HighlightOT then
-													shurHighlight.OutlineTransparency = antiKickSettings.HighlightOT
-												end
-
-												highlight2 = antiKickSettings.Highlight
-
-												if highlight2 then
-													antiKick = highlight2
-												else
-													forcefieldChar = tbl8.ForcefieldChar
-													antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
-												end
-
-												if antiKick then
-													transparency = 0
-												else
-													transparency = antiKickSettings.Transparency
-												end
-
-												for _, child in ipairs(v18:GetChildren()) do
-													if child:IsA("BasePart") then
-														if tbl12.ApplyCharacterHighlightPart then
-															tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
-														end
-
-														isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
-
-														if isMeshPart then
-															child.Transparency = transparency
-														end
-
-														if child.CanCollide then
-															child.CanCollide = false
-														end
-
-														if child.CanQuery then
-															child.CanQuery = false
-														end
-													end
-												end
+												if updateAntiKickAppearance then updateAntiKickAppearance() end
 											end
 										end
 									end
@@ -14016,71 +13890,7 @@ end
 												tbl12.DestroyToy(v18)
 												v18 = nil
 											else
-												shurHighlight = v18:FindFirstChild("ShurHighlight")
-
-												if not shurHighlight then
-													shurHighlight = Instance.new("Highlight")
-													shurHighlight.Name = "ShurHighlight"
-													shurHighlight.Adornee = v18
-													shurHighlight.Parent = v18
-												end
-
-												if shurHighlight.Enabled ~= antiKickSettings.Highlight then
-													shurHighlight.Enabled = antiKickSettings.Highlight
-												end
-
-												if shurHighlight.FillColor ~= antiKickSettings.HighlightFill then
-													shurHighlight.FillColor = antiKickSettings.HighlightFill
-												end
-
-												if shurHighlight.OutlineColor ~= antiKickSettings.HighlightOutl then
-													shurHighlight.OutlineColor = antiKickSettings.HighlightOutl
-												end
-
-												if shurHighlight.FillTransparency ~= antiKickSettings.HighlightFT then
-													shurHighlight.FillTransparency = antiKickSettings.HighlightFT
-												end
-
-												if shurHighlight.OutlineTransparency ~= antiKickSettings.HighlightOT then
-													shurHighlight.OutlineTransparency = antiKickSettings.HighlightOT
-												end
-
-												highlight2 = antiKickSettings.Highlight
-
-												if highlight2 then
-													antiKick = highlight2
-												else
-													forcefieldChar = tbl8.ForcefieldChar
-													antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
-												end
-
-												if antiKick then
-													transparency = 0
-												else
-													transparency = antiKickSettings.Transparency
-												end
-
-												for _, child in ipairs(v18:GetChildren()) do
-													if child:IsA("BasePart") then
-														if tbl12.ApplyCharacterHighlightPart then
-															tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
-														end
-
-														isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
-
-														if isMeshPart then
-															child.Transparency = transparency
-														end
-
-														if child.CanCollide then
-															child.CanCollide = false
-														end
-
-														if child.CanQuery then
-															child.CanQuery = false
-														end
-													end
-												end
+												if updateAntiKickAppearance then updateAntiKickAppearance() end
 											end
 										end
 									end
@@ -14093,71 +13903,7 @@ end
 										tbl12.DestroyToy(v18)
 										v18 = nil
 									else
-										shurHighlight = v18:FindFirstChild("ShurHighlight")
-
-										if not shurHighlight then
-											shurHighlight = Instance.new("Highlight")
-											shurHighlight.Name = "ShurHighlight"
-											shurHighlight.Adornee = v18
-											shurHighlight.Parent = v18
-										end
-
-										if shurHighlight.Enabled ~= antiKickSettings.Highlight then
-											shurHighlight.Enabled = antiKickSettings.Highlight
-										end
-
-										if shurHighlight.FillColor ~= antiKickSettings.HighlightFill then
-											shurHighlight.FillColor = antiKickSettings.HighlightFill
-										end
-
-										if shurHighlight.OutlineColor ~= antiKickSettings.HighlightOutl then
-											shurHighlight.OutlineColor = antiKickSettings.HighlightOutl
-										end
-
-										if shurHighlight.FillTransparency ~= antiKickSettings.HighlightFT then
-											shurHighlight.FillTransparency = antiKickSettings.HighlightFT
-										end
-
-										if shurHighlight.OutlineTransparency ~= antiKickSettings.HighlightOT then
-											shurHighlight.OutlineTransparency = antiKickSettings.HighlightOT
-										end
-
-										highlight2 = antiKickSettings.Highlight
-
-										if highlight2 then
-											antiKick = highlight2
-										else
-											forcefieldChar = tbl8.ForcefieldChar
-											antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
-										end
-
-										if antiKick then
-											transparency = 0
-										else
-											transparency = antiKickSettings.Transparency
-										end
-
-										for _, child in ipairs(v18:GetChildren()) do
-											if child:IsA("BasePart") then
-												if tbl12.ApplyCharacterHighlightPart then
-													tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
-												end
-
-												isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
-
-												if isMeshPart then
-													child.Transparency = transparency
-												end
-
-												if child.CanCollide then
-													child.CanCollide = false
-												end
-
-												if child.CanQuery then
-													child.CanQuery = false
-												end
-											end
-										end
+										if updateAntiKickAppearance then updateAntiKickAppearance() end
 									end
 								end
 							end
@@ -14183,30 +13929,86 @@ local function setAntiKick(on)
     end)
 end
 if Toggles.ShurikenAntiKick then Toggles.ShurikenAntiKick.Callback=setAntiKick end
-settings:AddToggle("SourceAntiKickHighlight",{Text="Anti Kick, highlight shuriken",Default=false,Callback=function(on) tbl7.AntiKickSettings.Highlight=on;Hub.requestSave() end})
+settings:AddToggle("SourceAntiKickHighlight",{Text="Anti Kick, highlight shuriken",Default=false,Callback=function(on) tbl7.AntiKickSettings.Highlight=on;if updateAntiKickAppearance then updateAntiKickAppearance() end;Hub.requestSave() end})
 for _,info in ipairs({{"SourceAntiKickFillAlpha","Anti Kick, fill transparency","HighlightFT",0.5},{"SourceAntiKickOutlineAlpha","Anti Kick, outline transparency","HighlightOT",0},{"SourceAntiKickToyAlpha","Anti Kick, shuriken transparency","Transparency",0.9}}) do
     local property=info[3]
-    settings:AddSlider(info[1],{Text=info[2],Default=info[4],Min=0,Max=1,Rounding=2,Callback=function(value) tbl7.AntiKickSettings[property]=value;Hub.requestSave() end})
+    settings:AddSlider(info[1],{Text=info[2],Default=info[4],Min=0,Max=1,Rounding=2,Callback=function(value) tbl7.AntiKickSettings[property]=value;if updateAntiKickAppearance then updateAntiKickAppearance() end;Hub.requestSave() end})
 end
 Hub.cleanup(function() tbl8.AntiKick=false;trackingEpoch+=1;clearKick();highlight:Destroy() end)
 
+-- ANTI KICK APPEARANCE BEGIN
 local rainbowFill,rainbowOutline=false,false
 local baseFill,baseOutline=tbl7.AntiKickSettings.HighlightFill,tbl7.AntiKickSettings.HighlightOutl
+local appearance={}
+updateAntiKickAppearance=function()
+    local config=tbl7.AntiKickSettings
+    if rainbowFill or rainbowOutline then
+        local color=Color3.fromHSV(os.clock()%5/5,1,1)
+        if rainbowFill then config.HighlightFill=color end
+        if rainbowOutline then config.HighlightOutl=color end
+    end
+    local model=tbl8.AntiKick and v18 and v18.Parent and v18 or nil
+    if appearance.model~=model then
+        if appearance.highlight and appearance.highlight.Parent then appearance.highlight.Enabled=false end
+        appearance.model=model;appearance.highlight=nil
+    end
+    if not model then return end
+    local shur=appearance.highlight
+    if not shur or shur.Parent~=model then
+        shur=model:FindFirstChild("ShurHighlight")
+        if not shur or not shur:IsA("Highlight") then
+            shur=Hub.new("Highlight",model);shur.Name="ShurHighlight"
+        end
+        appearance.highlight=shur
+    end
+    local show=config.Highlight or rainbowFill or rainbowOutline
+    shur.Adornee=model
+    shur.Enabled=show
+    shur.FillColor=config.HighlightFill;shur.OutlineColor=config.HighlightOutl
+    shur.FillTransparency=config.HighlightFT;shur.OutlineTransparency=config.HighlightOT
+    local opaque=show or (tbl8.ForcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"])
+    local transparency=opaque and 0 or config.Transparency
+    for _,part in ipairs(model:GetChildren()) do
+        if part:IsA("BasePart") then
+            if tbl12.ApplyCharacterHighlightPart then tbl12.ApplyCharacterHighlightPart(part,"Anti Kick") end
+            if part:IsA("MeshPart") or part.Name=="Part" then part.Transparency=transparency end
+            part.CanCollide=false;part.CanQuery=false
+        end
+    end
+end
 local function parseHex(value)
     local hex=tostring(value):gsub("^#","")
     if not hex:match("^%x%x%x%x%x%x$") then return end
     return Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16))
 end
-settings:AddInput("SourceAntiKickFillColor",{Text="Anti Kick fill colour, hex",Default="FF0000",Finished=true,Callback=function(value) local color=parseHex(value);if color then baseFill=color;if not rainbowFill then tbl7.AntiKickSettings.HighlightFill=color end;Hub.requestSave() end end})
-settings:AddInput("SourceAntiKickOutlineColor",{Text="Anti Kick outline colour, hex",Default="FFFFFF",Finished=true,Callback=function(value) local color=parseHex(value);if color then baseOutline=color;if not rainbowOutline then tbl7.AntiKickSettings.HighlightOutl=color end;Hub.requestSave() end end})
-settings:AddToggle("SourceAntiKickRainbowFill",{Text="Anti Kick rainbow fill",Default=false,Callback=function(on) rainbowFill=on;if not on then tbl7.AntiKickSettings.HighlightFill=baseFill end;Hub.requestSave() end})
-settings:AddToggle("SourceAntiKickRainbowOutline",{Text="Anti Kick rainbow outline",Default=false,Callback=function(on) rainbowOutline=on;if not on then tbl7.AntiKickSettings.HighlightOutl=baseOutline end;Hub.requestSave() end})
-Hub.connect(RunService.Heartbeat,function()
-    if not rainbowFill and not rainbowOutline then return end
-    local color=Color3.fromHSV(os.clock()%5/5,1,1)
-    if rainbowFill then tbl7.AntiKickSettings.HighlightFill=color end
-    if rainbowOutline then tbl7.AntiKickSettings.HighlightOutl=color end
+settings:AddInput("SourceAntiKickFillColor",{Text="Anti Kick fill colour, hex",Default="FF0000",Finished=true,Callback=function(value)
+    local color=parseHex(value)
+    if color then baseFill=color;if not rainbowFill then tbl7.AntiKickSettings.HighlightFill=color end;updateAntiKickAppearance();Hub.requestSave() end
+end})
+settings:AddInput("SourceAntiKickOutlineColor",{Text="Anti Kick outline colour, hex",Default="FFFFFF",Finished=true,Callback=function(value)
+    local color=parseHex(value)
+    if color then baseOutline=color;if not rainbowOutline then tbl7.AntiKickSettings.HighlightOutl=color end;updateAntiKickAppearance();Hub.requestSave() end
+end})
+settings:AddToggle("SourceAntiKickRainbowFill",{Text="Anti Kick rainbow fill",Default=false,Callback=function(on)
+    rainbowFill=on;if not on then tbl7.AntiKickSettings.HighlightFill=baseFill end
+    updateAntiKickAppearance();Hub.requestSave()
+end})
+settings:AddToggle("SourceAntiKickRainbowOutline",{Text="Anti Kick rainbow outline",Default=false,Callback=function(on)
+    rainbowOutline=on;if not on then tbl7.AntiKickSettings.HighlightOutl=baseOutline end
+    updateAntiKickAppearance();Hub.requestSave()
+end})
+local appearanceElapsed=0
+Hub.connect(RunService.Heartbeat,function(dt)
+    appearanceElapsed+=dt
+    if appearanceElapsed<0.05 then return end
+    appearanceElapsed=0
+    if updateAntiKickAppearance then updateAntiKickAppearance() end
 end)
+Hub.cleanup(function()
+    if appearance.highlight and appearance.highlight.Parent then appearance.highlight.Enabled=false end
+    appearance.model=nil;appearance.highlight=nil;updateAntiKickAppearance=nil
+end)
+-- ANTI KICK APPEARANCE END
 
 -- Other local defensive utilities from the supplied protection section.
 local collisionGroups={}
