@@ -763,6 +763,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 		-- commit 3ef72398fb4c8ba6fd1801e98704991d3cc9cbc2; Lucide icons: ISC license.
 		-- Only the 15 assets used here are retained; no icon-library script is fetched.
 		local iconAssets = {
+            bot={16898612819,869,98}, boxes={16898612819,196,771}, compass={16898613044,514,967},
 			heart={16898613509,661,771},
 			palette={16898613613,453,918},history={16898613509,869,98},bell={16898612819,820,257},
 			activity={16898612629,514,771},["user-round-check"]={16898613869,869,404},
@@ -1957,13 +1958,14 @@ local Tabs = {
     Defense = Window:AddTab("Defense", "shield"),
     Target = Window:AddTab("Loop Players", "crosshair"),
     AntiLag = Window:AddTab("Anti Lag", "activity"),
-    Blob = Window:AddTab("Blobman", "box"),
+    Blob = Window:AddTab("Blobman", "bot"),
     Aura = Window:AddTab("Player Auras", "sparkles"),
     Grab = Window:AddTab("Grab options", "hand"),
-    Fun = Window:AddTab("Objects & Toys", "box"),
+    Fun = Window:AddTab("Objects & Toys", "boxes"),
     Visual = Window:AddTab("Visuals", "eye"),
-    Misc = Window:AddTab("World & Travel", "globe"),
+    Misc = Window:AddTab("World & Travel", "compass"),
     Whitelist = Window:AddTab("Protected Players", "user-round-check"),
+    Explosions = Window:AddTab("Missiles & Explosions", "orbit"),
     KeyBinds = Window:AddTab("KeyBinds", "keyboard"),
     Notifications = Window:AddTab("Notifications", "bell"),
     Customization = Window:AddTab("Appearance", "palette"),
@@ -1972,6 +1974,7 @@ local Tabs = {
 
 -- Central shortcut settings. Existing option IDs remain compatible with saved settings.
 Hub.keybindDefinitions = {
+    {id="BlitzTriggerBombsKey",label="Trigger Bombs (hold)",default="F"},
     {id = "MenuKeybind", label = "Toggle menu", default = "M"},
     {id = "BlobSeatKey", label = "Sit in your Blobman", default = "B"},
     {id = "BlobFlyKey", label = "Toggle Blob Fly", default = "R"},
@@ -2874,49 +2877,35 @@ DefenseGroup:AddToggle("AntiBlobmanToggle", {
 	end
 })
 
--- Bounded explosion freeze; overlapping events share one original anchor snapshot.
-do
-    local enabled, connection, state = false, nil, nil
-    local nextFreeze = 0
-    local function release()
-        if state then
-            local old = state; state = nil
-            pcall(function() if old.root.Parent then old.root.Anchored = old.original end end)
-        end
-    end
-    local function inspect(model)
-        if not enabled or not model:IsA("BasePart") or model.Name ~= "Part" then return end
-        local char = Player.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not root or not hum or hum.Health <= 0 or hum.SeatPart or Hub.safeZoneLoopActive
-            or Hub.blobFlightActive or (model.Position-root.Position).Magnitude > 20 then return end
-        root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
-        -- Anti Grab owns its own anchor snapshot; never capture or restore it here.
-        if Toggles.AntiGrabObsidian and Toggles.AntiGrabObsidian.Value then return end
-        local now = os.clock()
-        if state then
-            if state.root == root then state.untilTime = math.min(state.started+0.3, now+0.15) end
-            return
-        end
-        if root.Anchored or now < nextFreeze then return end
-        state = {root=root, character=char, original=root.Anchored, started=now, untilTime=now+0.15}
-        root.Anchored = true
-    end
-    Hub.connect(RunService.Heartbeat,function()
-        if state and (not enabled or Player.Character ~= state.character or os.clock() >= state.untilTime
-            or Hub.safeZoneLoopActive or Hub.blobFlightActive) then
-            release(); nextFreeze = os.clock()+0.25
-        end
-    end)
-    DefenseGroup:AddToggle("AntiExplosionToggle", {Text="Anti Explosion",Default=false,Callback=function(on)
-        enabled=on
-        if connection then connection:Disconnect();Hub.connections[connection]=nil;connection=nil end
-        release()
-        if on then connection=Hub.connect(Workspace.ChildAdded,inspect) end
-    end})
-    Hub.cleanup(function() enabled=false;release() end)
+-- Legacy explosion protection.
+local antiExplodeT=false
+local antiExplodeConnection
+local function antiExplodeF()
+	antiExplodeT = true
+	if antiExplodeConnection then antiExplodeConnection:Disconnect() end
+	antiExplodeConnection = Hub.connect(workspace.ChildAdded, function(model)
+		if not antiExplodeT or not model:IsA("BasePart") or model.Name ~= "Part" then return end
+		local char = Player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp or (model.Position - hrp.Position).Magnitude > 20 then return end
+		local original = hrp.Anchored
+		hrp.Anchored = true
+		task.delay(0.15, function() if hrp.Parent then hrp.Anchored = original end end)
+		Hub.explosionAnchor = {hrp, original}
+	end)
 end
+Hub.cleanup(function()
+	if Hub.explosionAnchor then Hub.explosionAnchor[1].Anchored = Hub.explosionAnchor[2] end
+end)
+
+DefenseGroup:AddToggle("AntiExplosionToggle", {
+	Text="Anti Explosion", 
+	Default=false,
+	Callback=function(on)
+		Hub.requestSave()
+		if on then antiExplodeF() else antiExplodeT=false; if antiExplodeConnection then antiExplodeConnection:Disconnect(); antiExplodeConnection=nil end end
+	end
+})
 -- End explosion protection
 
 do
@@ -3089,7 +3078,7 @@ do
     local saved, character
     local lastSample, lastRecovery = -math.huge, -math.huge
     local recoveries = 0
-    local status = DefenseGroup:AddLabel("Anti Void is off. No recovery point recorded.")
+    local status = DefenseGroup:AddLabel("Anti Void uses the supplied height-threshold recovery method.")
     local function finiteVector(value)
         for _, number in ipairs({value.X, value.Y, value.Z}) do
             if number ~= number or math.abs(number) == math.huge then return false end
@@ -3144,7 +3133,7 @@ do
         end
     end
     Hub.sampleVoidProtection = sample
-    DefenseGroup:AddToggle("AntiVoidToggle", {Text = "Anti Void (last safe ground)", Default = false, Callback = function(on)
+    DefenseGroup:AddToggle("AntiVoidToggle", {Text = "Anti Void", Default = false, Callback = function(on)
         enabled = on
         if connection then connection:Disconnect(); Hub.connections[connection] = nil; connection = nil end
         saved, character = nil, Player.Character
@@ -3153,7 +3142,7 @@ do
             status:SetText("Anti Void: waiting for grounded, stable movement.")
             sample()
             connection = Hub.connect(RunService.Heartbeat, sample)
-        else status:SetText("Anti Void is off. No recovery point recorded.") end
+        else status:SetText("Anti Void uses the supplied height-threshold recovery method.") end
     end})
     DefenseGroup:AddButton({Text = "Record safe ground here", Func = function()
         if not record() then notify("Recovery", "Stand still on solid anchored ground outside seats and grabs first.", 5) end
@@ -3286,7 +3275,7 @@ do
 	(function()
 		local enabled=false
 		local saved,listeners,folders={},{},{}
-		local status=DefenseGroup:AddLabel("Anti Sticky is off.")
+		local status=DefenseGroup:AddLabel("Anti Sticky uses the supplied connected-part method.")
 		local function connect(event,callback)
 			local connection=Hub.connect(event,callback)
 			table.insert(listeners,connection)
@@ -3315,7 +3304,7 @@ do
 				pcall(function() if object.Parent then object.Disabled=disabled end end)
 			end
 			table.clear(saved)
-			status:SetText("Anti Sticky is off.")
+			status:SetText("Anti Sticky uses the supplied connected-part method.")
 		end
 		DefenseGroup:AddToggle("AntiStickyToggle",{Text="Anti Sticky",Default=false,Callback=function(on)
 			stop();enabled=on;Hub.requestSave()
@@ -3653,7 +3642,7 @@ DefenseExtra:AddToggle("PaintDeleteToggle", {
 do
 	local enabled=false
 	local monitorGeneration=0
-	local status=DefenseExtra:AddLabel("Gucci: Disabled")
+	local status=DefenseExtra:AddLabel("Gucci uses the supplied seat/weld controller.")
 	Hub.updateGucciStatus=function() status:SetText("Gucci: " .. (Hub.gucciStage or "Disabled")) end
 	DefenseExtra:AddToggle("GucciAutoDeleteBlob",{
 		Text="Auto-delete Blobman after Gucci",Default=true,
@@ -3665,7 +3654,7 @@ do
 		end,
 	})
 	DefenseExtra:AddToggle("AutoGucciBlobToggle",{
-		Text="Anti Gucci",Default=false,
+		Text="[GUCCI] Anti Grab",Default=false,
 		Callback=function(on)
 			enabled=on
 			monitorGeneration+=1
@@ -3754,7 +3743,7 @@ DefenseExtra:AddToggle("AutoGucciTrainToggle", {
 -- Anti-Input Lag
 local inputLagMonitorGeneration = 0
 DefenseExtra:AddToggle("AntiInputLag", {
-	Text = "Anti Input Lag",
+	Text = "Anti Network Ownership / Input Lag",
 	Default = false,
 	Callback = function(Value)
 		inputLagMonitorGeneration += 1
@@ -7508,199 +7497,481 @@ Hub.cleanup(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,
 local mouse = Player:GetMouse()
 local tpToolConn
 
--- One-shot missile throw adapted from the supplied code’s M shortcut; V is the default here.
+-- Bounded, cancellable toy actions. A toy counter is not a replication barrier.
 do
 (function()
-    local group = Hub.keybindGroups.missiles
-    local enabled, generation = true, 0
-    local pending, forces, toolConnections = {}, {}, {}
-    Hub.missileLaunchClaims = {}
-    local status = group:AddLabel("Ready.")
-    local function disconnect(connection)
-        if connection then connection:Disconnect(); Hub.connections[connection] = nil end
+    local shortcuts=Hub.keybindGroups.missiles
+    local menuGroup=Tabs.Explosions:AddRightGroupbox("Missile Throw Status")
+    local aimGroup=Tabs.Explosions:AddRightGroupbox("Launch Settings")
+    local status=menuGroup:AddLabel("Ready.")
+    local enabled,generation=true,0
+    local active=nil
+    local flights={}
+    local loopOn,loopCount,nextLoop=false,0,0
+    local toyName,action,aim="BombMissile","Throw","Camera"
+    local interval,maxCycles,speed,lifetime=1,10,500,3
+    local claims=Hub.missileLaunchClaims or {};Hub.missileLaunchClaims=claims
+    local reserved={};Hub.missileReservedModels=reserved
+    Hub.isMissileReserved=function(instance)
+        local cursor=instance
+        while cursor and cursor~=Workspace do if reserved[cursor] then return true end;cursor=cursor.Parent end
+        return false
     end
-    local function release(force)
-        local root = forces[force]
-        if not root then return end
-        forces[force] = nil
-        if Hub.missileLaunchClaims[root] == force then Hub.missileLaunchClaims[root] = nil end
-        Hub.instances[force], Hub.assetTargets[force] = nil, nil
-        pcall(function() force:Destroy() end)
+    local function disconnect(c) if c then c:Disconnect();Hub.connections[c]=nil end end
+    local function releaseFlight(op)
+        if op.force then
+            Hub.instances[op.force]=nil;Hub.assetTargets[op.force]=nil
+            pcall(function() op.force:Destroy() end);op.force=nil
+        end
+        disconnect(op.partsConnection);op.partsConnection=nil
+        for part in pairs(op.claimed) do if claims[part]==op then claims[part]=nil end end
+        if op.toy and reserved[op.toy]==op then reserved[op.toy]=nil end
+        flights[op]=nil
     end
-    local function cancel()
-        generation += 1
-        for _, connection in ipairs(toolConnections) do disconnect(connection) end
-        table.clear(toolConnections)
-        for operation, connection in pairs(pending) do disconnect(connection); pending[operation] = nil end
-        local list = {}
-        for force in pairs(forces) do table.insert(list, force) end
-        for _, force in ipairs(list) do release(force) end
-        status:SetText("Pending missile actions cancelled; launch forces released.")
+    local function finish(op)
+        disconnect(op.listener);op.listener=nil
+        if active==op then active=nil end
+        nextLoop=os.clock()+interval
     end
-    local function ownedStatus(name)
-        local node = Player:FindFirstChildOfClass("PlayerGui")
-        for _, childName in ipairs({"MenuGui", "Menu", "TabContents", "Toys", "Contents"}) do
-            node = node and node:FindFirstChild(childName)
-        end
-        return not node or node:FindFirstChild(name) ~= nil
-    end
-    local function run(name, explode)
-        if not Hub.alive or not enabled or Hub.keybindCaptureActive or UserInputService:GetFocusedTextBox() then return false end
-        local char = Player.Character
-        local head = char and char:FindFirstChild("Head")
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not root or not hum or hum.Health <= 0 or not ownedStatus(name) then
-            status:SetText("Character unavailable or toy not owned: " .. name); return false
-        end
-        local menu = ReplicatedStorage:FindFirstChild("MenuToys")
-        local spawn = menu and menu:FindFirstChild("SpawnToyRemoteFunction")
-        local grabs = ReplicatedStorage:FindFirstChild("GrabEvents")
-        local owner = grabs and grabs:FindFirstChild("SetNetworkOwner")
-        local folder = Workspace:FindFirstChild(Player.Name .. "SpawnedInToys")
-        local events = ReplicatedStorage:FindFirstChild("BombEvents")
-        local explosion = events and events:FindFirstChild("BombExplode")
-        if not spawn or not owner or not folder or (explode and not explosion) then
-            status:SetText("Missile remotes or toy folder are not ready."); return false
-        end
-        local operation = name .. (explode and ":explode" or ":throw")
-        if pending[operation] then status:SetText("That missile action is already waiting for its toy."); return false end
-        local ticket, accepted = generation, false
-        local function current()
-            return Hub.alive and enabled and ticket == generation and Player.Character == char and hum.Health > 0
-        end
-        local function finish()
-            disconnect(pending[operation]); pending[operation] = nil
-        end
-        -- Same order as the supplied callbacks: subscribe FIRST, then spawn asynchronously.
-        pending[operation] = Hub.connect(folder.ChildAdded, function(child)
-            if accepted or not current() or child.Name ~= name then return end
-            local number = child:WaitForChild("ThisToysNumber", 1)
-            local counter = folder:FindFirstChild("ToyNumber")
-            if not number or not counter or number.Value ~= counter.Value - 1 or accepted or not current() then return end
-            accepted = true
-            finish()
-            local hit = child:WaitForChild("PartHitDetector", 1)
-            if not hit or not hit:IsA("BasePart") or child.Parent ~= folder or not current() then return end
-            Hub.fire(owner, hit, hit.CFrame)
-            if explode then
-                local body = child:WaitForChild("Body", 1)
-                if not body or not body:IsA("BasePart") or not current() then return end
-                Hub.fire(explosion, {
-                    Radius = 17.5, TimeLength = 2, Hitbox = hit,
-                    ExplodesByFire = false, MaxForcePerStudSquared = 225,
-                    Model = child, ImpactSpeed = 100, ExplodesByPointy = false,
-                    DestroysModel = false, PositionPart = body,
-                }, body.Position)
-                status:SetText("Requested " .. name .. " explosion.")
-            else
-                local camera = Workspace.CurrentCamera
-                if not camera then return end
-                local velocityObj = Hub.new("BodyVelocity", hit)
-                forces[velocityObj] = hit.AssemblyRootPart or hit
-                Hub.missileLaunchClaims[forces[velocityObj]] = velocityObj
-                velocityObj.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                velocityObj.Velocity = camera.CFrame.LookVector * 500
-                Debris:AddItem(velocityObj, 10)
-                task.delay(10, function() release(velocityObj) end)
-                status:SetText("Threw BombMissile at 500 studs/sec.")
+    local function cancel(reason)
+        generation+=1
+        local op=active;active=nil
+        if op then
+            disconnect(op.listener)
+            if op.worker and coroutine.status(op.worker)~="dead" and op.worker~=coroutine.running() then
+                pcall(Hub.nativeTask.cancel,op.worker);Hub.threads[op.worker]=nil
             end
-        end)
-        -- Tool explosion listeners expire after one second; bound throw listeners too.
-        task.delay(explode and 1 or 5, function()
-            if ticket == generation and not accepted then finish() end
-        end)
-        local spawnCFrame = head and head.CFrame or root.CFrame
-        task.spawn(function()
-            if not current() then return end
-            local ok, err = pcall(function() Hub.invoke(spawn, name, spawnCFrame, Vector3.zero) end)
-            if not ok and current() then finish(); status:SetText("Missile spawn failed: " .. tostring(err)) end
+            releaseFlight(op)
+            if op.mode=="Cache" and op.toy then Hub.missileKeptModels=Hub.missileKeptModels or {};Hub.missileKeptModels[op.toy]=true end
+        end
+        local list={};for flight in pairs(flights) do table.insert(list,flight) end
+        for _,flight in ipairs(list) do releaseFlight(flight) end
+        status:SetText(reason or "Missile actions stopped.")
+    end
+    local function stop(reason)
+        loopOn=false
+        local toggle=Toggles.MissileLoopEnabled
+        if toggle and toggle.Value then toggle:SetValue(false) end
+        cancel(reason)
+    end
+    local function current(op)
+        return Hub.alive and enabled and active==op and generation==op.ticket
+            and Player.Character==op.character and op.humanoid.Health>0
+    end
+    local function reserve(op,model)
+        if op.toy==model then return end
+        if op.toy then releaseFlight(op) end
+        op.toy=model;reserved[model]=op
+        local function mark(part)
+            if part:IsA("BasePart") then
+                local root=part.AssemblyRootPart or part
+                if not claims[root] or claims[root]==op then claims[root]=op;op.claimed[root]=true end
+            end
+        end
+        for _,part in ipairs(model:GetDescendants()) do mark(part) end
+        op.partsConnection=Hub.connect(model.DescendantAdded,mark)
+    end
+    local function available(name)
+        local node=Player:FindFirstChildOfClass("PlayerGui")
+        for _,key in ipairs({"MenuGui","Menu","TabContents","Toys","Contents"}) do node=node and node:FindFirstChild(key) end
+        if node and not node:FindFirstChild(name) then return false,"You do not own "..name.."." end
+        local can=Player:FindFirstChild("CanSpawnToy")
+        if can and can.Value==false then return false,"Toy spawning is unavailable right now." end
+        local used,cap=Player:FindFirstChild("UsedToyPoints"),Player:FindFirstChild("ToysLimitCap")
+        if used and cap and tonumber(used.Value) and tonumber(cap.Value) and used.Value+10>cap.Value then
+            return false,"Not enough toy points. Free some space before restarting the loop."
+        end
+        return true
+    end
+    local definitions={
+        BombMissile={hit="PartHitDetector",physics="Body"},FireworkMissile={hit="PartHitDetector",physics="Hitbox"},
+        BombDarkMatter={hit="PartHitDetector",physics="Pyramid"},BombBalloon={hit="Balloon",physics="Balloon"},
+        PresentBig={hit="Box",physics="Box"},PresentSmall={hit="Box",physics="Box"},DiceSmall={hit="SoundPart",physics="SoundPart"},
+    }
+    local function start(name,mode,onPrepared)
+        if not Hub.alive or not enabled or Hub.keybindCaptureActive or UserInputService:GetFocusedTextBox() then return false end
+        if active then status:SetText("Waiting for the current toy, no extra spawn queued.");return false end
+        if not definitions[name] or (mode~="Cache" and name~="BombMissile" and name~="FireworkMissile") then return false end
+        local char=Player.Character
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        local camera=Workspace.CurrentCamera
+        if not root or not hum or hum.Health<=0 or not camera then status:SetText("Wait for your character and camera.");return false end
+        local allowed,reason=available(name);if not allowed then stop(reason);return false end
+        local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+        local toys=ReplicatedStorage:FindFirstChild("MenuToys")
+        local spawn=toys and toys:FindFirstChild("SpawnToyRemoteFunction")
+        local grabs=ReplicatedStorage:FindFirstChild("GrabEvents")
+        local owner=grabs and grabs:FindFirstChild("SetNetworkOwner")
+        local events=ReplicatedStorage:FindFirstChild("BombEvents")
+        local explode=events and events:FindFirstChild("BombExplode")
+        if not folder or not spawn or not owner or (mode=="Explode" and not explode) then stop("Toy remotes or your toy folder are not ready.");return false end
+        local direction=camera.CFrame.LookVector
+        if aim=="Mouse" then
+            local delta=mouse.Hit.Position-root.Position
+            if delta.Magnitude>0.001 then direction=delta.Unit end
+        end
+        local spawnPosition=root.Position+direction*6+Vector3.new(0,1,0)
+        local spawnFrame=Hub.safeLookAt(spawnPosition,spawnPosition+direction) or root.CFrame
+        local op={ticket=generation,character=char,humanoid=hum,claimed={},before={},deadline=os.clock()+(mode=="Cache" and 12 or 6),name=name,mode=mode}
+        active=op
+        for _,model in ipairs(folder:GetChildren()) do op.before[model]=true end
+        local function capture(model)
+            if not current(op) or op.before[model] or model.Parent~=folder or model.Name~=name or not model:IsA("Model") then return end
+            if not op.toy then reserve(op,model) end
+        end
+        op.listener=Hub.connect(folder.ChildAdded,capture)
+        status:SetText("Spawning "..name.."...")
+        op.worker=task.spawn(function()
+            local ok,err=xpcall(function()
+                local result=Hub.invoke(spawn,name,spawnFrame,Vector3.zero)
+                if not current(op) then return end
+                -- Prefer the returned model when the server exposes it. Otherwise
+                -- use a new own-folder child, never the moving global toy counter.
+                if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder
+                    and result.Name==name and not op.before[result] then reserve(op,result) end
+                local hit,body
+                repeat
+                    if not current(op) then return end
+                    if not op.toy then for _,model in ipairs(folder:GetChildren()) do capture(model) end end
+                    if op.toy and op.toy.Parent~=folder then error("The spawned toy disappeared before launch.") end
+                    if op.toy then
+                        hit=op.toy:FindFirstChild(definitions[name].hit,true)
+                        body=op.toy:FindFirstChild(mode=="Cache" and definitions[name].physics or "Body",true)
+                    end
+                    if hit and hit:IsA("BasePart") and not hit.Anchored and ((mode~="Explode" and mode~="Cache") or (body and body:IsA("BasePart"))) then break end
+                    task.wait()
+                until os.clock()>=op.deadline
+                if not current(op) then return end
+                if not hit or not hit:IsA("BasePart") or hit.Anchored or ((mode=="Explode" or mode=="Cache") and not body) then error("Toy parts did not become ready within six seconds.") end
+                disconnect(op.listener);op.listener=nil
+                local facing=Hub.lookAt(hit.Position,hit.Position+direction) or hit.CFrame
+                Hub.fire(owner,hit,facing)
+                if mode=="Cache" then
+                    local physics=op.toy:FindFirstChild(definitions[name].physics,true) or hit
+                    local deadline=math.min(op.deadline,os.clock()+8)
+                    if physics~=hit then Hub.fire(owner,physics,Hub.lookAt(physics.Position,physics.Position+direction) or physics.CFrame) end
+                    if type(CheckNetworkOwnerShipOnPart)=="function" then
+                        local nextRequest=os.clock()+0.5
+                        while current(op) and not CheckNetworkOwnerShipOnPart(physics) and os.clock()<deadline do
+                            if os.clock()>=nextRequest then
+                                nextRequest=os.clock()+0.5
+                                if Player:DistanceFromCharacter(physics.Position)<=30 then
+                                    Hub.fire(owner,physics,Hub.lookAt(root.Position,physics.Position) or physics.CFrame)
+                                end
+                            end
+                            task.wait()
+                        end
+                        if not current(op) then return end
+                        if not CheckNetworkOwnerShipOnPart(physics) then error("Network ownership was not confirmed for the cached toy.") end
+                    end
+                    local primary=op.toy.PrimaryPart or physics
+                    local force=Hub.new(name=="DiceSmall" and "BodyPosition" or "BodyVelocity",primary);op.force=force
+                    force.MaxForce=Vector3.new(math.huge,math.huge,math.huge)
+                    if name=="DiceSmall" then force.Position=Vector3.new(1000,400,10000);force.D=200;force.P=50000
+                    else force.Velocity=Vector3.zero;force.Name="Stable" end
+                    op.toy:PivotTo(CFrame.new(math.random(-1000,1000),10000,math.random(-1000,1000)))
+                    flights[op]=math.huge
+                    if onPrepared then onPrepared({model=op.toy,hit=hit,position=primary,force=force,release=function() releaseFlight(op) end}) end
+                elseif mode=="Throw" then
+                    local assembly=hit.AssemblyRootPart or hit
+                    claims[assembly]=op;op.claimed[assembly]=true
+                    local force=Hub.new("BodyVelocity",hit);op.force=force
+                    force.MaxForce=Vector3.new(math.huge,math.huge,math.huge)
+                    force.Velocity=direction*speed
+                    hit.AssemblyAngularVelocity=Vector3.zero
+                    hit.AssemblyLinearVelocity=direction*speed
+                    flights[op]=os.clock()+lifetime
+                    status:SetText(string.format("Launched %s at %d studs/sec.",name,speed))
+                else
+                    Hub.fire(explode,{Radius=17.5,TimeLength=2,Hitbox=hit,ExplodesByFire=false,
+                        MaxForcePerStudSquared=225,Model=op.toy,ImpactSpeed=100,ExplodesByPointy=false,
+                        DestroysModel=true,PositionPart=body},body.Position)
+                    flights[op]=os.clock()+2
+                    status:SetText("Requested "..name.." explosion.")
+                end
+                loopCount+=1;finish(op)
+            end,debug.traceback)
+            if not ok and current(op) then Hub.lastMissileError=tostring(err):sub(1,240);stop("Missile action paused: "..Hub.lastMissileError) end
         end)
         return true
     end
-    function Hub.throwMissile()
-        if not Hub.alive or not enabled or Hub.keybindCaptureActive or UserInputService:GetFocusedTextBox() then return false end
-        local localPlayer = Player
-        local playerCharacter = localPlayer.Character
-        local toysFolder = Workspace:FindFirstChild(localPlayer.Name .. "SpawnedInToys")
-        if not playerCharacter or not toysFolder then return false end
-        local workspace = Workspace
-        local SetNetworkOwner = ReplicatedStorage.GrabEvents.SetNetworkOwner
-        local ownedToys = {}
-        local node = localPlayer:FindFirstChildOfClass("PlayerGui")
-        for _, name in ipairs({"MenuGui", "Menu", "TabContents", "Toys", "Contents"}) do node = node and node:FindFirstChild(name) end
-        if node then
-            for _, toy in ipairs(node:GetChildren()) do
-                if toy.Name ~= "UIGridLayout" then ownedToys[toy.Name] = true end
-            end
-        else
-            ownedToys.BombMissile = true -- Let the normal server spawn validate while the menu loads.
+    Hub.throwMissile=function(value) if type(value)=="string" then return false end;return start("BombMissile","Throw") end
+    Hub.explodeMissile=function(name) return start(name,"Explode") end
+    Hub.prepareExplosive=function(name,callback) return start(name,"Cache",callback) end
+    Hub.missileWorkBusy=function() return active~=nil end
+    Hub.cancelMissileWork=stop
+    shortcuts:AddLabel("Throw Bomb"):AddKeyPicker("MissileThrowKey",{Default="V",Text="Throw Bomb",Callback=Hub.throwMissile})
+    shortcuts:AddLabel("Explode Bomb"):AddKeyPicker("ExplodeBombKey",{Default="J",Text="Explode Bomb",Callback=function(value) if type(value)~="string" then Hub.explodeMissile("BombMissile") end end})
+    shortcuts:AddLabel("Explode Firework"):AddKeyPicker("ExplodeFireworkKey",{Default="N",Text="Explode Firework",Callback=function(value) if type(value)~="string" then Hub.explodeMissile("FireworkMissile") end end})
+    shortcuts:AddToggle("MissileThrowEnabled",{Text="Enable missile actions",Default=true,Callback=function(on) enabled=on;if not on then stop("Missile actions disabled.") end end})
+    shortcuts:AddButton({Text="Throw Bomb",Func=Hub.throwMissile})
+    shortcuts:AddButton({Text="Explode Bomb",Func=function() Hub.explodeMissile("BombMissile") end})
+    shortcuts:AddButton({Text="Explode Firework",Func=function() Hub.explodeMissile("FireworkMissile") end})
+    shortcuts:AddButton({Text="Cancel missile actions",Func=function() stop("Missile actions stopped.") end})
+    aimGroup:AddDropdown("MissileAimMode",{Text="Throw direction",Values={"Camera","Mouse"},Default=1,Callback=function(value) aim=value end})
+    aimGroup:AddSlider("MissileLaunchSpeed",{Text="Launch speed",Default=500,Min=100,Max=500,Rounding=0,Callback=function(value) speed=value end})
+    aimGroup:AddSlider("MissileForceLifetime",{Text="Launch force lifetime (seconds)",Default=3,Min=0.5,Max=10,Rounding=1,Callback=function(value) lifetime=value end})
+    aimGroup:AddLabel("Uses your own newly spawned missile or firework. Throw starts as soon as its physics part is ready. Each loop waits for completion and stops on spawn failure, toy limits, death or respawn.")
+    Hub.connect(RunService.Heartbeat,function()
+        local now=os.clock()
+        if active and not current(active) then stop("Character became unavailable, missile actions stopped.")
+        elseif active and now>=active.deadline then Hub.lastMissileError="Spawn/replication timed out.";stop("Spawn timed out. No further spawn requests queued.") end
+        local expired={};for op,deadline in pairs(flights) do if now>=deadline or not op.toy or not op.toy.Parent then table.insert(expired,op) end end
+        for _,op in ipairs(expired) do releaseFlight(op) end
+        if loopOn and not active and now>=nextLoop then
+            if loopCount>=maxCycles then stop("Loop finished its selected action count.") else start(toyName,action) end
         end
-        local OrionLib = {MakeNotification = function(_, info) status:SetText(info.Content) end}
-        -- BEGIN supplied spawnItemCf (verbatim)
-local function spawnItemCf(itemName, cframe)
-	task.spawn(function()
-		local rotation = Vector3.new(0, 0, 0)
-		ReplicatedStorage.MenuToys.SpawnToyRemoteFunction:InvokeServer(itemName, cframe, rotation)
-	end)
-end
-        -- END supplied spawnItemCf
-        -- BEGIN supplied Throw Bomb callback (only connection bookkeeping added)
-		if not ownedToys["BombMissile"] then
-			OrionLib:MakeNotification({Name = "Missing toy", Content = "You do not own the BombMissile toy. ", Image = "rbxassetid://4483345998", Time = 3})
-			return
-		end
-
-		local connection
-		connection = toysFolder.ChildAdded:Connect(function(child)
-			if child.Name == "BombMissile" then
-				if child:WaitForChild("ThisToysNumber", 1) then
-
-					if child.ThisToysNumber.Value == (toysFolder.ToyNumber.Value - 1) then
-
-						connection:Disconnect()
-
-						SetNetworkOwner:FireServer(child.PartHitDetector, child.PartHitDetector.CFrame)
-						local velocityObj = Instance.new("BodyVelocity", child.PartHitDetector)
-						velocityObj.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-						velocityObj.Velocity = workspace.CurrentCamera.CFrame.lookVector * 500
-						Debris:AddItem(velocityObj, 10)
-                        -- BEGIN hub bookkeeping (no launch changes)
-                        local assembly = child.PartHitDetector.AssemblyRootPart or child.PartHitDetector
-                        forces[velocityObj] = assembly
-                        Hub.missileLaunchClaims[assembly] = velocityObj
-                        Hub.instances[velocityObj] = true
-                        task.delay(10, function() release(velocityObj) end)
-                        -- END hub bookkeeping
-					end
-				end
-			end
-		end)
-        table.insert(toolConnections, connection)
-        Hub.connections[connection] = true
-		spawnItemCf("BombMissile", playerCharacter.Head.CFrame or playerCharacter.HumanoidRootPart.CFrame)
-        -- END supplied Throw Bomb callback
-        return true
-    end
-    function Hub.explodeMissile(name)
-        if name ~= "BombMissile" and name ~= "FireworkMissile" then return false end
-        return run(name, true)
-    end
-    group:AddLabel("Throw Bomb"):AddKeyPicker("MissileThrowKey", {Default = "V", Text = "Throw Bomb", Callback = Hub.throwMissile})
-    group:AddLabel("Explode Bomb"):AddKeyPicker("ExplodeBombKey", {Default = "J", Text = "Explode Bomb", Callback = function() Hub.explodeMissile("BombMissile") end})
-    group:AddLabel("Explode Firework"):AddKeyPicker("ExplodeFireworkKey", {Default = "N", Text = "Explode Firework", Callback = function() Hub.explodeMissile("FireworkMissile") end})
-    group:AddToggle("MissileThrowEnabled", {Text = "Enable missile actions", Default = true, Callback = function(on) enabled = on; if not on then cancel() end end})
-    group:AddButton({Text = "Throw Bomb", Func = Hub.throwMissile})
-    group:AddButton({Text = "Explode Bomb", Func = function() Hub.explodeMissile("BombMissile") end})
-    group:AddButton({Text = "Explode Firework", Func = function() Hub.explodeMissile("FireworkMissile") end})
-    group:AddButton({Text = "Cancel missile actions", Func = cancel})
-    Hub.connect(Player.CharacterRemoving, cancel)
-    Hub.cleanup(function()
-        enabled = false; cancel()
-        Hub.throwMissile, Hub.explodeMissile = nil, nil
     end)
+    Hub.connect(Player.CharacterRemoving,function() stop("Character changed, missile actions stopped.") end)
+    Hub.cleanup(function() enabled=false;loopOn=false;cancel();Hub.throwMissile=nil;Hub.explodeMissile=nil;Hub.missileReservedModels=nil;Hub.isMissileReserved=nil;Hub.prepareExplosive=nil;Hub.missileWorkBusy=nil;Hub.cancelMissileWork=nil end)
 end)()
 end
+
+-- Blitz-style preloaded explosives, integrated with the hub's own-toy reservations.
+do
+(function()
+    local group=Tabs.Explosions:AddLeftGroupbox("Explosions Spam")
+    local help=Tabs.Explosions:AddRightGroupbox("FAQ about Explosions Spam")
+    local types={Firework="FireworkMissile",Missile="BombMissile",Void="BombDarkMatter",Ballon="BombBalloon",["Small Present"]="PresentSmall",["Big Present"]="PresentBig"}
+    local enabled,held,predict=false,false,false
+    local kind,trigger,targetMode="Firework","Automatic","Spawn"
+    local amount,delay=1,0
+    local selected=nil
+    local cache,queue,retired={},{},{}
+    local aimEntry,pending=nil,nil
+    local epoch,nextSpawn,nextFire,lastAim=0,0,0,0
+    local paused=false
+    local retained={}
+    local status=group:AddLabel("Off.")
+    local picker
+    local stopping=false
+    local nextStatus=0
+    local function own(entry)
+        local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+        return entry and entry.model and entry.model.Parent==folder
+            and entry.hit and entry.hit.Parent and entry.position and entry.position.Parent
+            and Hub.isMissileReserved and Hub.isMissileReserved(entry.model)
+    end
+    local function dispose(entry,deleteToy)
+        if not entry or entry.disposed then return end
+        entry.disposed=true;retired[entry]=nil
+        if not deleteToy and entry.model then retained[entry.model]=true end
+        local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+        local model=entry.model
+        entry.release()
+        if deleteToy and model and model.Parent==folder then
+            local menu=ReplicatedStorage:FindFirstChild("MenuToys")
+            local remote=menu and menu:FindFirstChild("DestroyToy")
+            if remote then Hub.fire(remote,model) end
+        end
+    end
+    local function clearCache()
+        for _,entry in ipairs(cache) do dispose(entry) end
+        for _,entry in ipairs(queue) do dispose(entry) end
+        local old={};for entry in pairs(retired) do table.insert(old,entry) end;for _,entry in ipairs(old) do dispose(entry) end
+        table.clear(cache);table.clear(queue)
+        dispose(aimEntry);aimEntry=nil
+    end
+    local function stop(reason)
+        if stopping then return end;stopping=true
+        enabled=false;held=false;epoch+=1;pending=nil
+        clearCache()
+        if Hub.cancelMissileWork then Hub.cancelMissileWork(reason or "Explosion cache stopped.") end
+        local toggle=Toggles.BlitzExplodeEnabled
+        if toggle and toggle.Value then toggle:SetValue(false) end
+        status:SetText(reason or "Off, launch forces released. Your toys were kept.")
+        stopping=false
+    end
+    local function refresh()
+        local names={};for _,p in ipairs(Players:GetPlayers()) do if p~=Player then table.insert(names,p.Name) end end
+        table.sort(names);picker:SetValues(names)
+    end
+    local function wantsAim() return targetMode=="Mouse" or (targetMode=="Player" and predict) end
+    local function target()
+        if targetMode=="Spawn" then
+            local spawn=Workspace:FindFirstChild("SpawnLocation",true)
+            if spawn and spawn:IsA("BasePart") then return spawn,Vector3.new(math.random(-10,10),math.random(-10,10),math.random(-10,10)) end
+        elseif targetMode=="Player" then
+            local p=selected
+            local char=p and p.Character
+            local hum=char and char:FindFirstChildOfClass("Humanoid")
+            local root=char and char:FindFirstChild("HumanoidRootPart")
+            local plot=p and p:FindFirstChild("InPlot")
+            if not p or not Hub.canHarm(p) or (plot and plot.Value) or not hum or hum.Health<=0 or not root then return nil end
+            if predict then
+                if own(aimEntry) then return aimEntry.position,root.Position+root.AssemblyLinearVelocity/1.93 end
+            else return root,root.Position end
+        elseif own(aimEntry) then
+            local char=Player.Character
+            local camPart=char and char:FindFirstChild("CamPart")
+            local camera=Workspace.CurrentCamera
+            local cf=camPart and camPart.CFrame or (camera and camera.CFrame)
+            if not cf then return nil end
+            local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude
+            local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+            params.FilterDescendantsInstances=folder and {char,folder} or {char}
+            params.IgnoreWater=true
+            local hit=Workspace:Raycast(cf.Position,cf.LookVector*5000,params)
+            if hit then return aimEntry.position,hit.Position end
+        end
+        return nil
+    end
+    local function readyToFire()
+        return targetMode=="Mouse" and held or (targetMode~="Mouse" and (trigger=="Automatic" or held))
+    end
+    local function spawnBudget()
+        local can=Player:FindFirstChild("CanSpawnToy")
+        if can and not can.Value then return false end
+        local used,cap=Player:FindFirstChild("UsedToyPoints"),Player:FindFirstChild("ToysLimitCap")
+        return not used or not cap or used.Value+10<=cap.Value
+    end
+    local function pause(reason)
+        paused=true;pending=nil;held=false
+        status:SetText("Paused, "..reason.." Use Retry cache when ready. Toys are kept.")
+    end
+    local function prepare(name,isAim)
+        local ticket=epoch
+        Hub.lastMissileError=nil
+        pending={aim=isAim,time=os.clock()}
+        local accepted=Hub.prepareExplosive(name,function(entry)
+            if not enabled or ticket~=epoch then dispose(entry);return end
+            pending=nil;nextSpawn=os.clock()+0.15
+            Hub.lastMissileError=nil
+            if isAim then aimEntry=entry else table.insert(cache,entry) end
+            status:SetText(string.format("%d/%d %s cached, %s trigger, %s target.",#cache,amount,kind,trigger,targetMode))
+        end)
+        if not accepted then pause(Hub.lastMissileError or "cannot prepare toy, check missile actions, ownership and toy points") end
+    end
+    local function step()
+        if not enabled or paused then return end
+        local char=Player.Character
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health<=0 then stop("Character unavailable, explosion cache stopped.");return end
+        local now=os.clock()
+        -- A surviving explosive still consumes toy points. Reuse it instead of
+        -- releasing it into an unusable retained pool after the first effect.
+        local cooling=0
+        for entry,readyAt in pairs(retired) do
+            if not own(entry) then dispose(entry)
+            elseif now>=readyAt then retired[entry]=nil;table.insert(cache,entry)
+            else cooling+=1 end
+        end
+        for model in pairs(retained) do if not model.Parent then retained[model]=nil end end
+        for i=#cache,1,-1 do if not own(cache[i]) then cache[i].release();table.remove(cache,i) end end
+        if aimEntry and not own(aimEntry) then aimEntry.release();aimEntry=nil end
+        if aimEntry and now-lastAim>=0.05 and aimEntry.force then
+            lastAim=now
+            aimEntry.force.Position=Vector3.new(math.floor(now/0.05)%2==0 and 1000 or -1000,400,10000)
+        end
+        if pending and not Hub.missileWorkBusy() then pause(Hub.lastMissileError or "toy preparation failed or was cancelled");return end
+        if pending then return end
+        if wantsAim() and not aimEntry then
+            if spawnBudget() and now>=nextSpawn then prepare("DiceSmall",true) end
+            return
+        end
+        if #queue>0 and now>=nextFire and readyToFire() then
+            local positionPart,position=target()
+            if positionPart then
+                local events=ReplicatedStorage:FindFirstChild("BombEvents")
+                local remote=events and events:FindFirstChild("BombExplode")
+                if not remote then stop("BombExplode is unavailable.");return end
+                local count=delay>0 and 1 or #queue
+                for _=1,count do
+                    local entry=table.remove(queue,1)
+                    if own(entry) then
+                        -- Preserve Blitz's minimal Hitbox/PositionPart protocol.
+                        Hub.fire(remote,{Hitbox=entry.hit,PositionPart=positionPart},position)
+                        retired[entry]=now+2;cooling+=1
+                    else entry.release() end
+                end
+                nextFire=now+delay
+            end
+        end
+        if #queue==0 and #cache>0 and readyToFire() and (#cache>=amount or not spawnBudget() or trigger=="Key" or targetMode=="Mouse") then
+            if target() then
+                if trigger=="Key" or targetMode=="Mouse" then table.insert(queue,table.remove(cache,1))
+                else queue=cache;cache={} end
+                nextFire=now
+            end
+        end
+        if #queue==0 and #cache+cooling<amount and now>=nextSpawn and not Hub.missileWorkBusy() and spawnBudget() then prepare(types[kind],false) end
+        if now>=nextStatus and not pending then
+            nextStatus=now+0.5
+            local detail
+            if not readyToFire() then detail="waiting for held Trigger Bombs"
+            elseif not target() then detail=targetMode=="Player" and "waiting for an eligible selected player outside a plot" or "waiting for a valid target surface/reference"
+            elseif cooling>0 then detail="cooldown, surviving toys will return to the cache"
+            elseif #cache+#queue==0 and not spawnBudget() then detail="toy limit/cooldown reached, no live cached explosive available"
+            else detail="active" end
+            status:SetText(string.format("%d ready, %d queued, %d cooling, %s.",#cache,#queue,cooling,detail))
+        end
+    end
+    group:AddToggle("BlitzExplodeEnabled",{Text="Explode",Default=false,Callback=function(on)
+        if stopping then return end
+        if not on then stop();return end
+        if Toggles.MissileLoopEnabled and Toggles.MissileLoopEnabled.Value then Toggles.MissileLoopEnabled:SetValue(false) end
+        enabled=true;paused=false;held=false;epoch+=1;nextSpawn=0;nextFire=0
+        status:SetText("Filling explosive cache...")
+    end})
+    group:AddDropdown("BlitzExplosionType",{Text="Explosion Type",Values={"Firework","Missile","Void","Ballon","Small Present","Big Present"},Default=1,Callback=function(value)
+        if kind~=value then
+            local wasEnabled=enabled
+            epoch+=1;pending=nil;held=false;clearCache()
+            if Hub.cancelMissileWork then Hub.cancelMissileWork("Explosive type changed, toys kept.") end
+            kind=value;paused=false;nextSpawn=0;nextFire=0
+            enabled=wasEnabled
+            status:SetText(wasEnabled and "Type changed, refilling cache. Previous toys kept." or "Ready.")
+        end
+    end})
+    group:AddLabel("Trigger Bombs (hold)"):AddKeyPicker("BlitzTriggerBombsKey",{Default="F",Text="Trigger Bombs",Callback=function() end})
+    group:AddDropdown("BlitzTriggerMode",{Text="Trigger Mode",Values={"Key","Automatic"},Default=2,Callback=function(value) trigger=value;held=false end})
+    group:AddSlider("BlitzExplosionDelay",{Text="Delay (Automatic Trigger Mode)",Default=0,Min=0,Max=0.5,Rounding=3,Callback=function(value) delay=value end})
+    group:AddSlider("BlitzExplosionAmount",{Text="Amount to Explode",Default=1,Min=1,Max=20,Rounding=0,Callback=function(value) amount=value end})
+    group:AddDropdown("BlitzExplosionTarget",{Text="Target",Values={"Spawn","Player","Mouse"},Default=1,Callback=function(value) targetMode=value;held=false end})
+    picker=group:AddDropdown("BlitzExplosionPlayer",{Text="Select Player",Values={},Callback=function(value) selected=type(value)=="string" and Players:FindFirstChild(value) or nil end})
+    group:AddToggle("BlitzPredictPlayer",{Text="Predict Player Movement",Default=false,Callback=function(on) predict=on end})
+    group:AddButton({Text="Refresh player list",Func=refresh})
+    group:AddButton({Text="Stop, keep toys",Func=function() stop() end})
+    group:AddButton({Text="Retry cache",Func=function()
+        if not enabled then status:SetText("Enable Explode first. Your previous toys were kept.");return end
+        paused=false;pending=nil;nextSpawn=os.clock();status:SetText("Retry requested. Preparing one toy at a time.")
+    end})
+    group:AddButton({Text="Delete this tool's cached toys",Func=function()
+        local models={};for model in pairs(retained) do models[model]=true end
+        for model in pairs(Hub.missileKeptModels or {}) do models[model]=true end
+        for _,entry in ipairs(cache) do models[entry.model]=true end
+        for _,entry in ipairs(queue) do models[entry.model]=true end
+        for entry in pairs(retired) do models[entry.model]=true end
+        if aimEntry then models[aimEntry.model]=true end
+        stop("Explicit cache deletion requested.")
+        local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+        local toys=ReplicatedStorage:FindFirstChild("MenuToys");local remote=toys and toys:FindFirstChild("DestroyToy")
+        if remote then for model in pairs(models) do if model.Parent==folder then Hub.fire(remote,model) end;retained[model]=nil;if Hub.missileKeptModels then Hub.missileKeptModels[model]=nil end end end
+    end})
+    help:AddLabel("Mouse targeting uses Press/Hold Trigger Bombs, even in Automatic mode, matching Blitz. Player targeting needs Target = Player and a selected unprotected player outside a plot.")
+    help:AddLabel("The cache is created from your own toys and parked at height 10000 after ownership is confirmed. Prediction and mouse aiming use an owned DiceSmall as Blitz's replicated aim reference. This tool does not buy toys.")
+    help:AddLabel("Zero delay fires the ready batch together. Spawning is serialized with a short preparation interval, rather than running five independent polling loops. Failures pause instead of switching Explode off. Stop and unload keep toys; deletion needs the explicit delete button.")
+    Hub.connect(UserInputService.InputBegan,function(input,processed)
+        if processed or not enabled or UserInputService:GetFocusedTextBox() or Hub.keybindCaptureActive then return end
+        if Hub.matchesKeybind("BlitzTriggerBombsKey",input,"F") then held=true end
+    end)
+    Hub.connect(UserInputService.InputEnded,function(input)
+        local option=Options.BlitzTriggerBombsKey
+        if input.KeyCode and input.KeyCode.Name==(option and option.Value or "F") then held=false end
+    end)
+    Hub.connect(UserInputService.WindowFocusReleased,function() held=false end)
+    Hub.connect(Players.PlayerAdded,function() Hub.queueRefresh("blitzExplosions",refresh) end)
+    Hub.connect(Players.PlayerRemoving,function(person) if person==selected then selected=nil end;Hub.queueRefresh("blitzExplosions",refresh) end)
+    local elapsed=0
+    Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed<0.05 then return end;elapsed=0;step() end)
+    Hub.connect(Player.CharacterRemoving,function() stop("Respawn, explosion cache cleared.") end)
+    Hub.stopBlitzExplosions=stop
+    Hub.cleanup(function() stop();Hub.stopBlitzExplosions=nil end)
+    refresh()
+end)()
+end
+
 -- End missile throw.
 
 -- Click TP requires a finite, solid surface hit, never Mouse.Hit's sky fallback.
@@ -7723,8 +7994,7 @@ Hub.clickTeleport=function()
                 if value~=value or math.abs(value)==math.huge then return end
             end
             if (position-root.Position).Magnitude>512 or position.Y<=Workspace.FallenPartsDestroyHeight+8 then return end
-            local characterOwner=Hub.playerOf(hit.Instance)
-            if characterOwner then return end
+            -- A real collidable toy is a valid landing surface, regardless of anchoring or ownership.
             local clearance=math.max(3,hum.HipHeight+root.Size.Y/2+0.5)
             root.CFrame=CFrame.new(position+Vector3.new(0,clearance,0))*root.CFrame.Rotation
             root.AssemblyLinearVelocity=Vector3.zero
@@ -7921,7 +8191,7 @@ end
 
 -- Auto Reset
 local autoResetEnabled = false
-MiscGroup:AddToggle("AutoResetToggle", {
+DefenseGroup:AddToggle("AutoResetToggle", {
 	Text = "Auto Reset",
 	Default = false,
 	Callback = function(on)
@@ -8430,6 +8700,7 @@ do
 			return char and char:FindFirstChild("HumanoidRootPart")
 		end
 		local function safeAssembly(part,folder)
+            if Hub.isMissileReserved and Hub.isMissileReserved(part) then return nil end
             if part and ((Hub.toyBuildClaims and Hub.toyBuildClaims[part.AssemblyRootPart or part]) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[part.AssemblyRootPart or part])) then return nil end
 			if not part.Parent or part.Anchored or not part:IsDescendantOf(folder) then return nil end
 			local owner=part:FindFirstChild("PartOwner")
@@ -8755,7 +9026,7 @@ do
 			return false
 		end
 		local function eligible(part)
-            if part and ((Hub.toyBuildClaims and Hub.toyBuildClaims[part.AssemblyRootPart or part]) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[part.AssemblyRootPart or part])) then return false end
+            if part and ((Hub.isMissileReserved and Hub.isMissileReserved(part)) or (Hub.toyBuildClaims and Hub.toyBuildClaims[part.AssemblyRootPart or part]) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[part.AssemblyRootPart or part])) then return false end
 			if not part or not part.Parent or not part:IsDescendantOf(Workspace) or part.Anchored then return false end
 			if part:IsA("Seat") or part:IsA("VehicleSeat") or characterPart(part) then return false end
 			-- Avoid competing with the separate creative shape controller.
@@ -9532,6 +9803,4371 @@ end)()
 end
 
 
+-- BEGIN PRIVATE SAFE FEATURE ADAPTER
+-- Independently adapted local features. No external loader or remote calls.
+do
+(function()
+    local lighting=game:GetService("Lighting")
+    local visual=Tabs.Visual:AddRightGroupbox("Local appearance extras")
+    local defense=Tabs.Defense:AddRightGroupbox("Local hazard filters")
+    local states={}
+    local snapshots={}
+    local watches={}
+    local disposed=false
+    local scanning=false
+    local epoch=0
+    local color=Color3.fromRGB(120,190,255)
+    local crossSize,particleRate,particleSize=18,12,0.3
+    local crossGui,crossLabel,hat,attachment,emitter
+    local function forget(instance)
+        for _,connection in ipairs(watches[instance] or {}) do connection:Disconnect();Hub.connections[connection]=nil end
+        watches[instance]=nil
+    end
+    local function restore(instance)
+        forget(instance)
+        local saved=snapshots[instance]
+        snapshots[instance]=nil
+        if saved then for property,value in pairs(saved) do pcall(function() instance[property]=value end) end end
+    end
+    local function override(instance,property,value)
+        local saved=snapshots[instance]
+        if not saved then saved={};snapshots[instance]=saved end
+        if saved[property]==nil then saved[property]=instance[property] end
+        if instance[property]~=value then instance[property]=value end
+        watches[instance]=watches[instance] or {}
+        local list=watches[instance]
+        list.keys=list.keys or {}
+        if not list.keys[property] then
+            list.keys[property]=true
+            table.insert(list,Hub.connect(instance:GetPropertyChangedSignal(property),function()
+                if snapshots[instance] and not disposed and instance[property]~=value then instance[property]=value end
+            end))
+        end
+    end
+    local function isPoison(part)
+        if not part:IsA("BasePart") or (part.Name~="PoisonHurtPart" and part.Name~="PaintPlayerPart") then return false end
+        local parent=part.Parent
+        return parent and (parent.Name=="PoisonBigHole" or parent.Name=="PoisonSmallHole")
+    end
+    local function apply(instance)
+        if disposed or not instance.Parent then return end
+        if instance:IsA("Sound") then
+            local parent=instance.Parent
+            local ambient=false
+            local ancestor=parent
+            while ancestor and ancestor~=Workspace do if ancestor.Name=="MapNoises" then ambient=true;break end;ancestor=ancestor.Parent end
+            if (states.ambience and ambient) or (states.screams and instance.Name=="Scream" and parent and parent.Name=="HumanoidRootPart")
+                or (states.soundwaves and instance.Name=="SineWave") or (states.rhythm and instance.Name:lower():match("^sound[1-8]$"))
+                or (states.instruments and parent and parent.Name=="MusicPart") then override(instance,"Volume",0) end
+        end
+        if states.poison and isPoison(instance) then override(instance,"CanTouch",false) end
+        if states.blur and instance:IsA("BlurEffect") then override(instance,"Enabled",false) end
+        if states.particles and (instance:IsA("ParticleEmitter") or instance:IsA("Smoke") or instance:IsA("Fire") or instance:IsA("Sparkles")) and instance~=emitter then
+            override(instance,"Enabled",false)
+        end
+        if states.trails and instance:IsA("Trail") then override(instance,"Enabled",false) end
+        if states.decals and (instance:IsA("Decal") or instance:IsA("Texture")) then override(instance,"Transparency",1) end
+        if states.material and instance:IsA("BasePart") and not instance:IsDescendantOf(Player.Character or lighting) and instance~=hat then
+            override(instance,"Material",Enum.Material.SmoothPlastic)
+        end
+        if states.character and Player.Character and instance:IsDescendantOf(Player.Character) and instance:IsA("BasePart") then
+            override(instance,"Material",Enum.Material.ForceField)
+        end
+    end
+    local function rescan()
+        epoch+=1
+        local current=epoch
+        for instance in pairs(snapshots) do restore(instance) end
+        local roots={Workspace,lighting}
+        if not next(states) then return end
+        task.spawn(function()
+            scanning=true
+            for _,root in ipairs(roots) do
+                local objects=root:GetDescendants()
+                for i,instance in ipairs(objects) do
+                    if disposed or current~=epoch then return end
+                    apply(instance)
+                    if i%150==0 then task.wait() end
+                end
+            end
+            scanning=false
+        end)
+    end
+    local function setState(key,on)
+        states[key]=on and true or nil
+        rescan();Hub.requestSave()
+    end
+    local function toggle(group,id,text,key)
+        group:AddToggle(id,{Text=text,Default=false,Callback=function(on) setState(key,on) end})
+    end
+    toggle(defense,"PrivatePoisonTouch","Ignore poison touch locally","poison")
+    defense:AddLabel("Local touch filtering cannot block server-enforced damage.")
+    toggle(visual,"PrivateDisableBlur","Disable blur effects","blur")
+    toggle(visual,"PrivateHideParticles","Hide world particles, fire and smoke","particles")
+    toggle(visual,"PrivateHideTrails","Hide trails","trails")
+    toggle(visual,"PrivateHideDecals","Hide world decals and textures","decals")
+    toggle(visual,"PrivateSimpleMaterials","Simple world materials","material")
+    toggle(visual,"PrivateForcefieldCharacter","Forcefield character appearance","character")
+    local audio=Tabs.Visual:AddRightGroupbox("Local sound filters")
+    toggle(audio,"PrivateMuteAmbience","Mute ambience","ambience")
+    toggle(audio,"PrivateMuteScreams","Mute screams","screams")
+    toggle(audio,"PrivateMuteSoundwaves","Mute soundwaves","soundwaves")
+    toggle(audio,"PrivateMuteRhythm","Mute rhythm makers","rhythm")
+    toggle(audio,"PrivateMuteInstruments","Mute instruments","instruments")
+    local shadowOriginal
+    visual:AddToggle("PrivateNoShadows",{Text="Disable global shadows",Default=false,Callback=function(on)
+        if on then
+            if shadowOriginal==nil then shadowOriginal=lighting.GlobalShadows end
+            lighting.GlobalShadows=false
+        elseif shadowOriginal~=nil then lighting.GlobalShadows=shadowOriginal;shadowOriginal=nil end
+        Hub.requestSave()
+    end})
+    local function destroy(instance)
+        if instance then Hub.instances[instance]=nil;Hub.assetTargets[instance]=nil;instance:Destroy() end
+    end
+    local function cosmetics()
+        destroy(hat);destroy(attachment);hat,attachment,emitter=nil,nil,nil
+        local char=Player.Character
+        local head=char and char:FindFirstChild("Head")
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        if states.hat and head then
+            hat=Hub.new("Part",Workspace.CurrentCamera)
+            hat.Name="ArrivaLocalConeHat";hat.Size=Vector3.new(3,0.7,3)
+            hat.Anchored=true;hat.CanCollide=false;hat.CanTouch=false;hat.CanQuery=false;hat.CastShadow=false
+            hat.Color=color;hat.Material=Enum.Material.Neon;hat.Transparency=0.35
+            local mesh=Hub.new("SpecialMesh",hat);mesh.MeshType=Enum.MeshType.FileMesh;mesh.MeshId="rbxassetid://1778999"
+            mesh.Scale=Vector3.new(3,0.7,3)
+        end
+        if states.cosmeticParticles and root then
+            attachment=Hub.new("Attachment",root);attachment.Name="ArrivaLocalParticles"
+            emitter=Hub.new("ParticleEmitter",attachment)
+            emitter.Texture="rbxasset://textures/particles/sparkles_main.dds"
+            emitter.Rate=particleRate;emitter.Lifetime=NumberRange.new(1,2);emitter.Speed=NumberRange.new(0.5,2)
+            emitter.Size=NumberSequence.new(particleSize);emitter.Color=ColorSequence.new(color)
+            emitter.LightEmission=0.6;emitter.SpreadAngle=Vector2.new(180,180)
+        end
+    end
+    visual:AddToggle("PrivateConeHat",{Text="Local cone hat",Default=false,Callback=function(on) states.hat=on and true or nil;cosmetics();Hub.requestSave() end})
+    visual:AddToggle("PrivateCharacterParticles",{Text="Local character particles",Default=false,Callback=function(on) states.cosmeticParticles=on and true or nil;cosmetics();Hub.requestSave() end})
+    visual:AddSlider("PrivateParticleRate",{Text="Particle rate",Default=12,Min=1,Max=50,Rounding=0,Callback=function(value) particleRate=value;if emitter then emitter.Rate=value end;Hub.requestSave() end})
+    visual:AddSlider("PrivateParticleSize",{Text="Particle size",Default=0.3,Min=0.1,Max=2,Rounding=1,Callback=function(value) particleSize=value;if emitter then emitter.Size=NumberSequence.new(value) end;Hub.requestSave() end})
+    local function crosshair()
+        if not states.crosshair then destroy(crossGui);crossGui,crossLabel=nil,nil;return end
+        local parent=Player:FindFirstChildOfClass("PlayerGui")
+        if not parent then return end
+        if not crossGui or not crossGui.Parent then
+            crossGui=Hub.new("ScreenGui",parent);crossGui.Name="ArrivaLocalCrosshair";crossGui.ResetOnSpawn=false;crossGui.IgnoreGuiInset=true
+            crossLabel=Hub.new("TextLabel",crossGui);crossLabel.BackgroundTransparency=1;crossLabel.AnchorPoint=Vector2.new(0.5,0.5)
+            crossLabel.Font=Enum.Font.GothamBold;crossLabel.Text="+";crossLabel.TextStrokeTransparency=0.4;crossLabel.Active=false
+        end
+        crossLabel.Size=UDim2.fromOffset(crossSize*2,crossSize*2);crossLabel.TextSize=crossSize;crossLabel.TextColor3=color
+    end
+    visual:AddToggle("PrivateCrosshair",{Text="Custom crosshair",Default=false,Callback=function(on) states.crosshair=on and true or nil;crosshair();Hub.requestSave() end})
+    visual:AddSlider("PrivateCrosshairSize",{Text="Crosshair size",Default=18,Min=8,Max=48,Rounding=0,Callback=function(value) crossSize=value;crosshair();Hub.requestSave() end})
+    visual:AddDropdown("PrivateCosmeticColor",{Text="Cosmetic colour",Values={"Blue","White","Pink","Green","Orange","Purple"},Default=1,Callback=function(value)
+        local palette={Blue=Color3.fromRGB(120,190,255),White=Color3.fromRGB(255,255,255),Pink=Color3.fromRGB(255,120,190),Green=Color3.fromRGB(120,255,160),Orange=Color3.fromRGB(255,170,80),Purple=Color3.fromRGB(190,120,255)}
+        color=palette[value] or color;if hat then hat.Color=color end;if emitter then emitter.Color=ColorSequence.new(color) end;crosshair();Hub.requestSave()
+    end})
+    Hub.connect(Workspace.DescendantAdded,function(instance) if next(states) then task.defer(function() apply(instance) end) end end)
+    Hub.connect(lighting.DescendantAdded,function(instance) if next(states) then apply(instance) end end)
+    Hub.connect(Workspace.DescendantRemoving,function(instance) if snapshots[instance] then restore(instance) end end)
+    Hub.connect(Player.CharacterAdded,function(char)
+        task.spawn(function()
+            char:WaitForChild("HumanoidRootPart",5)
+            if disposed or Player.Character~=char then return end
+            cosmetics();rescan()
+        end)
+    end)
+    Hub.connect(Player.ChildAdded,function(child) if child:IsA("PlayerGui") then crosshair() end end)
+    Hub.connect(RunService.RenderStepped,function()
+        if hat then
+            local head=Player.Character and Player.Character:FindFirstChild("Head")
+            if head then hat.CFrame=head.CFrame*CFrame.new(0,1,0);hat.LocalTransparencyModifier=head.LocalTransparencyModifier end
+        end
+        if crossLabel then local point=UserInputService:GetMouseLocation();crossLabel.Position=UDim2.fromOffset(point.X,point.Y) end
+    end)
+    local diagnostics=Tabs.AntiLag:AddRightGroupbox("Runtime diagnostics")
+    diagnostics:AddButton({Text="Show runtime status",Func=function()
+        local connections,threads,instances=0,0,0
+        for _ in pairs(Hub.connections) do connections+=1 end
+        for _ in pairs(Hub.threads) do threads+=1 end
+        for _ in pairs(Hub.instances) do instances+=1 end
+        notify("Runtime status",string.format("%d tracked connections, %d tasks, %d local instances",connections,threads,instances),6)
+    end})
+    diagnostics:AddButton({Text="Show latest callback error",Func=function()
+        notify("Runtime diagnostics",tostring(Hub.lastCallbackError or Hub.lastWorkerError or "No callback errors recorded this session."),8)
+    end})
+    Hub.cleanup(function()
+        disposed=true;epoch+=1
+        for instance in pairs(snapshots) do restore(instance) end
+        if shadowOriginal~=nil then lighting.GlobalShadows=shadowOriginal end
+        destroy(hat);destroy(attachment);destroy(crossGui)
+    end)
+end)()
+end
+-- END PRIVATE SAFE FEATURE ADAPTER
+
+-- BEGIN LOCAL ENVIRONMENT OPTIONS
+do
+(function()
+    local lighting=game:GetService("Lighting")
+    local terrain=Workspace:FindFirstChildOfClass("Terrain")
+    local group=Tabs.Visual:AddRightGroupbox("Local environment")
+    local shader,sky,clouds
+    local shaderOn,skyOn,waterOn=false,false,false
+    local saturation,exposure,bloom=0.15,0,0.3
+    local image="rbxassetid://159454299"
+    local water={WaterWaveSize=0.15,WaterWaveSpeed=10,WaterTransparency=0.3,WaterReflectance=0.5}
+    local savedWater
+    local oldSkies={}
+    local function remove(instance) if instance then Hub.instances[instance]=nil;Hub.assetTargets[instance]=nil;instance:Destroy() end end
+    local function updateShader()
+        if not shaderOn then remove(shader);shader=nil;return end
+        if not shader then
+            shader=Hub.new("Folder",lighting);shader.Name="ArrivaLocalShaders"
+            local correction=Hub.new("ColorCorrectionEffect",lighting);correction.Name="ArrivaLocalCorrection"
+            local glow=Hub.new("BloomEffect",lighting);glow.Name="ArrivaLocalBloom"
+            -- Effects must be directly beneath Lighting to render.
+            shader:SetAttribute("Owned",true)
+            shader={folder=shader,correction=correction,glow=glow}
+        end
+        shader.correction.Saturation=saturation;shader.correction.Brightness=exposure
+        shader.glow.Intensity=bloom;shader.glow.Size=24;shader.glow.Threshold=1.5
+    end
+    local function clearShader()
+        if shader then remove(shader.correction);remove(shader.glow);remove(shader.folder);shader=nil end
+    end
+    local function applyShader() if shaderOn then updateShader() else clearShader() end end
+    group:AddToggle("PrivateShader",{Text="Local shaders",Default=false,Callback=function(on) shaderOn=on;applyShader();Hub.requestSave() end})
+    group:AddSlider("PrivateSaturation",{Text="Shader saturation",Default=0.15,Min=-1,Max=1,Rounding=2,Callback=function(v) saturation=v;applyShader();Hub.requestSave() end})
+    group:AddSlider("PrivateBrightness",{Text="Shader brightness",Default=0,Min=-0.3,Max=0.3,Rounding=2,Callback=function(v) exposure=v;applyShader();Hub.requestSave() end})
+    group:AddSlider("PrivateBloom",{Text="Shader bloom",Default=0.3,Min=0,Max=2,Rounding=2,Callback=function(v) bloom=v;applyShader();Hub.requestSave() end})
+    local function updateSky()
+        if skyOn then
+            for _,child in ipairs(lighting:GetChildren()) do
+                if child:IsA("Sky") and child~=sky then oldSkies[child]=lighting;child.Parent=nil end
+            end
+            if not sky then sky=Hub.new("Sky",lighting);sky.Name="ArrivaLocalSky" end
+            for _,property in ipairs({"SkyboxBk","SkyboxDn","SkyboxFt","SkyboxLf","SkyboxRt","SkyboxUp"}) do sky[property]=image end
+        else
+            remove(sky);sky=nil
+            for child,parent in pairs(oldSkies) do pcall(function() if child.Parent==nil then child.Parent=parent end end);oldSkies[child]=nil end
+        end
+    end
+    group:AddInput("PrivateSkyImage",{Text="Sky image asset ID",Default="159454299",Finished=true,Callback=function(v)
+        local id=tostring(v):match("^%s*(%d+)%s*$") or tostring(v):match("^rbxassetid://(%d+)$")
+        if id then image="rbxassetid://"..id;updateSky();Hub.requestSave() end
+    end})
+    group:AddToggle("PrivateSkyEnabled",{Text="Custom sky (same image on all faces)",Default=false,Callback=function(on) skyOn=on;updateSky();Hub.requestSave() end})
+    local function updateWater()
+        if not terrain then return end
+        if waterOn then
+            if not savedWater then savedWater={};for property in pairs(water) do savedWater[property]=terrain[property] end end
+            for property,value in pairs(water) do terrain[property]=value end
+        elseif savedWater then for property,value in pairs(savedWater) do terrain[property]=value end;savedWater=nil end
+    end
+    group:AddToggle("PrivateWaterEnabled",{Text="Custom water appearance",Default=false,Callback=function(on) waterOn=on;updateWater();Hub.requestSave() end})
+    for _,option in ipairs({{"Wave size","WaterWaveSize",0,1,2},{"Wave speed","WaterWaveSpeed",0,100,0},{"Water transparency","WaterTransparency",0,1,2},{"Water reflectance","WaterReflectance",0,1,2}}) do
+        local property=option[2]
+        group:AddSlider("Private"..property,{Text=option[1],Default=water[property],Min=option[3],Max=option[4],Rounding=option[5],Callback=function(v) water[property]=v;updateWater();Hub.requestSave() end})
+    end
+    local cover,density=0.5,0.5
+    local function updateClouds()
+        if clouds then clouds.Cover=cover;clouds.Density=density end
+    end
+    group:AddToggle("PrivateClouds",{Text="Local clouds",Default=false,Callback=function(on)
+        if on and terrain then if not clouds then clouds=Hub.new("Clouds",terrain);clouds.Name="ArrivaLocalClouds" end;updateClouds()
+        else remove(clouds);clouds=nil end;Hub.requestSave()
+    end})
+    group:AddSlider("PrivateCloudCover",{Text="Cloud cover",Default=0.5,Min=0,Max=1,Rounding=2,Callback=function(v) cover=v;updateClouds();Hub.requestSave() end})
+    group:AddSlider("PrivateCloudDensity",{Text="Cloud density",Default=0.5,Min=0,Max=1,Rounding=2,Callback=function(v) density=v;updateClouds();Hub.requestSave() end})
+    Hub.connect(lighting.ChildAdded,function(child) if skyOn and child:IsA("Sky") and child~=sky then oldSkies[child]=lighting;child.Parent=nil end end)
+    Hub.cleanup(function() clearShader();skyOn=false;updateSky();waterOn=false;updateWater();remove(clouds) end)
+end)()
+end
+-- END LOCAL ENVIRONMENT OPTIONS
+
+-- BEGIN LOCAL CAMERA OPTIONS
+do
+(function()
+    local group=Tabs.Visual:AddRightGroupbox("Camera and cursor")
+    local third,limbs,cursor=false,false,false
+    local zoom,transparency,cursorSize=128,0.3,24
+    local cursorImage="rbxassetid://9943168532"
+    local originalCamera
+    local savedLimbs={}
+    local gui,image
+    local oldMouseIcon
+    local function camera()
+        if third then
+            if not originalCamera then originalCamera={Player.CameraMode,Player.CameraMinZoomDistance,Player.CameraMaxZoomDistance} end
+            Player.CameraMode=Enum.CameraMode.Classic;Player.CameraMaxZoomDistance=zoom;Player.CameraMinZoomDistance=0.5
+        elseif originalCamera then
+            Player.CameraMode=originalCamera[1];Player.CameraMaxZoomDistance=originalCamera[3];Player.CameraMinZoomDistance=originalCamera[2];originalCamera=nil
+        end
+    end
+    group:AddToggle("PrivateThirdPerson",{Text="Third person camera",Default=false,Callback=function(on) third=on;camera();Hub.requestSave() end})
+    group:AddSlider("PrivateMaxZoom",{Text="Maximum camera zoom",Default=128,Min=10,Max=512,Rounding=0,Callback=function(v) zoom=v;camera();Hub.requestSave() end})
+    local function restoreLimbs()
+        for part,value in pairs(savedLimbs) do pcall(function() part.LocalTransparencyModifier=value end);savedLimbs[part]=nil end
+    end
+    group:AddToggle("PrivateVisibleLimbs",{Text="Show limbs in first person",Default=false,Callback=function(on) limbs=on;if not on then restoreLimbs() end;Hub.requestSave() end})
+    group:AddSlider("PrivateLimbTransparency",{Text="First person limb transparency",Default=0.3,Min=0,Max=1,Rounding=2,Callback=function(v) transparency=v;Hub.requestSave() end})
+    local function clearCursor()
+        if gui then Hub.instances[gui]=nil;Hub.assetTargets[gui]=nil;gui:Destroy();gui,image=nil,nil end
+        if oldMouseIcon~=nil then UserInputService.MouseIconEnabled=oldMouseIcon;oldMouseIcon=nil end
+    end
+    local function updateCursor()
+        if not cursor then clearCursor();return end
+        local playerGui=Player:FindFirstChildOfClass("PlayerGui");if not playerGui then return end
+        if not gui or not gui.Parent then
+            clearCursor();oldMouseIcon=UserInputService.MouseIconEnabled
+            gui=Hub.new("ScreenGui",playerGui);gui.Name="ArrivaLocalCursor";gui.ResetOnSpawn=false;gui.IgnoreGuiInset=true;gui.DisplayOrder=1000
+            image=Hub.new("ImageLabel",gui);image.BackgroundTransparency=1;image.AnchorPoint=Vector2.new(0.5,0.5);image.Active=false
+        end
+        image.Image=cursorImage;image.Size=UDim2.fromOffset(cursorSize,cursorSize);UserInputService.MouseIconEnabled=false
+    end
+    group:AddToggle("PrivateCustomCursor",{Text="Custom cursor",Default=false,Callback=function(on) cursor=on;updateCursor();Hub.requestSave() end})
+    group:AddInput("PrivateCursorImage",{Text="Cursor image asset ID",Default="9943168532",Finished=true,Callback=function(v)
+        local id=tostring(v):match("^%s*(%d+)%s*$") or tostring(v):match("^rbxassetid://(%d+)$")
+        if id then cursorImage="rbxassetid://"..id;updateCursor();Hub.requestSave() end
+    end})
+    group:AddSlider("PrivateCursorSize",{Text="Cursor size",Default=24,Min=8,Max=64,Rounding=0,Callback=function(v) cursorSize=v;updateCursor();Hub.requestSave() end})
+    Hub.connect(RunService.RenderStepped,function()
+        if image then local point=UserInputService:GetMouseLocation();image.Position=UDim2.fromOffset(point.X,point.Y) end
+        if not limbs then return end
+        local char=Player.Character;local cam=Workspace.CurrentCamera
+        if not char or not cam then return end
+        local first=(cam.CFrame.Position-cam.Focus.Position).Magnitude<=1.5
+        for _,part in ipairs(char:GetChildren()) do
+            if part:IsA("BasePart") and part.Name~="Head" and part.Name~="HumanoidRootPart" and part.Name~="Torso" and part.Name~="UpperTorso" and part.Name~="LowerTorso" then
+                if savedLimbs[part]==nil then savedLimbs[part]=part.LocalTransparencyModifier end
+                part.LocalTransparencyModifier=first and transparency or 0
+            end
+        end
+    end)
+    Hub.connect(Player.CharacterAdded,function() restoreLimbs() end)
+    Hub.connect(Player.ChildAdded,function(child) if child:IsA("PlayerGui") then updateCursor() end end)
+    Hub.cleanup(function() third=false;camera();restoreLimbs();clearCursor() end)
+end)()
+end
+-- END LOCAL CAMERA OPTIONS
+
+-- BEGIN LOCAL ANIMATION OPTIONS
+do
+(function()
+    local group=Tabs.Player:AddRightGroupbox("Character animations")
+    local animations={Struggle = "rbxassetid://7047322890",
+				Faint = "rbxassetid://181526230",
+				["Floor Faint"] = "rbxassetid://181525546",
+				Levitate = "rbxassetid://313762630",
+				Spinner = "rbxassetid://188632011",
+				["Spin Dance"] = "rbxassetid://429730430",
+				["Spin Dance 2"] = "rbxassetid://186934910",
+				["Float Sit"] = "rbxassetid://179224234",
+				Scared = "rbxassetid://180612465",
+				["Floating Head"] = "rbxassetid://121572214",
+				Crouch = "rbxassetid://182724289",
+				["Moving Dance"] = "rbxassetid://429703734",
+				["Bow Down"] = "rbxassetid://204292303",
+				["Sword Slam"] = "rbxassetid://204295235",
+				Insane = "rbxassetid://33796059",
+				["Mega Insane"] = "rbxassetid://184574340",
+				["Sword Slice"] = "rbxassetid://35978879",
+				["Loop Head"] = "rbxassetid://35154961",
+				["Floor Crawl"] = "rbxassetid://282574440",
+				["Dino Walk"] = "rbxassetid://204328711",
+				["Weird Back"] = "rbxassetid://215384594",
+				["Moon Dance"] = "rbxassetid://45834924",
+				["Full Punch"] = "rbxassetid://204062532",
+				["Full Swing"] = "rbxassetid://218504594",
+				["Arm Turbine"] = "rbxassetid://259438880",
+				["Barrel Roll"] = "rbxassetid://136801964",
+				["Arm Detach"] = "rbxassetid://33169583",
+				["Insane Arms"] = "rbxassetid://27432691",
+    }
+    local names={};for name in pairs(animations) do table.insert(names,name) end;table.sort(names)
+    local selected=names[1]
+    local speed,enabled=1,false
+    local track,asset
+    local function stop()
+        if track then pcall(function() track:Stop(0.15);track:Destroy() end);track=nil end
+        if asset then Hub.instances[asset]=nil;Hub.assetTargets[asset]=nil;asset:Destroy();asset=nil end
+    end
+    local function play()
+        stop();if not enabled then return end
+        local character=Player.Character
+        local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+        local animator=humanoid and humanoid:FindFirstChildOfClass("Animator")
+        if not animator or humanoid.Health<=0 then return end
+        local ok,message=pcall(function()
+            asset=Hub.new("Animation");asset.AnimationId=animations[selected]
+            track=animator:LoadAnimation(asset);track.Looped=true;track:Play(0.15);track:AdjustSpeed(speed)
+        end)
+        if not ok then stop();notify("Animation unavailable","This animation could not be loaded for your character.",5);warn(tostring(message)) end
+    end
+    group:AddDropdown("PrivateAnimationPreset",{Text="Animation",Values=names,Default=1,Callback=function(value) if animations[value] then selected=value;play();Hub.requestSave() end end})
+    group:AddSlider("PrivateAnimationSpeed",{Text="Animation speed",Default=1,Min=0,Max=5,Rounding=2,Callback=function(value) speed=value;if track then track:AdjustSpeed(speed) end;Hub.requestSave() end})
+    group:AddToggle("PrivateAnimationEnabled",{Text="Play selected animation",Default=false,Callback=function(on) enabled=on;play();Hub.requestSave() end})
+    group:AddLabel("Animation availability depends on your rig and asset permissions.")
+    Hub.connect(Player.CharacterRemoving,stop)
+    Hub.connect(Player.CharacterAdded,function(char)
+        task.spawn(function()
+            local humanoid=char:WaitForChild("Humanoid",5)
+            if humanoid then humanoid:WaitForChild("Animator",5) end
+            if Hub.alive and Player.Character==char then play() end
+        end)
+    end)
+    Hub.cleanup(function() enabled=false;stop() end)
+end)()
+end
+-- END LOCAL ANIMATION OPTIONS
+
+-- Private adapter for the supplied Gucci state machine.
+do
+(function()
+    local localPlayer=Player
+    local originalRunService=RunService
+    local sourceConnections={}
+    local RunService=setmetatable({},{__index=function(_,key)
+        local event=originalRunService[key]
+        if key=="Heartbeat" or key=="RenderStepped" or key=="Stepped" then
+            return setmetatable({Connect=function(_,callback)
+                local character=Player.Character
+                local native,connection
+                local function disconnect()
+                    if native then native:Disconnect();Hub.connections[native]=nil end
+                    if connection then sourceConnections[connection]=nil end
+                end
+                native=Hub.connect(event,function(...)
+                    if not Hub.alive or Player.Character~=character then disconnect();return end
+                    callback(...)
+                end)
+                connection=setmetatable({Disconnect=disconnect},{__index=function(_,property) return native[property] end})
+                sourceConnections[connection]=true;return connection
+            end,Wait=function() return event:Wait() end},{__index=event})
+        end
+        return event
+    end})
+    local Instance=setmetatable({new=function(class,parent) return Hub.new(class,parent) end},{__index=Instance})
+    local flag11=false
+    local tbl7={ToyAuraReserved={}}
+    local tbl8={GucciAntiGrab=false}
+    local tbl9={GucciType="CreatureBlobman",RagdollInRG=false}
+    local tbl11={}
+    local tbl12={}
+    local toggles={GucciAntiGrab={SetValue=function(_,v) if Toggles.AutoGucciBlobToggle then Toggles.AutoGucciBlobToggle:SetValue(v) end end}}
+    local train=setmetatable({},{__index=function(_,method)
+        if method=="FindFirstChild" then return function(_,name)
+            local folder=Workspace:FindFirstChild("AlwaysHereTweenedObjects")
+            local current=folder and folder:FindFirstChild("Train")
+            return current and current:FindFirstChild(name)
+        end end
+    end})
+    local isHeld=setmetatable({},{__index=function(_,key)
+        if key=="Value" then local state=Player:FindFirstChild("IsHeld");return state and state.Value or false end
+    end})
+    local function fn18(message,title) notify(title or "Gucci",message,5) end
+    local function fn20(duration) return task.wait(duration) end
+    tbl11.RagdollRemote={FireServer=function(_,...) if ragdollRemoteEvent then Hub.fire(ragdollRemoteEvent,...) end end}
+    tbl12.Char=function(who)
+        who=who or Player
+        local char=who.Character
+        return char,char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart")),char and char:FindFirstChildOfClass("Humanoid")
+    end
+    tbl12.Teleport=function(part,frame) if part and part.Parent then part.CFrame=frame;part.AssemblyLinearVelocity=Vector3.zero;part.AssemblyAngularVelocity=Vector3.zero;return true end end
+    tbl12.IsNetworkOwner=function(part)
+        if not part or not part:IsA("BasePart") then return false end
+        local root=part.AssemblyRootPart or part
+        return not root.Anchored and root.ReceiveAge==0
+    end
+    tbl12.FindNicePart=function(model)
+        if not model then return end
+        local fallback
+        for _,part in ipairs(model:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanQuery and not part.Anchored and part.Name~="Button" then
+                fallback=fallback or part
+                if (part.AssemblyRootPart or part)==part then return part end
+            end
+        end
+        return fallback
+    end
+    local spawned={}
+    tbl12.DestroyToy=function(model)
+        if not model or not model.Parent then return end
+        local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+        if not folder or model.Parent~=folder or not spawned[model] then return end
+        local menu=ReplicatedStorage:FindFirstChild("MenuToys")
+        local remote=menu and menu:FindFirstChild("DestroyToy")
+        if remote then Hub.fire(remote,model) end
+        spawned[model]=nil
+    end
+    local spawnBusy=false
+    local function sourceSpawnImpl(name,frame,timeout)
+        local char,root,hum=tbl12.Char()
+        if flag11 or not root or not hum or hum.Health<=0 then return end
+        local menu=ReplicatedStorage:FindFirstChild("MenuToys")
+        local remote=menu and menu:FindFirstChild("SpawnToyRemoteFunction")
+        if not remote then return end
+        local allowed=Player:FindFirstChild("CanSpawnToy");if allowed and not allowed.Value then return end
+        local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+        local before={};if folder then for _,model in ipairs(folder:GetChildren()) do before[model]=true end end
+        local result=Hub.invoke(remote,name,frame,Vector3.new(0,97.69000244140625,0))
+        local deadline=os.clock()+(timeout or 2)
+        repeat
+            if flag11 or Player.Character~=char then return end
+            folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+            if folder then
+                if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder and not before[result] then spawned[result]=true;return result end
+                for _,model in ipairs(folder:GetChildren()) do if not before[model] and model:IsA("Model") and model.Name==name then spawned[model]=true;return model end end
+            end
+            task.wait()
+        until os.clock()>=deadline
+    end
+    tbl12.SpawnToy=function(...)
+        if spawnBusy then return nil end
+        spawnBusy=true
+        local args=table.pack(...)
+        local ok,result=xpcall(function() return sourceSpawnImpl(table.unpack(args,1,args.n)) end,debug.traceback)
+        spawnBusy=false
+        if not ok then warn("[Source defense spawn] "..tostring(result));return nil end
+        return result
+    end
+    tbl12.SNO=function(part)
+        if flag11 or not part or not part.Parent or not setNetworkOwnerEvent then return false end
+        local char,root,hum=tbl12.Char()
+        if not root or not hum or hum.Health<=0 then return false end
+        local saved=root.CFrame
+        local moved=(root.Position-part.Position).Magnitude>=30
+        if moved then root.CFrame=part.CFrame;task.wait() end
+        local basis=Hub.lookAt(root.Position,part.Position)
+        if basis then Hub.fire(setNetworkOwnerEvent,part,basis) end
+        local deadline=os.clock()+0.75
+        repeat
+            if flag11 or Player.Character~=char or not part.Parent then break end
+            if tbl12.IsNetworkOwner(part) then break end
+            task.wait()
+        until os.clock()>=deadline
+        if moved and root.Parent and Player.Character==char then root.CFrame=saved;root.AssemblyLinearVelocity=Vector3.zero end
+        return part.Parent and tbl12.IsNetworkOwner(part) or false
+    end
+    tbl12.Grab=function(part)
+        local _,root,hum=tbl12.Char()
+        if not part or not part.Parent or not root or not hum or hum.Health<=0 then return end
+        local from=(root.CFrame*CFrame.new(0,1.593,0)).Position
+        local basis=Hub.lookAt(from,part.Position)
+        if basis then Hub.fire(setNetworkOwnerEvent,part,basis) end
+    end
+    tbl12.RNO=function(part) if part and part.Parent then Hub.fire(destroyGrabLineEvent,part) end end
+    tbl12.Ragdoll=function(char)
+        if char~=Player.Character then return false end
+        local root=char:FindFirstChild("HumanoidRootPart")
+        if root then tbl11.RagdollRemote:FireServer(root,0.35);return true end
+        return false
+    end
+    local obj=setmetatable({},{__mode="k"})
+    local obj2=setmetatable({},{__mode="k"})
+    local runtimeConnections={}
+    tbl12.SetRuntimeConnection=function(key,event,on,callback)
+        if runtimeConnections[key] then runtimeConnections[key]:Disconnect();runtimeConnections[key]=nil end
+        if on and event then runtimeConnections[key]=Hub.connect(event,callback) end
+    end
+    tbl12.GetInventory=function(who)
+        local folder=Workspace:FindFirstChild(who.Name.."SpawnedInToys")
+        local plots=Workspace:FindFirstChild("Plots")
+        local items=Workspace:FindFirstChild("PlotItems")
+        local plotFolder
+        if plots and items then for _,plot in ipairs(plots:GetChildren()) do
+            local sign=plot:FindFirstChild("PlotSign");local owners=sign and sign:FindFirstChild("ThisPlotsOwners")
+            if owners then for _,owner in ipairs(owners:GetChildren()) do if owner:IsA("StringValue") and owner.Value==who.Name then plotFolder=items:FindFirstChild(plot.Name) end end end
+        end end
+        return folder,plotFolder
+    end
+				tbl12.RemoveGucci = function(arg)
+					local v22, v23, v24 = tbl12.Char()
+					local v25, v26, v27 = tbl12.Char(arg)
+					local v28, v29 = tbl12.GetInventory(arg)
+					local gucciAntiGrab = tbl8.GucciAntiGrab
+
+					if not gucciAntiGrab then
+						gucciAntiGrab = not (v24 and v24.Health > 0 and v23 and v28)
+					end
+
+					if gucciAntiGrab then
+						return false
+					end
+
+					local function fn21(arg2)
+						if not (arg2 and arg2.Parent) or obj2[arg2] then
+							return
+						end
+
+						if obj[arg2] then
+							return
+						end
+
+						if (arg2:IsA("VehicleSeat") or arg2:IsA("Seat")) and not arg2.Occupant then
+							obj2[arg2] = true
+
+							if tbl8.RagdollInRG and v26 then
+								tbl12.SNO(v26, 1.5)
+							end
+
+							if v24.Sit then
+								v24.Sit = false
+								task.wait(0.1)
+							end
+
+							local now3 = tick()
+							local flag12 = false
+							local flag13 = false
+
+							tbl12.SetRuntimeConnection(arg2, v22.ChildAdded, true, function(arg3)
+								if arg3:IsA("LocalScript") and arg3.Name:lower():find("control") then
+									arg3.Enabled = false
+									arg3:Destroy()
+									flag13 = true
+								end
+							end)
+
+							local connection = arg2.ChildAdded:Connect(function(child)
+								if child.Name == "SeatWeld" then
+									child.Enabled = false
+									child:Destroy()
+									flag12 = true
+								end
+							end)
+
+							while true do
+								arg2:Sit(v24)
+								fn20()
+								if not (flag12 or tick() - now3 > 0.5 or not arg2.Parent or v24.Health <= 0 or flag11) then
+									continue
+								end
+								break
+							end
+
+							v24.Sit = false
+
+							if flag12 then
+								local now4 = tick()
+
+								while not flag13 and not flag11 and v22.Parent and v24.Health > 0 and tick() - now4 < 0.5 do
+									task.wait()
+								end
+							end
+
+							tbl12.SetRuntimeConnection(arg2, nil, false)
+							obj2[arg2] = nil
+
+							if not flag12 then
+								v24.Sit = true
+								task.wait(0.05)
+								v24.Sit = false
+								return connection:Disconnect()
+							end
+
+							obj[arg2] = true
+							connection:Disconnect()
+
+							connection = arg2.ChildAdded:Connect(function(child)
+								local v30
+								v30, v30 = tbl12.Char()
+
+								if child.Name == "SeatWeld" and child.Part1 ~= v30 then
+									obj[arg2] = nil
+									connection:Disconnect()
+								end
+							end)
+						end
+					end
+
+					local seatPart = v27 and v27.SeatPart
+					if seatPart and not v27.Sit then
+						obj[seatPart] = nil
+						return fn21(seatPart)
+					end
+
+					for _, v30 in v28:GetChildren() do
+						if v30:IsA("Model") then
+							local vehicleSeat = v30:FindFirstChildWhichIsA("VehicleSeat") or v30:FindFirstChildWhichIsA("Seat")
+
+							if vehicleSeat then
+								fn21(vehicleSeat)
+							end
+						end
+					end
+
+					if v29 then
+						for _, v30 in v29:GetChildren() do
+							if v30:IsA("Model") then
+								local vehicleSeat = v30:FindFirstChildWhichIsA("VehicleSeat") or v30:FindFirstChildWhichIsA("Seat")
+
+								if vehicleSeat then
+									fn21(vehicleSeat)
+								end
+							end
+						end
+					end
+				end
+					do
+						local tbl16 = nil
+						local flag12 = nil
+
+						local function fn21(arg)
+							if not arg.Parent or arg.Health <= 0 then
+								return
+							end
+							arg.Sit = true
+							task.wait(0.05)
+
+							if arg.Parent then
+								arg.Sit = false
+							end
+
+							task.wait(0.05)
+						end
+
+						local function fn22()
+							if not tbl16 then
+								return
+							end
+
+							for _, v23 in tbl16.Connections, nil, nil do
+								v23:Disconnect()
+							end
+
+							table.clear(tbl16.Connections)
+
+							if tbl16.BP then
+								tbl16.BP:Destroy()
+								tbl16.BP = nil
+							end
+
+							local hum = tbl16.Hum
+							local hrp = tbl16.HRP
+
+							if hum and hum.Parent then
+								hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, tbl16.Jumping)
+
+								if hum.SeatPart == tbl16.Seat or not hum.SeatPart then
+									hum.Sit = false
+								end
+							end
+
+							if tbl16.Ragdoll and hrp and hrp.Parent then
+								tbl11.RagdollRemote:FireServer(hrp, 0.15)
+							end
+
+							local v23 = tbl16
+							local v24 = tbl16
+							tbl16.Hum = nil
+							v23.HRP = nil
+							v24.Ragdoll = nil
+						end
+
+						local function fn23()
+							if not tbl16 then
+								return
+							end
+							fn22()
+
+							if tbl16.InvConn then
+								tbl16.InvConn:Disconnect()
+							end
+
+							local vehicle = tbl16.Vehicle
+							local seat = tbl16.Seat
+
+							if vehicle then
+								tbl7.ToyAuraReserved[vehicle] = tbl16.Reserved
+
+								if tbl16.Type == "Train" then
+									if seat and seat.Parent then
+										seat.Transparency = tbl16.Transparency
+										seat.CanCollide = tbl16.CanCollide
+									end
+								else
+									tbl12.DestroyToy(vehicle)
+								end
+							end
+
+							tbl16 = nil
+						end
+
+						local function fn24()
+							local character = localPlayer.Character
+							local n36 = 0
+							local v23 = nil
+							local v24, v25, v26, gucciType, ragdolled, object, v27, seat
+
+							while tbl8.GucciAntiGrab do
+								local exitTo = nil
+								local vehicle, root, flag13, fn25, flag14, now3, cFrame2, n37, connection, flag15, flag16, now4, flag17, parent2, v28, bodyPosition, random, parent3, seatPart, flag18, occupant, playerFromCharacter
+
+								while true do
+									task.wait()
+									v24, v25, v26 = tbl12.Char()
+									gucciType = tbl9.GucciType
+
+									if v24 ~= character then
+										character = v24
+										n36 = os.clock() + 1
+									end
+
+									if tbl16 and (tbl16.Type ~= gucciType or not tbl16.Vehicle.Parent or not tbl16.Seat.Parent or tbl16.Char ~= v24) then
+										fn23()
+									end
+
+									if tbl8.GucciAntiGrab then
+										ragdolled = v26 and v26:FindFirstChild("Ragdolled")
+
+										if not (v25 and v26 and v26.Health > 0 and ragdolled) or isHeld.Value or ragdolled.Value then
+											exitTo = 1
+											break
+										elseif not tbl16 then
+											local seat2, v29, v30, flag19, flag20, parent4, parent5, fn26
+
+											if gucciType == "Train" then
+												object = train:FindFirstChild("Object")
+												object = object and object:FindFirstChild("ObjectModel")
+												seat2 = object and object:FindFirstChildWhichIsA("Seat")
+
+												if not seat2 then
+													exitTo = 25
+													break
+												else
+													v29 = tbl7.ToyAuraReserved[object]
+													v30 = nil
+													flag19 = not tbl8.GucciAntiGrab or tbl9.GucciType ~= gucciType or localPlayer.Character ~= v24
+
+													if flag19 then
+														flag20 = flag19
+													else
+														parent4 = object and object.Parent
+														parent5 = parent4 and seat2 and seat2.Parent
+														flag20 = not parent5
+													end
+
+													if flag20 then
+														exitTo = 26
+														break
+													else
+														tbl16 = {
+															Vehicle = object,
+															Seat = seat2,
+															Root = v30,
+															Char = v24,
+															Type = gucciType,
+															Reserved = v29,
+															Connections = {},
+															Transparency = seat2.Transparency,
+															CanCollide = seat2.CanCollide,
+														}
+
+														tbl7.ToyAuraReserved[object] = true
+														v23 = nil
+
+														if gucciType == "Train" then
+															v27 = tbl16
+															vehicle = v27.Vehicle
+															seat = v27.Seat
+															root = v27.Root
+															flag13 = seat.Occupant and seat.Occupant ~= v26
+
+															if flag13 then
+																exitTo = 32
+																break
+															else
+																fn25 = function()
+																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+
+																	if flag21 then
+																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
+																	end
+
+																	return flag21
+																end
+
+																v27.Hum = v26
+																v27.HRP = v25
+																v27.Jumping = v26:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+																seat.Transparency = 1
+																seat.CanCollide = false
+																v26.Sit = false
+																flag14 = false
+
+																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child.Name == "SeatWeld" then
+																		child.Enabled = false
+																		child:Destroy()
+																		flag14 = true
+																	end
+																end))
+
+																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+																		child.Enabled = false
+																		child:Destroy()
+																	end
+																end))
+
+																now3 = os.clock()
+																cFrame2 = v25.CFrame
+																n37 = nil
+																v27.Ragdoll = true
+																connection = nil
+
+																connection = RunService.Heartbeat:Connect(function()
+																	if not fn25() then
+																		connection:Disconnect()
+																	elseif n37 and os.clock() >= n37 then
+																		v27.Ragdoll = false
+																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		connection:Disconnect()
+																	else
+																		tbl11.RagdollRemote:FireServer(v25, 0)
+																	end
+																end)
+
+																table.insert(v27.Connections, connection)
+																tbl11.RagdollRemote:FireServer(v25, 0)
+																task.wait()
+
+																if not fn25() then
+																	exitTo = 33
+																	break
+																else
+																	seat:Sit(v26)
+
+																	while true do
+																		task.wait()
+
+																		if not fn25() then
+																			break
+																		else
+																			flag15 = flag14 or os.clock() - now3 > 0.75
+																			if not flag15 then
+																				continue
+																			end
+																			break
+																		end
+																	end
+
+																	flag16 = not fn25() or not flag14
+
+																	if flag16 then
+																		exitTo = 34
+																		break
+																	else
+																		v26.Sit = false
+																		now4 = os.clock()
+																		n37 = now4 + 0.15
+
+																		if now4 < n36 then
+																			tbl12.Teleport(v25, cFrame2)
+																		end
+
+																		flag17 = gucciType ~= "Train" and root
+																		parent2 = flag17 and root.Parent
+
+																		if parent2 then
+																			v28 = root:IsDescendantOf(workspace.PlotItems)
+																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																		end
+
+																		if parent2 then
+																			if not fn25() then
+																				exitTo = 36
+																				break
+																			else
+																				bodyPosition = Instance.new("BodyPosition")
+																				bodyPosition.Name = "GucciBP"
+																				bodyPosition.D = 200
+																				bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+																				random = math.random
+																				bodyPosition.Position = Vector3.new(math.random(-100000, 100000), 100000, random(-100000, 100000))
+																				v27.BP = bodyPosition
+																				vehicle.Name = "GucciRSC"
+																				bodyPosition.Parent = root
+																				v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+																				while fn25() do
+																					task.wait()
+																				end
+
+																				parent3 = v26.Parent
+																				seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+																				flag18 = seatPart and v26.SeatPart ~= seat
+
+																				if flag18 then
+																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																				end
+
+																				if tbl16 == v27 then
+																					occupant = seat.Occupant
+																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+																					if playerFromCharacter then
+																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																					end
+
+																					fn22()
+
+																					if playerFromCharacter then
+																						fn23()
+																					end
+																				end
+
+																				fn21(v26)
+																				if tbl8.GucciAntiGrab then
+																					continue
+																				end
+																			end
+																		else
+																			exitTo = 35
+																			break
+																		end
+																	end
+																end
+															end
+														else
+															fn26 = function(descendant)
+																if descendant:IsA("BasePart") then
+																	descendant.Transparency = 1
+																	descendant.CanCollide = false
+																elseif descendant:IsA("Decal") or descendant:IsA("Texture") then
+																	descendant.Transparency = 1
+																elseif descendant.Name == "ItemSpawnSound" then
+																	descendant:Destroy()
+																end
+															end
+
+															for _, v31 in object:GetDescendants() do
+																fn26(v31)
+															end
+
+															tbl16.InvConn = object.DescendantAdded:Connect(fn26)
+															v23 = nil
+															v27 = tbl16
+															vehicle = v27.Vehicle
+															seat = v27.Seat
+															root = v27.Root
+															flag13 = seat.Occupant and seat.Occupant ~= v26
+
+															if flag13 then
+																exitTo = 27
+																break
+															else
+																fn25 = function()
+																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+
+																	if flag21 then
+																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
+																	end
+
+																	return flag21
+																end
+
+																v27.Hum = v26
+																v27.HRP = v25
+																v27.Jumping = v26:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+																seat.Transparency = 1
+																seat.CanCollide = false
+																v26.Sit = false
+																flag14 = false
+
+																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child.Name == "SeatWeld" then
+																		child.Enabled = false
+																		child:Destroy()
+																		flag14 = true
+																	end
+																end))
+
+																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+																		child.Enabled = false
+																		child:Destroy()
+																	end
+																end))
+
+																now3 = os.clock()
+																cFrame2 = v25.CFrame
+																n37 = nil
+																v27.Ragdoll = true
+																connection = nil
+
+																connection = RunService.Heartbeat:Connect(function()
+																	if not fn25() then
+																		connection:Disconnect()
+																	elseif n37 and os.clock() >= n37 then
+																		v27.Ragdoll = false
+																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		connection:Disconnect()
+																	else
+																		tbl11.RagdollRemote:FireServer(v25, 0)
+																	end
+																end)
+
+																table.insert(v27.Connections, connection)
+																tbl11.RagdollRemote:FireServer(v25, 0)
+																task.wait()
+
+																if not fn25() then
+																	exitTo = 28
+																	break
+																else
+																	seat:Sit(v26)
+
+																	while true do
+																		task.wait()
+
+																		if not fn25() then
+																			break
+																		else
+																			flag15 = flag14 or os.clock() - now3 > 0.75
+																			if not flag15 then
+																				continue
+																			end
+																			break
+																		end
+																	end
+
+																	flag16 = not fn25() or not flag14
+
+																	if flag16 then
+																		exitTo = 29
+																		break
+																	else
+																		v26.Sit = false
+																		now4 = os.clock()
+																		n37 = now4 + 0.15
+
+																		if now4 < n36 then
+																			tbl12.Teleport(v25, cFrame2)
+																		end
+
+																		flag17 = gucciType ~= "Train" and root
+																		parent2 = flag17 and root.Parent
+
+																		if parent2 then
+																			v28 = root:IsDescendantOf(workspace.PlotItems)
+																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																		end
+
+																		if parent2 then
+																			if not fn25() then
+																				exitTo = 31
+																				break
+																			else
+																				bodyPosition = Instance.new("BodyPosition")
+																				bodyPosition.Name = "GucciBP"
+																				bodyPosition.D = 200
+																				bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+																				random = math.random
+																				bodyPosition.Position = Vector3.new(math.random(-100000, 100000), 100000, random(-100000, 100000))
+																				v27.BP = bodyPosition
+																				vehicle.Name = "GucciRSC"
+																				bodyPosition.Parent = root
+																				v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+																				while fn25() do
+																					task.wait()
+																				end
+
+																				parent3 = v26.Parent
+																				seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+																				flag18 = seatPart and v26.SeatPart ~= seat
+
+																				if flag18 then
+																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																				end
+
+																				if tbl16 == v27 then
+																					occupant = seat.Occupant
+																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+																					if playerFromCharacter then
+																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																					end
+
+																					fn22()
+
+																					if playerFromCharacter then
+																						fn23()
+																					end
+																				end
+
+																				fn21(v26)
+																				if tbl8.GucciAntiGrab then
+																					continue
+																				end
+																			end
+																		else
+																			exitTo = 30
+																			break
+																		end
+																	end
+																end
+															end
+														end
+													end
+												end
+											else
+												object = tbl12.SpawnToy(gucciType, CFrame.new(100000, 500000, 0), 2, true)
+												seat2 = object and object:WaitForChild("VehicleSeat", 1.25)
+												v29 = nil
+
+												if seat2 then
+													v30 = tbl12.FindNicePart(object)
+													v29 = nil
+													flag19 = not tbl8.GucciAntiGrab or tbl9.GucciType ~= gucciType or localPlayer.Character ~= v24
+
+													if flag19 then
+														flag20 = flag19
+													else
+														parent4 = object and object.Parent
+														parent5 = parent4 and seat2 and seat2.Parent
+														flag20 = not parent5
+													end
+
+													if flag20 then
+														exitTo = 14
+														break
+													else
+														tbl16 = {
+															Vehicle = object,
+															Seat = seat2,
+															Root = v30,
+															Char = v24,
+															Type = gucciType,
+															Reserved = v29,
+															Connections = {},
+															Transparency = seat2.Transparency,
+															CanCollide = seat2.CanCollide,
+														}
+
+														tbl7.ToyAuraReserved[object] = true
+														v23 = nil
+
+														if gucciType == "Train" then
+															v27 = tbl16
+															vehicle = v27.Vehicle
+															seat = v27.Seat
+															root = v27.Root
+															flag13 = seat.Occupant and seat.Occupant ~= v26
+
+															if flag13 then
+																exitTo = 20
+																break
+															else
+																fn25 = function()
+																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+
+																	if flag21 then
+																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
+																	end
+
+																	return flag21
+																end
+
+																v27.Hum = v26
+																v27.HRP = v25
+																v27.Jumping = v26:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+																seat.Transparency = 1
+																seat.CanCollide = false
+																v26.Sit = false
+																flag14 = false
+
+																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child.Name == "SeatWeld" then
+																		child.Enabled = false
+																		child:Destroy()
+																		flag14 = true
+																	end
+																end))
+
+																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+																		child.Enabled = false
+																		child:Destroy()
+																	end
+																end))
+
+																now3 = os.clock()
+																cFrame2 = v25.CFrame
+																n37 = nil
+																v27.Ragdoll = true
+																connection = nil
+
+																connection = RunService.Heartbeat:Connect(function()
+																	if not fn25() then
+																		connection:Disconnect()
+																	elseif n37 and os.clock() >= n37 then
+																		v27.Ragdoll = false
+																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		connection:Disconnect()
+																	else
+																		tbl11.RagdollRemote:FireServer(v25, 0)
+																	end
+																end)
+
+																table.insert(v27.Connections, connection)
+																tbl11.RagdollRemote:FireServer(v25, 0)
+																task.wait()
+
+																if not fn25() then
+																	exitTo = 21
+																	break
+																else
+																	seat:Sit(v26)
+
+																	while true do
+																		task.wait()
+
+																		if not fn25() then
+																			break
+																		else
+																			flag15 = flag14 or os.clock() - now3 > 0.75
+																			if not flag15 then
+																				continue
+																			end
+																			break
+																		end
+																	end
+
+																	flag16 = not fn25() or not flag14
+
+																	if flag16 then
+																		exitTo = 22
+																		break
+																	else
+																		v26.Sit = false
+																		now4 = os.clock()
+																		n37 = now4 + 0.15
+
+																		if now4 < n36 then
+																			tbl12.Teleport(v25, cFrame2)
+																		end
+
+																		flag17 = gucciType ~= "Train" and root
+																		parent2 = flag17 and root.Parent
+
+																		if parent2 then
+																			v28 = root:IsDescendantOf(workspace.PlotItems)
+																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																		end
+
+																		if parent2 then
+																			if not fn25() then
+																				exitTo = 24
+																				break
+																			else
+																				bodyPosition = Instance.new("BodyPosition")
+																				bodyPosition.Name = "GucciBP"
+																				bodyPosition.D = 200
+																				bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+																				random = math.random
+																				bodyPosition.Position = Vector3.new(math.random(-100000, 100000), 100000, random(-100000, 100000))
+																				v27.BP = bodyPosition
+																				vehicle.Name = "GucciRSC"
+																				bodyPosition.Parent = root
+																				v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+																				while fn25() do
+																					task.wait()
+																				end
+
+																				parent3 = v26.Parent
+																				seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+																				flag18 = seatPart and v26.SeatPart ~= seat
+
+																				if flag18 then
+																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																				end
+
+																				if tbl16 == v27 then
+																					occupant = seat.Occupant
+																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+																					if playerFromCharacter then
+																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																					end
+
+																					fn22()
+
+																					if playerFromCharacter then
+																						fn23()
+																					end
+																				end
+
+																				fn21(v26)
+																				if tbl8.GucciAntiGrab then
+																					continue
+																				end
+																			end
+																		else
+																			exitTo = 23
+																			break
+																		end
+																	end
+																end
+															end
+														else
+															fn26 = function(arg)
+																if arg:IsA("BasePart") then
+																	arg.Transparency = 1
+																	arg.CanCollide = false
+																elseif arg:IsA("Decal") or arg:IsA("Texture") then
+																	arg.Transparency = 1
+																elseif arg.Name == "ItemSpawnSound" then
+																	arg:Destroy()
+																end
+															end
+
+															for _, v31 in object:GetDescendants() do
+																fn26(v31)
+															end
+
+															tbl16.InvConn = object.DescendantAdded:Connect(fn26)
+															v23 = nil
+															v27 = tbl16
+															vehicle = v27.Vehicle
+															seat = v27.Seat
+															root = v27.Root
+															flag13 = seat.Occupant and seat.Occupant ~= v26
+
+															if flag13 then
+																exitTo = 15
+																break
+															else
+																fn25 = function()
+																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+
+																	if flag21 then
+																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
+																	end
+
+																	return flag21
+																end
+
+																v27.Hum = v26
+																v27.HRP = v25
+																v27.Jumping = v26:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+																seat.Transparency = 1
+																seat.CanCollide = false
+																v26.Sit = false
+																flag14 = false
+
+																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child.Name == "SeatWeld" then
+																		child.Enabled = false
+																		child:Destroy()
+																		flag14 = true
+																	end
+																end))
+
+																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+																		child.Enabled = false
+																		child:Destroy()
+																	end
+																end))
+
+																now3 = os.clock()
+																cFrame2 = v25.CFrame
+																n37 = nil
+																v27.Ragdoll = true
+																connection = nil
+
+																connection = RunService.Heartbeat:Connect(function()
+																	if not fn25() then
+																		connection:Disconnect()
+																	elseif n37 and os.clock() >= n37 then
+																		v27.Ragdoll = false
+																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		connection:Disconnect()
+																	else
+																		tbl11.RagdollRemote:FireServer(v25, 0)
+																	end
+																end)
+
+																table.insert(v27.Connections, connection)
+																tbl11.RagdollRemote:FireServer(v25, 0)
+																task.wait()
+
+																if not fn25() then
+																	exitTo = 16
+																	break
+																else
+																	seat:Sit(v26)
+
+																	while true do
+																		task.wait()
+
+																		if not fn25() then
+																			break
+																		else
+																			flag15 = flag14 or os.clock() - now3 > 0.75
+																			if not flag15 then
+																				continue
+																			end
+																			break
+																		end
+																	end
+
+																	flag16 = not fn25() or not flag14
+
+																	if flag16 then
+																		exitTo = 17
+																		break
+																	else
+																		v26.Sit = false
+																		now4 = os.clock()
+																		n37 = now4 + 0.15
+
+																		if now4 < n36 then
+																			tbl12.Teleport(v25, cFrame2)
+																		end
+
+																		flag17 = gucciType ~= "Train" and root
+																		parent2 = flag17 and root.Parent
+
+																		if parent2 then
+																			v28 = root:IsDescendantOf(workspace.PlotItems)
+																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																		end
+
+																		if parent2 then
+																			if not fn25() then
+																				exitTo = 19
+																				break
+																			else
+																				bodyPosition = Instance.new("BodyPosition")
+																				bodyPosition.Name = "GucciBP"
+																				bodyPosition.D = 200
+																				bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+																				random = math.random
+																				bodyPosition.Position = Vector3.new(math.random(-100000, 100000), 100000, random(-100000, 100000))
+																				v27.BP = bodyPosition
+																				vehicle.Name = "GucciRSC"
+																				bodyPosition.Parent = root
+																				v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+																				while fn25() do
+																					task.wait()
+																				end
+
+																				parent3 = v26.Parent
+																				seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+																				flag18 = seatPart and v26.SeatPart ~= seat
+
+																				if flag18 then
+																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																				end
+
+																				if tbl16 == v27 then
+																					occupant = seat.Occupant
+																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+																					if playerFromCharacter then
+																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																					end
+
+																					fn22()
+
+																					if playerFromCharacter then
+																						fn23()
+																					end
+																				end
+
+																				fn21(v26)
+																				if tbl8.GucciAntiGrab then
+																					continue
+																				end
+																			end
+																		else
+																			exitTo = 18
+																			break
+																		end
+																	end
+																end
+															end
+														end
+													end
+												else
+													v30 = seat2
+													flag19 = not tbl8.GucciAntiGrab or tbl9.GucciType ~= gucciType or localPlayer.Character ~= v24
+
+													if flag19 then
+														flag20 = flag19
+													else
+														parent4 = object and object.Parent
+														parent5 = parent4 and seat2 and seat2.Parent
+														flag20 = not parent5
+													end
+
+													if flag20 then
+														exitTo = 3
+														break
+													else
+														tbl16 = {
+															Vehicle = object,
+															Seat = seat2,
+															Root = v30,
+															Char = v24,
+															Type = gucciType,
+															Reserved = v29,
+															Connections = {},
+															Transparency = seat2.Transparency,
+															CanCollide = seat2.CanCollide,
+														}
+
+														tbl7.ToyAuraReserved[object] = true
+														v23 = nil
+
+														if gucciType == "Train" then
+															v27 = tbl16
+															vehicle = v27.Vehicle
+															seat = v27.Seat
+															root = v27.Root
+															flag13 = seat.Occupant and seat.Occupant ~= v26
+
+															if flag13 then
+																exitTo = 9
+																break
+															else
+																fn25 = function()
+																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+
+																	if flag21 then
+																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
+																	end
+
+																	return flag21
+																end
+
+																v27.Hum = v26
+																v27.HRP = v25
+																v27.Jumping = v26:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+																seat.Transparency = 1
+																seat.CanCollide = false
+																v26.Sit = false
+																flag14 = false
+
+																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child.Name == "SeatWeld" then
+																		child.Enabled = false
+																		child:Destroy()
+																		flag14 = true
+																	end
+																end))
+
+																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+																		child.Enabled = false
+																		child:Destroy()
+																	end
+																end))
+
+																now3 = os.clock()
+																cFrame2 = v25.CFrame
+																n37 = nil
+																v27.Ragdoll = true
+																connection = nil
+
+																connection = RunService.Heartbeat:Connect(function()
+																	if not fn25() then
+																		connection:Disconnect()
+																	elseif n37 and os.clock() >= n37 then
+																		v27.Ragdoll = false
+																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		connection:Disconnect()
+																	else
+																		tbl11.RagdollRemote:FireServer(v25, 0)
+																	end
+																end)
+
+																table.insert(v27.Connections, connection)
+																tbl11.RagdollRemote:FireServer(v25, 0)
+																task.wait()
+
+																if not fn25() then
+																	exitTo = 10
+																	break
+																else
+																	seat:Sit(v26)
+
+																	while true do
+																		task.wait()
+
+																		if not fn25() then
+																			break
+																		else
+																			flag15 = flag14 or os.clock() - now3 > 0.75
+																			if not flag15 then
+																				continue
+																			end
+																			break
+																		end
+																	end
+
+																	flag16 = not fn25() or not flag14
+
+																	if flag16 then
+																		exitTo = 11
+																		break
+																	else
+																		v26.Sit = false
+																		now4 = os.clock()
+																		n37 = now4 + 0.15
+
+																		if now4 < n36 then
+																			tbl12.Teleport(v25, cFrame2)
+																		end
+
+																		flag17 = gucciType ~= "Train" and root
+																		parent2 = flag17 and root.Parent
+
+																		if parent2 then
+																			v28 = root:IsDescendantOf(workspace.PlotItems)
+																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																		end
+
+																		if parent2 then
+																			if not fn25() then
+																				exitTo = 13
+																				break
+																			else
+																				bodyPosition = Instance.new("BodyPosition")
+																				bodyPosition.Name = "GucciBP"
+																				bodyPosition.D = 200
+																				bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+																				random = math.random
+																				bodyPosition.Position = Vector3.new(math.random(-100000, 100000), 100000, random(-100000, 100000))
+																				v27.BP = bodyPosition
+																				vehicle.Name = "GucciRSC"
+																				bodyPosition.Parent = root
+																				v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+																				while fn25() do
+																					task.wait()
+																				end
+
+																				parent3 = v26.Parent
+																				seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+																				flag18 = seatPart and v26.SeatPart ~= seat
+
+																				if flag18 then
+																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																				end
+
+																				if tbl16 == v27 then
+																					occupant = seat.Occupant
+																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+																					if playerFromCharacter then
+																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																					end
+
+																					fn22()
+
+																					if playerFromCharacter then
+																						fn23()
+																					end
+																				end
+
+																				fn21(v26)
+																				if tbl8.GucciAntiGrab then
+																					continue
+																				end
+																			end
+																		else
+																			exitTo = 12
+																			break
+																		end
+																	end
+																end
+															end
+														else
+															fn26 = function(arg)
+																if arg:IsA("BasePart") then
+																	arg.Transparency = 1
+																	arg.CanCollide = false
+																elseif arg:IsA("Decal") or arg:IsA("Texture") then
+																	arg.Transparency = 1
+																elseif arg.Name == "ItemSpawnSound" then
+																	arg:Destroy()
+																end
+															end
+
+															for _, v31 in object:GetDescendants() do
+																fn26(v31)
+															end
+
+															tbl16.InvConn = object.DescendantAdded:Connect(fn26)
+															v23 = nil
+															v27 = tbl16
+															vehicle = v27.Vehicle
+															seat = v27.Seat
+															root = v27.Root
+															flag13 = seat.Occupant and seat.Occupant ~= v26
+
+															if flag13 then
+																exitTo = 4
+																break
+															else
+																fn25 = function()
+																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+
+																	if flag21 then
+																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
+																	end
+
+																	return flag21
+																end
+
+																v27.Hum = v26
+																v27.HRP = v25
+																v27.Jumping = v26:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+																seat.Transparency = 1
+																seat.CanCollide = false
+																v26.Sit = false
+																flag14 = false
+
+																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child.Name == "SeatWeld" then
+																		child.Enabled = false
+																		child:Destroy()
+																		flag14 = true
+																	end
+																end))
+
+																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+																		child.Enabled = false
+																		child:Destroy()
+																	end
+																end))
+
+																now3 = os.clock()
+																cFrame2 = v25.CFrame
+																n37 = nil
+																v27.Ragdoll = true
+																connection = nil
+
+																connection = RunService.Heartbeat:Connect(function()
+																	if not fn25() then
+																		connection:Disconnect()
+																	elseif n37 and os.clock() >= n37 then
+																		v27.Ragdoll = false
+																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		connection:Disconnect()
+																	else
+																		tbl11.RagdollRemote:FireServer(v25, 0)
+																	end
+																end)
+
+																table.insert(v27.Connections, connection)
+																tbl11.RagdollRemote:FireServer(v25, 0)
+																task.wait()
+
+																if not fn25() then
+																	exitTo = 5
+																	break
+																else
+																	seat:Sit(v26)
+
+																	while true do
+																		task.wait()
+
+																		if not fn25() then
+																			break
+																		else
+																			flag15 = flag14 or os.clock() - now3 > 0.75
+																			if not flag15 then
+																				continue
+																			end
+																			break
+																		end
+																	end
+
+																	flag16 = not fn25() or not flag14
+
+																	if flag16 then
+																		exitTo = 6
+																		break
+																	else
+																		v26.Sit = false
+																		now4 = os.clock()
+																		n37 = now4 + 0.15
+
+																		if now4 < n36 then
+																			tbl12.Teleport(v25, cFrame2)
+																		end
+
+																		flag17 = gucciType ~= "Train" and root
+																		parent2 = flag17 and root.Parent
+
+																		if parent2 then
+																			v28 = root:IsDescendantOf(workspace.PlotItems)
+																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																		end
+
+																		if parent2 then
+																			if not fn25() then
+																				exitTo = 8
+																				break
+																			else
+																				bodyPosition = Instance.new("BodyPosition")
+																				bodyPosition.Name = "GucciBP"
+																				bodyPosition.D = 200
+																				bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+																				random = math.random
+																				bodyPosition.Position = Vector3.new(math.random(-100000, 100000), 100000, random(-100000, 100000))
+																				v27.BP = bodyPosition
+																				vehicle.Name = "GucciRSC"
+																				bodyPosition.Parent = root
+																				v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+																				while fn25() do
+																					task.wait()
+																				end
+
+																				parent3 = v26.Parent
+																				seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+																				flag18 = seatPart and v26.SeatPart ~= seat
+
+																				if flag18 then
+																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																				end
+
+																				if tbl16 == v27 then
+																					occupant = seat.Occupant
+																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+																					if playerFromCharacter then
+																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																					end
+
+																					fn22()
+
+																					if playerFromCharacter then
+																						fn23()
+																					end
+																				end
+
+																				fn21(v26)
+																				if tbl8.GucciAntiGrab then
+																					continue
+																				end
+																			end
+																		else
+																			exitTo = 7
+																			break
+																		end
+																	end
+																end
+															end
+														end
+													end
+												end
+											end
+										else
+											exitTo = 2
+											break
+										end
+									end
+
+									break
+								end
+
+								if exitTo == 1 then
+									continue
+								else
+									local flag19, flag20
+
+									if exitTo == 2 then
+										v27 = tbl16
+										vehicle = v27.Vehicle
+										seat = v27.Seat
+										root = v27.Root
+										flag13 = seat.Occupant and seat.Occupant ~= v26
+
+										if flag13 then
+											fn23()
+										else
+											fn25 = function()
+												local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+
+												if flag21 then
+													flag21 = not (seat.Occupant and seat.Occupant ~= v26)
+												end
+
+												return flag21
+											end
+
+											v27.Hum = v26
+											v27.HRP = v25
+											v27.Jumping = v26:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+											seat.Transparency = 1
+											seat.CanCollide = false
+											v26.Sit = false
+											flag14 = false
+
+											table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+												if tbl16 == v27 and child.Name == "SeatWeld" then
+													child.Enabled = false
+													child:Destroy()
+													flag14 = true
+												end
+											end))
+
+											table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+												if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+													child.Enabled = false
+													child:Destroy()
+												end
+											end))
+
+											now3 = os.clock()
+											cFrame2 = v25.CFrame
+											n37 = nil
+											v27.Ragdoll = true
+											connection = nil
+
+											connection = RunService.Heartbeat:Connect(function()
+												if not fn25() then
+													connection:Disconnect()
+												elseif n37 and os.clock() >= n37 then
+													v27.Ragdoll = false
+													tbl11.RagdollRemote:FireServer(v25, 0.15)
+													connection:Disconnect()
+												else
+													tbl11.RagdollRemote:FireServer(v25, 0)
+												end
+											end)
+
+											table.insert(v27.Connections, connection)
+											tbl11.RagdollRemote:FireServer(v25, 0)
+											task.wait()
+
+											if not fn25() then
+												if tbl16 == v27 then
+													fn22()
+												end
+
+												fn21(v26)
+											else
+												seat:Sit(v26)
+
+												while true do
+													task.wait()
+
+													if not fn25() then
+														break
+													else
+														flag15 = flag14 or os.clock() - now3 > 0.75
+														if not flag15 then
+															continue
+														end
+														break
+													end
+												end
+
+												flag16 = not fn25() or not flag14
+
+												if flag16 then
+													flag19 = v26.Sit and seat.Occupant == v26
+													flag20 = not flag19
+
+													if tbl16 == v27 then
+														fn23()
+													end
+
+													if flag20 then
+														fn21(v26)
+													end
+												else
+													v26.Sit = false
+													now4 = os.clock()
+													n37 = now4 + 0.15
+
+													if now4 < n36 then
+														tbl12.Teleport(v25, cFrame2)
+													end
+
+													flag17 = gucciType ~= "Train" and root
+													parent2 = flag17 and root.Parent
+
+													if parent2 then
+														v28 = root:IsDescendantOf(workspace.PlotItems)
+														parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+													end
+
+													if parent2 then
+														if not fn25() then
+															if tbl16 == v27 then
+																fn23()
+															end
+
+															fn21(v26)
+														else
+															bodyPosition = Instance.new("BodyPosition")
+															bodyPosition.Name = "GucciBP"
+															bodyPosition.D = 200
+															bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+															random = math.random
+															bodyPosition.Position = Vector3.new(math.random(-100000, 100000), 100000, random(-100000, 100000))
+															v27.BP = bodyPosition
+															vehicle.Name = "GucciRSC"
+															bodyPosition.Parent = root
+															v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+															while fn25() do
+																task.wait()
+															end
+
+															parent3 = v26.Parent
+															seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+															flag18 = seatPart and v26.SeatPart ~= seat
+
+															if flag18 then
+																fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+															end
+
+															if tbl16 == v27 then
+																occupant = seat.Occupant
+																playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+																if playerFromCharacter then
+																	fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																end
+
+																fn22()
+
+																if playerFromCharacter then
+																	fn23()
+																end
+															end
+
+															fn21(v26)
+														end
+													else
+														v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+														while fn25() do
+															task.wait()
+														end
+
+														parent3 = v26.Parent
+														seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+														flag18 = seatPart and v26.SeatPart ~= seat
+
+														if flag18 then
+															fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+														end
+
+														if tbl16 == v27 then
+															occupant = seat.Occupant
+															playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+															if playerFromCharacter then
+																fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+															end
+
+															fn22()
+
+															if playerFromCharacter then
+																fn23()
+															end
+														end
+
+														fn21(v26)
+													end
+												end
+											end
+										end
+
+										continue
+									else
+										local flag21
+
+										if exitTo == 3 then
+											flag21 = object and gucciType ~= "Train"
+
+											if flag21 then
+												tbl7.ToyAuraReserved[object] = nil
+												tbl12.DestroyToy(object)
+											end
+
+											continue
+										elseif exitTo == 4 then
+											fn23()
+											continue
+										elseif exitTo == 5 then
+											if tbl16 == v27 then
+												fn22()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 6 then
+											flag19 = v26.Sit and seat.Occupant == v26
+											flag20 = not flag19
+
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											if flag20 then
+												fn21(v26)
+											end
+
+											continue
+										elseif exitTo == 7 then
+											v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+											while fn25() do
+												task.wait()
+											end
+
+											parent3 = v26.Parent
+											seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+											flag18 = seatPart and v26.SeatPart ~= seat
+
+											if flag18 then
+												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+											end
+
+											if tbl16 == v27 then
+												occupant = seat.Occupant
+												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+												if playerFromCharacter then
+													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+												end
+
+												fn22()
+
+												if playerFromCharacter then
+													fn23()
+												end
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 8 then
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 9 then
+											fn23()
+											continue
+										elseif exitTo == 10 then
+											if tbl16 == v27 then
+												fn22()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 11 then
+											flag19 = v26.Sit and seat.Occupant == v26
+											flag20 = not flag19
+
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											if flag20 then
+												fn21(v26)
+											end
+
+											continue
+										elseif exitTo == 12 then
+											v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+											while fn25() do
+												task.wait()
+											end
+
+											parent3 = v26.Parent
+											seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+											flag18 = seatPart and v26.SeatPart ~= seat
+
+											if flag18 then
+												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+											end
+
+											if tbl16 == v27 then
+												occupant = seat.Occupant
+												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+												if playerFromCharacter then
+													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+												end
+
+												fn22()
+
+												if playerFromCharacter then
+													fn23()
+												end
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 13 then
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 14 then
+											flag21 = object and gucciType ~= "Train"
+
+											if flag21 then
+												tbl7.ToyAuraReserved[object] = nil
+												tbl12.DestroyToy(object)
+											end
+
+											continue
+										elseif exitTo == 15 then
+											fn23()
+											continue
+										elseif exitTo == 16 then
+											if tbl16 == v27 then
+												fn22()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 17 then
+											flag19 = v26.Sit and seat.Occupant == v26
+											flag20 = not flag19
+
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											if flag20 then
+												fn21(v26)
+											end
+
+											continue
+										elseif exitTo == 18 then
+											v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+											while fn25() do
+												task.wait()
+											end
+
+											parent3 = v26.Parent
+											seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+											flag18 = seatPart and v26.SeatPart ~= seat
+
+											if flag18 then
+												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+											end
+
+											if tbl16 == v27 then
+												occupant = seat.Occupant
+												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+												if playerFromCharacter then
+													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+												end
+
+												fn22()
+
+												if playerFromCharacter then
+													fn23()
+												end
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 19 then
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 20 then
+											fn23()
+											continue
+										elseif exitTo == 21 then
+											if tbl16 == v27 then
+												fn22()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 22 then
+											flag19 = v26.Sit and seat.Occupant == v26
+											flag20 = not flag19
+
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											if flag20 then
+												fn21(v26)
+											end
+
+											continue
+										elseif exitTo == 23 then
+											v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+											while fn25() do
+												task.wait()
+											end
+
+											parent3 = v26.Parent
+											seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+											flag18 = seatPart and v26.SeatPart ~= seat
+
+											if flag18 then
+												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+											end
+
+											if tbl16 == v27 then
+												occupant = seat.Occupant
+												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+												if playerFromCharacter then
+													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+												end
+
+												fn22()
+
+												if playerFromCharacter then
+													fn23()
+												end
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 24 then
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 25 then
+											if v23 ~= gucciType then
+												local v29 = fn18
+												local str5
+
+												if object then
+													str5 = "Train doesn't have seats!"
+												else
+													str5 = "Train doesn't exist!"
+												end
+
+												v29(str5)
+												v23 = gucciType
+											end
+
+											continue
+										elseif exitTo == 26 then
+											flag21 = object and gucciType ~= "Train"
+
+											if flag21 then
+												tbl7.ToyAuraReserved[object] = nil
+												tbl12.DestroyToy(object)
+											end
+
+											continue
+										elseif exitTo == 27 then
+											fn23()
+											continue
+										elseif exitTo == 28 then
+											if tbl16 == v27 then
+												fn22()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 29 then
+											flag19 = v26.Sit and seat.Occupant == v26
+											flag20 = not flag19
+
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											if flag20 then
+												fn21(v26)
+											end
+
+											continue
+										elseif exitTo == 30 then
+											v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+											while fn25() do
+												task.wait()
+											end
+
+											parent3 = v26.Parent
+											seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+											flag18 = seatPart and v26.SeatPart ~= seat
+
+											if flag18 then
+												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+											end
+
+											if tbl16 == v27 then
+												occupant = seat.Occupant
+												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+												if playerFromCharacter then
+													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+												end
+
+												fn22()
+
+												if playerFromCharacter then
+													fn23()
+												end
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 31 then
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 32 then
+											fn23()
+											continue
+										elseif exitTo == 33 then
+											if tbl16 == v27 then
+												fn22()
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 34 then
+											flag19 = v26.Sit and seat.Occupant == v26
+											flag20 = not flag19
+
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											if flag20 then
+												fn21(v26)
+											end
+
+											continue
+										elseif exitTo == 35 then
+											v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+
+											while fn25() do
+												task.wait()
+											end
+
+											parent3 = v26.Parent
+											seatPart = parent3 and v26.Health > 0 and v26.SeatPart
+											flag18 = seatPart and v26.SeatPart ~= seat
+
+											if flag18 then
+												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+											end
+
+											if tbl16 == v27 then
+												occupant = seat.Occupant
+												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
+
+												if playerFromCharacter then
+													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+												end
+
+												fn22()
+
+												if playerFromCharacter then
+													fn23()
+												end
+											end
+
+											fn21(v26)
+											continue
+										elseif exitTo == 36 then
+											if tbl16 == v27 then
+												fn23()
+											end
+
+											fn21(v26)
+											continue
+										end
+									end
+								end
+
+								break
+							end
+						end
+
+						tbl12.SetGucciAntiGrab = function(arg)
+							tbl8.GucciAntiGrab = arg and not flag11
+							if not tbl8.GucciAntiGrab then
+								fn23()
+								return
+							end
+
+							if flag12 then
+								return
+							end
+							flag12 = true
+
+							task.spawn(function()
+								local ok, result = pcall(fn24)
+								fn23()
+								flag12 = nil
+
+								if not ok then
+									warn("[GUCCI Anti Grab] " .. tostring(result))
+
+									if not flag11 then
+										toggles.GucciAntiGrab:SetValue(false)
+									end
+								end
+							end)
+						end
+					end
+-- Additional supplied defense behaviors, sharing the supplied Gucci helpers.
+local defenseGroup=DefenseGroup
+local settings=DefenseExtra
+local workers={}
+local workerControls={}
+local stopActions={}
+local ownedProperties={}
+local function remember(instance,property)
+    local record=ownedProperties[instance]
+    if not record then record={};ownedProperties[instance]=record end
+    if record[property]==nil then record[property]=instance[property] end
+end
+local function restoreProperties()
+    for instance,record in pairs(ownedProperties) do
+        for property,value in pairs(record) do pcall(function() instance[property]=value end) end
+        ownedProperties[instance]=nil
+    end
+end
+local function charAlive()
+    local char,root,hum=tbl12.Char()
+    return char,root,hum,root and hum and hum.Health>0
+end
+local function stopWorker(key)
+    tbl8[key]=false
+    if stopActions[key] then stopActions[key]() end
+end
+local function runWorker(key,interval,action,cleanup)
+    stopActions[key]=cleanup
+    return function(on)
+        tbl8[key]=on
+        Hub.requestSave()
+        if not on then if cleanup then cleanup() end;return end
+        if workers[key] then return end
+        workers[key]=true
+        task.spawn(function()
+            local ok,message=xpcall(function()
+                while Hub.alive and not flag11 and tbl8[key] do
+                    action()
+                    task.wait(type(interval)=="function" and interval() or interval)
+                end
+            end,debug.traceback)
+            workers[key]=nil
+            if cleanup then cleanup() end
+            if not ok then tbl8[key]=false;local control=workerControls[key];if control and control.Value then control:SetValue(false) end;warn("[Source defense "..key.."] "..tostring(message));notify("Defense error",key.." stopped, check the console for details.",5) end
+        end)
+    end
+end
+local function bind(id,key,interval,action,cleanup)
+    workerControls[key]=Toggles[id]
+    local callback=runWorker(key,interval,action,cleanup)
+    if Toggles[id] then Toggles[id].Callback=callback end
+    return callback
+end
+local function add(id,text,key,interval,action,cleanup)
+    defenseGroup:AddToggle(id,{Text=text,Default=false,Callback=runWorker(key,interval,action,cleanup)})
+    workerControls[key]=Toggles[id]
+end
+-- Pure helper functions and the supplied default anti-grab function are inserted verbatim.
+						tbl12.ResetVelocity = function(arg)
+							if not arg or not arg:IsA("BasePart") then
+								return false
+							end
+
+							if arg.AssemblyAngularVelocity ~= Vector3.zero then
+								arg.AssemblyAngularVelocity = Vector3.zero
+							end
+
+							if arg.AssemblyLinearVelocity ~= Vector3.zero then
+								arg.AssemblyLinearVelocity = Vector3.zero
+							end
+
+							return true
+						end
+						tbl12.RepositionLimbs = function(arg, arg2)
+							local humanoidRootPart = arg:FindFirstChild("HumanoidRootPart")
+							local torso = arg:FindFirstChild("Torso")
+							if not humanoidRootPart or not torso then
+								return
+							end
+							local neck = torso:FindFirstChild("Neck")
+							if neck and neck.Enabled then
+								return
+							end
+							local lookVector = humanoidRootPart.CFrame.LookVector
+							local vector = Vector3.new(lookVector.X, 0, lookVector.Z)
+							if vector.Magnitude < 0.001 then
+								return
+							end
+							local cframe = CFrame.lookAt(humanoidRootPart.Position, humanoidRootPart.Position + vector.Unit)
+
+							for k, v24 in pairs(tbl7.LimbOffsetsRL) do
+								local v25 = arg:FindFirstChild(k)
+
+								if v25 and v25:IsA("BasePart") then
+									local cFrame2 = cframe * v24
+
+									if v25.CFrame ~= cFrame2 then
+										v25.CFrame = cFrame2
+									end
+
+									if arg2 then
+										tbl12.ResetVelocity(v25)
+									end
+								end
+							end
+						end
+						tbl12.ToggleCollisions = function(arg, canCollide, arg2, arg3)
+							if canCollide == nil then
+								canCollide = false
+							end
+
+							local lightPhysicalProperties
+
+							if arg3 then
+								lightPhysicalProperties = tbl12.LightPhysicalProperties
+							else
+								lightPhysicalProperties = nil
+							end
+
+							for _, child in pairs(arg:GetChildren()) do
+								if child:IsA("BasePart") then
+									local flag12
+
+									if canCollide then
+										flag12 = child.Name == "Torso" or child.Name == "Head"
+									else
+										flag12 = canCollide
+									end
+
+									if flag12 then
+										if child.CanCollide ~= canCollide then
+											child.CanCollide = canCollide
+										end
+									elseif not canCollide then
+										if child.CanCollide ~= canCollide then
+											child.CanCollide = canCollide
+										end
+
+										if not arg2 then
+											local ragdollLimbPart = child:FindFirstChild("RagdollLimbPart")
+
+											if ragdollLimbPart and ragdollLimbPart.CanCollide then
+												ragdollLimbPart.CanCollide = false
+											end
+										end
+									end
+
+									if child.Name ~= "HumanoidRootPart" and child.CustomPhysicalProperties ~= lightPhysicalProperties then
+										child.CustomPhysicalProperties = lightPhysicalProperties
+									end
+								end
+							end
+						end
+					tbl12.ExtraEscape = function()
+						local v22, v23, v24 = tbl12.Char()
+						if not v23 or not v24 or v24.Health == 0 or tbl7.States.Escaping or localPlayer.InPlot.Value then
+							return
+						end
+						tbl7.States.Escaping = true
+						local TractorGreen = tbl12.SpawnToy("TractorGreen", workspace.Waypoints.TudorHouse.CFrame)
+						if not TractorGreen then
+							tbl7.States.Escaping = false
+							return
+						end
+						local vehicleSeat = TractorGreen:WaitForChild("VehicleSeat", 1)
+						if not vehicleSeat then
+							tbl7.States.Escaping = false
+							return tbl12.DestroyToy(TractorGreen)
+						end
+						local now3 = tick()
+						local flag12 = false
+						v24.Sit = false
+						vehicleSeat:Sit(v24)
+
+						local connection = vehicleSeat.ChildAdded:Connect(function(child)
+							if child.Name == "SeatWeld" then
+								child.Enabled = false
+								flag12 = true
+								child:Destroy()
+							end
+						end)
+
+						while true do
+							fn20()
+							if not (flag12 or tick() - now3 > 0.7) then
+								continue
+							end
+							break
+						end
+
+						connection:Disconnect()
+						v24.Sit = false
+						tbl7.States.Escaping = false
+						return tbl12.DestroyToy(TractorGreen)
+					end
+				tbl12.BreakLimb = function(arg, arg2)
+					local flag12 = arg == localPlayer
+					if flag12 and tbl8.GucciAntiGrab then
+						return fn18("Can't break limbs while in Gucci!")
+					end
+					local v24, v25, v26 = tbl12.Char(arg)
+					local ragdolled = v26 and v26:FindFirstChild("Ragdolled")
+					if not (v25 and v26 and v26.Health ~= 0 and ragdolled) then
+						return
+					end
+					local children = v24:GetChildren()
+					local flag13 = false
+
+					for _, child in ipairs(children) do
+						if child:IsA("BasePart") then
+							if child.Name:find("Arm") and (arg2 == "Arms" or arg2 == "All") or child.Name:find("Leg") and (arg2 == "Legs" or arg2 == "All") then
+								flag13 = true
+								break
+							end
+						end
+					end
+
+					if not flag13 then
+						return
+					end
+
+					if flag12 then
+						tbl11.RagdollRemote:FireServer(v25, 0.35)
+						local now3 = tick()
+
+						while true do
+							task.wait()
+							if not (ragdolled.Value or tick() - now3 > 0.5) then
+								continue
+							end
+							break
+						end
+					elseif not (tbl12.SNO(v25) and tbl12.Ragdoll(v24)) then
+						return
+					end
+
+					if not ragdolled.Value then
+						return
+					end
+					local cFrame2 = v25.CFrame
+
+					for _, child in ipairs(children) do
+						if child:IsA("BasePart") then
+							if child.Name:find("Arm") and (arg2 == "Arms" or arg2 == "All") then
+								tbl12.Teleport(child, CFrame.new(0, -100000, 0))
+							elseif child.Name:find("Leg") and (arg2 == "Legs" or arg2 == "All") then
+								tbl12.Teleport(child, CFrame.new(0, -100000, 0))
+							end
+						end
+					end
+
+					task.wait(0.15)
+					if not v25.Parent then
+						return
+					end
+
+					if flag12 then
+						tbl12.Grab(v25)
+						task.wait()
+
+						for _, v27 in children, nil, nil do
+							if v27.Parent then
+								tbl12.ResetVelocity(v27)
+							end
+						end
+
+						tbl11.RagdollRemote:FireServer(v25, 0)
+					else
+						workspace.FallenPartsDestroyHeight = -10000
+						tbl12.Teleport(v25, CFrame.new(0, -11000, 0))
+						task.wait()
+						local v27 = workspace
+						local fallenPartsDestroyHeight2
+
+						if tbl8.DestroyVoid then
+							fallenPartsDestroyHeight2 = (0/0)
+						else
+							fallenPartsDestroyHeight2 = -100
+						end
+
+						v27.FallenPartsDestroyHeight = fallenPartsDestroyHeight2
+
+						if v25.Parent then
+							tbl12.Teleport(v25, cFrame2)
+
+							for _, v28 in children, nil, nil do
+								if v28.Parent then
+									tbl12.ResetVelocity(v28)
+								end
+							end
+
+							RunService.Heartbeat:Wait()
+
+							for _, v28 in children, nil, nil do
+								if v28.Parent then
+									tbl12.ResetVelocity(v28)
+								end
+							end
+
+							if v25.Parent then
+								tbl12.RNO(v25)
+							end
+						end
+					end
+				end
+local originalBreakLimb=tbl12.BreakLimb
+tbl12.BreakLimb=function(who,which) if who~=Player then return false end;return originalBreakLimb(who,which) end
+local originalCollision=tbl12.ToggleCollisions
+local collisionSaved={}
+tbl12.ToggleCollisions=function(char,...)
+    for _,part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then
+        if not collisionSaved[part] then collisionSaved[part]={part.CanCollide,part.CustomPhysicalProperties} end
+    end end
+    return originalCollision(char,...)
+end
+local function restoreCollision()
+    for part,record in pairs(collisionSaved) do
+        pcall(function() part.CanCollide=record[1];part.CustomPhysicalProperties=record[2] end)
+        collisionSaved[part]=nil
+    end
+end
+tbl12.LightPhysicalProperties=PhysicalProperties.new(0.01,0.01,0.01,0.01,0.01)
+tbl7.States={}
+tbl7.LimbOffsetsRL={Head=CFrame.new(0,1.5,0),["Left Arm"]=CFrame.new(-1.5,0,0),["Right Arm"]=CFrame.new(1.5,0,0),["Left Leg"]=CFrame.new(-0.5,-2,0),["Right Leg"]=CFrame.new(0.5,-2,0),Torso=CFrame.new()}
+tbl9.AGType="Normal"
+local currentCamera=setmetatable({},{__index=function(_,key) local camera=Workspace.CurrentCamera;return camera and camera[key] end})
+local v22
+					tbl12.AntiGrab = function()
+						if flag11 then
+							return
+						end
+
+						if isHeld.Value and tbl8.AntiGrab and not tbl7.States["Anti Grab"] then
+							tbl11.Struggle:FireServer()
+							local v23, v24, v25 = tbl12.Char()
+							local torso = v23 and v23:FindFirstChild("Torso")
+							local neck = torso and torso:FindFirstChild("Neck")
+							if not (v25 and torso) then
+								return
+							end
+							v25.RequiresNeck = false
+							v25.AutoRotate = false
+							tbl12.ResetVelocity(v24 or torso)
+							local position = torso.Position
+							local lookVector = torso.CFrame.LookVector
+							local unit = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
+							tbl7.States["Anti Grab"] = true
+							local flag12 = tbl9.AGType == "Escapes Anything, but buggy"
+							local sit = tbl9.AGType == "Anti-Kill"
+							local flag13 = tbl9.AGType == "No Ragdoll"
+
+							if flag12 then
+								task.spawn(tbl12.ExtraEscape)
+							end
+
+							local now3 = tick()
+							local connection = nil
+							local n36 = tick() + 0.033333333333333333
+							local n37 = 0
+
+							connection = RunService.RenderStepped:Connect(function(deltaTime)
+								local now4 = tick()
+
+								if now4 >= n36 then
+									tbl11.Struggle:FireServer()
+									n36 = now4 + 0.033333333333333333
+								end
+
+								if v24 and not flag12 and not flag13 and now4 >= n37 then
+									local ragdollRemote = tbl11.RagdollRemote
+									local fireServer = ragdollRemote.FireServer
+									local n38
+
+									if sit then
+										n38 = 0.11
+									else
+										n38 = 0
+									end
+
+									fireServer(ragdollRemote, v24, n38)
+									n37 = now4 + 0.033333333333333333
+								end
+
+								if flag12 and tick() - now3 > 2 then
+									task.spawn(tbl12.ExtraEscape)
+									now3 = tick()
+								end
+
+								local moveDirection = v25.MoveDirection
+								local walkSpeed
+
+								if tbl8.WalkSpeed and tbl9.WalkSpeed > 16 then
+									walkSpeed = tbl9.WalkSpeed
+								else
+									walkSpeed = 16
+								end
+
+								if moveDirection.Magnitude > 0 then
+									position += moveDirection * walkSpeed * deltaTime
+								end
+
+								if (currentCamera.CFrame.Position - currentCamera.Focus.Position).Magnitude < 1 then
+									moveDirection = currentCamera.CFrame.LookVector
+								end
+
+								local vector = Vector3.new(moveDirection.X, 0, moveDirection.Z)
+
+								if vector.Magnitude > 0 then
+									unit = unit:Lerp(vector.Unit, math.min(deltaTime * 12, 1)).Unit
+								end
+
+								tbl12.ResetVelocity(v24 or torso)
+
+								if v22 then
+									local v26 = torso
+									local v27 = v22
+									position = v22.Position
+									v26.CFrame = v27
+									v22 = nil
+								else
+									torso.CFrame = CFrame.lookAt(position, position + unit)
+								end
+
+								v25.Sit = sit
+
+								if not neck or not neck.Enabled then
+									tbl12.ToggleCollisions(v23, false)
+									tbl12.RepositionLimbs(v23, true)
+								end
+
+								for _, v26 in ipairs(v25:GetPlayingAnimationTracks()) do
+									if v26.Animation.AnimationId == "rbxassetid://7047322890" then
+										v26:Stop()
+									end
+								end
+
+								if v24 and v24:FindFirstChild("Scream") then
+									v24.Scream.Playing = false
+								end
+
+								if not isHeld.Value or not tbl8.AntiGrab then
+									tbl7.States["Anti Grab"] = false
+
+									if sit then
+										task.delay(0.1, function()
+											if not v25.SeatPart then
+												v25.Sit = false
+												v25:ChangeState(Enum.HumanoidStateType.Running)
+											end
+										end)
+									end
+
+									v25.AutoRotate = true
+									connection:Disconnect()
+								end
+							end)
+						end
+					end
+local originalAG=tbl12.AntiGrab
+tbl12.AntiGrab=function()
+    local char,_,hum=tbl12.Char()
+    if char and hum and tbl8.AntiGrab then remember(hum,"RequiresNeck");remember(hum,"AutoRotate") end
+    return originalAG()
+end
+if Toggles.AntiGrabObsidian then Toggles.AntiGrabObsidian.Callback=function(on) tbl8.AntiGrab=on;tbl12.AntiGrab();if not on then restoreCollision() end;Hub.requestSave() end end
+local held=Player:FindFirstChild("IsHeld")
+if held then Hub.connect(held:GetPropertyChangedSignal("Value"),tbl12.AntiGrab) end
+settings:AddDropdown("SourceAntiGrabMode",{Text="Anti Grab method",Values={"Normal","No Ragdoll","Anti-Kill","Escapes Anything, but buggy"},Default=1,Callback=function(value) tbl9.AGType=value;Hub.requestSave() end})
+
+-- RootAttachment replacement and root mass repair, as used by the supplied Anti Blobman.
+local removedAttachment,attachmentRoot,replacement
+local function restoreBlob()
+    if replacement then replacement:Destroy();replacement=nil end
+    if removedAttachment and attachmentRoot and attachmentRoot.Parent then removedAttachment.Parent=attachmentRoot end
+    removedAttachment,attachmentRoot=nil,nil
+end
+bind("AntiBlobmanToggle","AntiBlobman",0.05,function()
+    local char,root,hum,alive=charAlive()
+    if not alive then restoreBlob();return end
+    if attachmentRoot and attachmentRoot~=root then restoreBlob() end
+    if not removedAttachment then
+        local attachment=root:FindFirstChild("RootAttachment")
+        if attachment and attachment:IsA("Attachment") then
+            removedAttachment,attachmentRoot=attachment,root
+            attachment.Parent=ReplicatedStorage
+            replacement=Hub.new("BoolValue",root);replacement.Name="RootAttachment"
+        end
+    end
+    remember(root,"Massless");root.Massless=false
+end,restoreBlob)
+
+-- Hold/drop based anti-network-ownership. At most one outstanding call per remote.
+local inputToy,dropPending,holdPending
+local earlyOriginal,earlyReplacement
+local function restoreEarly()
+    if earlyReplacement then earlyReplacement:Destroy();earlyReplacement=nil end
+    if earlyOriginal and earlyOriginal.Parent==nil then earlyOriginal.Parent=grabEventsFolder end
+    earlyOriginal=nil
+end
+local function disableEarly()
+    if earlyReplacement and earlyReplacement.Parent then return end
+    local current=grabEventsFolder:FindFirstChild("EndGrabEarly")
+    if current and current~=earlyReplacement then earlyOriginal=current;current.Parent=nil end
+    earlyReplacement=Hub.new("RemoteEvent",grabEventsFolder);earlyReplacement.Name="EndGrabEarly"
+end
+local function clearInput()
+    if inputToy then tbl12.DestroyToy(inputToy);inputToy=nil end
+    restoreEarly()
+end
+tbl9.AntiInputType="FoodHamburger";tbl9.InputLgDelay=0.05;tbl9.AILTransparency=1
+bind("AntiInputLag","AntiInputLag",function() return math.max(0.05,tbl9.InputLgDelay) end,function()
+    local char,root,hum,alive=charAlive()
+    if not alive then clearInput();return end
+    disableEarly()
+    if inputToy and (not inputToy.Parent or inputToy.Name~=tbl9.AntiInputType) then tbl12.DestroyToy(inputToy);inputToy=nil end
+    if not inputToy then inputToy=tbl12.SpawnToy(tbl9.AntiInputType,CFrame.new(0,1e20,0),2,true) end
+    if not tbl8.AntiInputLag then clearInput();return end
+    if not inputToy then return end
+    local toy=inputToy
+    local holdPart=toy:FindFirstChild("HoldPart")
+    local holdRemote=holdPart and holdPart:FindFirstChild("HoldItemRemoteFunction")
+    local dropRemote=holdPart and holdPart:FindFirstChild("DropItemRemoteFunction")
+    if not holdRemote or not dropRemote then tbl12.DestroyToy(toy);inputToy=nil;return end
+    local constraint=holdPart:FindFirstChild("RigidConstraint")
+    local link=constraint and constraint.Attachment1
+    local left=char:FindFirstChild("Left Arm");local right=char:FindFirstChild("Right Arm")
+    if link and link~=(left and left:FindFirstChild("LeftGripAttachment")) and link~=(right and right:FindFirstChild("RightGripAttachment")) then
+        tbl12.DestroyToy(toy);inputToy=nil;return
+    end
+    for _,part in ipairs(toy:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide=false;if part:IsA("MeshPart") or part.Name=="Part" then part.Transparency=tbl9.AILTransparency end end end
+    if not dropPending then dropPending=true;task.spawn(function() pcall(function() if toy.Parent and tbl8.AntiInputLag then Hub.invoke(dropRemote,toy,CFrame.new(0,1e20,0),Vector3.zero) end end);dropPending=false end) end
+    if not holdPending then holdPending=true;task.spawn(function() pcall(function() if toy.Parent and tbl8.AntiInputLag and Player.Character==char then Hub.invoke(holdRemote,toy,char) end end);holdPending=false end) end
+end,clearInput)
+settings:AddDropdown("SourceInputToy",{Text="Anti Input, interactable toy",Values={"FoodHamburger","InstrumentDrumBongos","InstrumentBrassTrumpet","InstrumentBrassBugle","InstrumentVoiceMicrophone","InstrumentWoodwindOcarina","InstrumentGuitarUkulele","InstrumentGuitarLyre","InstrumentGuitarBanjo","InstrumentGuitarAcoustic","CupMugBrown","CupMugWhite","FoodBanana","FoodBread","FoodBroccoli","FoodCakePink","FoodCoconut","FoodDippyEgg","FoodDonut","FoodFrenchFries","FoodHotdog","FoodMayonnaise","FoodMeatStick","FoodMushroomPoison","FoodPizzaCheese","FoodPizzaPepperoni","FoodSodaCan","PoopPile","PoopPileSparkle"},Default=1,Callback=function(value) tbl9.AntiInputType=value;Hub.requestSave() end})
+settings:AddSlider("SourceInputDelay",{Text="Anti Input, hold/drop delay",Default=0.05,Min=0.05,Max=0.3,Rounding=2,Callback=function(value) tbl9.InputLgDelay=value;Hub.requestSave() end})
+settings:AddSlider("SourceInputTransparency",{Text="Anti Input, item transparency",Default=1,Min=0,Max=1,Rounding=2,Callback=function(value) tbl9.AILTransparency=value;Hub.requestSave() end})
+
+-- The supplied Anti Banana intentionally breaks the local character's legs.
+local bananaHip,bananaHum
+local function restoreBanana()
+    if bananaHum and bananaHum.Parent and bananaHip~=nil then bananaHum.HipHeight=bananaHip end
+    bananaHip,bananaHum=nil,nil
+end
+add("SourceAntiBanana","Anti Banana (supplied leg method)","AntiBanana",0.03,function()
+    local char,root,hum,alive=charAlive()
+    if not alive then restoreBanana();return end
+    local leg=char:FindFirstChild("Right Leg")
+    if not leg or not tbl12.IsNetworkOwner(root) then return end
+    if bananaHum~=hum then restoreBanana();bananaHum=hum;bananaHip=hum.HipHeight end
+    local gucciWasOn=tbl8.GucciAntiGrab
+    if gucciWasOn then tbl12.SetGucciAntiGrab(false);task.wait(0.25) end
+    if not tbl8.AntiBanana or Player.Character~=char then return end
+    hum.Sit=false;hum.HipHeight=2
+    tbl12.BreakLimb(Player,"Legs")
+    local deadline=os.clock()+0.75
+    repeat
+        if not tbl8.AntiBanana or not Hub.alive or Player.Character~=char or hum.Health<=0 or not leg.Parent then break end
+        hum.HipHeight=2;task.wait()
+    until os.clock()>=deadline
+    if gucciWasOn and tbl8.AntiBanana and Hub.alive and Player.Character==char then tbl12.SetGucciAntiGrab(true) end
+end,restoreBanana)
+defenseGroup:AddLabel("Anti Banana uses the source's leg-breaking method, respawn restores missing limbs.")
+
+add("SourceAntiSnowball","Anti Snowball (supplied method)","AntiSnowball",0.03,function()
+    if tbl8.GucciAntiGrab then return end
+    local char,root,hum,alive=charAlive()
+    if not alive then return end
+    if tbl8.AntiBanana and char:FindFirstChild("Right Leg") then return end
+    local weld=root:FindFirstChild("WeldHRP")
+    if not weld then return end
+    remember(hum,"AutoRotate")
+    tbl11.RagdollRemote:FireServer(root,0.5)
+    if not hum.SeatPart then hum.Sit=false end
+    hum.AutoRotate=true
+    if weld.Enabled then
+        game:GetService("ContextActionService"):UnbindAction("JumpRemover")
+        hum:SetStateEnabled(Enum.HumanoidStateType.Jumping,true)
+        tbl12.RepositionLimbs(char)
+        tbl12.ToggleCollisions(char,false,false,true)
+    end
+end,restoreCollision)
+
+
+add("SourceBreakPCLD","[Break PCLD] Anti Kick (two resets)","AntiKick2",0.2,function()
+    local char,root,hum,alive=charAlive()
+    if not hum or (alive and hum:GetAttribute("BrokenPCLD")) then return end
+    for _=1,2 do
+        if not tbl8.AntiKick2 or flag11 then return end
+        local original=Player.Character
+        repeat
+            if not tbl8.AntiKick2 or flag11 then return end
+            local _,_,current=tbl12.Char()
+            if current and current.Health>0 then current.Health=0;current:ChangeState(Enum.HumanoidStateType.Dead) end
+            task.wait()
+        until Player.Character~=original
+        local nextChar=Player.Character
+        if not nextChar then
+            repeat task.wait() until not tbl8.AntiKick2 or flag11 or Player.Character
+            nextChar=Player.Character
+        end
+        if not nextChar then return end
+        nextChar:WaitForChild("Humanoid",5)
+    end
+    local _,_,current=tbl12.Char()
+    if current and tbl8.AntiKick2 then current:SetAttribute("BrokenPCLD",true) end
+end)
+
+-- Supplied low-FPS auto anti-lag supplements the existing line-burst detector.
+local lowFps=false
+local fpsThreshold=3
+local lowFpsStarted=os.clock()
+Hub.connect(RunService.Heartbeat,function(dt)
+    if lowFps and os.clock()-lowFpsStarted>=2.5 and dt>0 and math.floor(1/dt)<fpsThreshold then
+        local toggle=Toggles.AntiLagToggle
+        if toggle and not toggle.Value then toggle:SetValue(true);fn18("Anti Lag enabled, FPS below threshold.","Auto Anti Lag") end
+    end
+end)
+defenseGroup:AddToggle("SourceLowFpsAntiLag",{Text="Auto Anti Lag (supplied FPS method)",Default=false,Callback=function(on) lowFps=on;Hub.requestSave() end})
+settings:AddSlider("SourceLowFpsThreshold",{Text="Auto Anti Lag FPS threshold",Default=3,Min=1,Max=20,Rounding=0,Callback=function(value) fpsThreshold=value;Hub.requestSave() end})
+
+-- Supplied anti-invisibility is included by the adjoining module.
+-- Supplied correction-event auto reset, independent from the old periodic reset option.
+tbl8.AutoLeave=true;tbl9.KickFlags=0
+local lastFlag=0
+local corrections=ReplicatedStorage:FindFirstChild("GameCorrectionEvents")
+local correctionRemote=corrections and corrections:FindFirstChild("GameCorrectionsNotify")
+if correctionRemote then Hub.connect(correctionRemote.OnClientEvent,function(reason)
+    if reason~="Flying" then return end
+    local now=os.clock()
+    if now-lastFlag>1 then lastFlag=now;tbl9.KickFlags=1 else tbl9.KickFlags+=1 end
+    if not tbl8.AutoReset then return end
+    if tbl9.KickFlags>=4 and tbl8.AutoLeave then Player:Kick("Arriva Core Hub, Auto Reset, avoided repeated movement flags");return end
+    local _,_,hum=tbl12.Char()
+    if hum then hum:ChangeState(Enum.HumanoidStateType.Running);hum:ChangeState(Enum.HumanoidStateType.Dead) end
+end) end
+if Toggles.AutoResetToggle then Toggles.AutoResetToggle.Callback=function(on) tbl8.AutoReset=on;Hub.requestSave() end end
+settings:AddToggle("SourceCorrectionLeave",{Text="Auto leave after four rapid correction flags",Default=true,Callback=function(on) tbl8.AutoLeave=on;Hub.requestSave() end})
+
+local loopSaved,loopCharacter
+bind("LoopTP","LoopTP",0.04,function()
+    local char,root,hum,alive=charAlive()
+    if not alive then return end
+    if loopCharacter~=char then loopCharacter=char;loopSaved=root.CFrame end
+    char:PivotTo(CFrame.new(math.random(-1000,1000),-7.35,math.random(-1000,1000)))
+end,function()
+    local char,root=tbl12.Char()
+    if root and char==loopCharacter and loopSaved then char:PivotTo(loopSaved);root.AssemblyLinearVelocity=Vector3.zero end
+    loopSaved,loopCharacter=nil,nil
+end)
+local originalVoid
+defenseGroup:AddToggle("SourceDisableVoid",{Text="Disable Void (supplied method)",Default=false,Callback=function(on)
+    tbl8.DestroyVoid=on
+    if on then if originalVoid==nil then originalVoid=Workspace.FallenPartsDestroyHeight end;Workspace.FallenPartsDestroyHeight=0/0
+    elseif originalVoid~=nil then Workspace.FallenPartsDestroyHeight=originalVoid;originalVoid=nil end
+    Hub.requestSave()
+end})
+Hub.cleanup(function()
+    for key in pairs(workers) do stopWorker(key) end
+    restoreCollision();restoreProperties();restoreBlob();clearInput();restoreBanana()
+    if originalVoid~=nil then Workspace.FallenPartsDestroyHeight=originalVoid end
+end)
+Hub.connect(Player.CharacterRemoving,function()
+    tbl7.States["Anti Grab"]=false
+    restoreCollision();restoreProperties();restoreBlob();clearInput();restoreBanana()
+end)
+Hub.sourceDefense={state=tbl8,settings=tbl9,workers=workers,stop=stopWorker}
+
+-- Remaining environmental defenses use the supplied mechanisms with hub cleanup.
+local touchRecords={}
+local touchModes={paint=false,poison=false}
+local function touchMatch(part)
+    if not part:IsA("BasePart") then return false end
+    if touchModes.paint and part.Name=="PaintPlayerPart" then return true end
+    local parent=part.Parent
+    return touchModes.poison and parent and (parent.Name=="PoisonBigHole" or parent.Name=="PoisonSmallHole") and (part.Name=="PaintPlayerPart" or part.Name=="PoisonHurtPart")
+end
+local function restoreTouch(part)
+    local saved=touchRecords[part];if not saved then return end
+    touchRecords[part]=nil;saved.connection:Disconnect()
+    if part.Parent then part.CanTouch=saved.value end
+end
+local function inspectTouch(part)
+    if not touchMatch(part) then if touchRecords[part] then restoreTouch(part) end;return end
+    if not touchRecords[part] then
+        local saved={value=part.CanTouch};touchRecords[part]=saved
+        saved.connection=Hub.connect(part:GetPropertyChangedSignal("CanTouch"),function() if touchRecords[part] and touchMatch(part) and part.CanTouch then part.CanTouch=false end end)
+    end
+    part.CanTouch=false
+end
+local touchEpoch=0
+local function setTouchMode(key,on)
+    touchModes[key]=on;touchEpoch+=1;local ticket=touchEpoch
+    for part in pairs(touchRecords) do if not touchMatch(part) then restoreTouch(part) end end
+    if on then Hub.scanDescendants(Workspace,inspectTouch,function() return ticket==touchEpoch and (touchModes.paint or touchModes.poison) end) end
+    Hub.requestSave()
+end
+if Toggles.PaintDeleteToggle then Toggles.PaintDeleteToggle.Callback=function(on) setTouchMode("paint",on) end end
+if Toggles.PrivatePoisonTouch then Toggles.PrivatePoisonTouch.Callback=function(on) setTouchMode("poison",on) end end
+Hub.connect(Workspace.DescendantAdded,function(part) if touchModes.paint or touchModes.poison then inspectTouch(part) end end)
+Hub.connect(Workspace.DescendantRemoving,function(part) if touchRecords[part] then restoreTouch(part) end end)
+
+bind("AntiStickyToggle","AntiSticky",0.1,function()
+    local char=Player.Character;if not char then return end
+    local own=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+    local plots=Workspace:FindFirstChild("PlotItems")
+    local inOwnPlot=Player:FindFirstChild("InOwnedPlot")
+    local seen={}
+    for _,part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then
+        for _,connected in ipairs(part:GetConnectedParts()) do
+            if connected.Name=="StickyPart" and not seen[connected] and not (own and connected:IsDescendantOf(own))
+                and not (plots and connected:IsDescendantOf(plots) and not (inOwnPlot and inOwnPlot.Value)) then
+                seen[connected]=true
+                for _,child in ipairs(connected:GetChildren()) do if child:IsA("TouchTransmitter") or child:IsA("TouchInterest") then child:Destroy() end end
+                local model=connected.Parent
+                local grabPart=model and tbl12.FindNicePart(model)
+                if grabPart then tbl12.Grab(grabPart) end
+            end
+        end
+    end end
+end)
+
+-- Source anti-void thresholds and origin recovery; keep the separate safe-zone controls.
+bind("AntiVoidToggle","AntiVoid",0.03,function()
+    local _,root,hum,alive=charAlive()
+    if not alive then return end
+    if root.Position.Y>=10000 or root.Position.Y<=-500 then tbl12.Teleport(root,CFrame.new(0,15,0)) end
+end)
+
+-- Nearby explosion parts briefly anchor the local root, clear momentum, then release it.
+if Toggles.AntiExplosionToggle then Toggles.AntiExplosionToggle.Callback=function(on) tbl8.AntiExplosion=on;Hub.requestSave() end end
+local explosionAnchors={}
+Hub.connect(Workspace.ChildAdded,function(part)
+    if not tbl8.AntiExplosion or part.Name~="Part" or not part:IsA("BasePart") then return end
+    local char,root,hum,alive=charAlive()
+    if not alive or (part.Position-root.Position).Magnitude>20 then return end
+    local record=explosionAnchors[root]
+    if not record then record={original=root.Anchored,untilTime=0};explosionAnchors[root]=record end
+    record.untilTime=os.clock()+0.02;root.Anchored=true
+    task.spawn(function()
+        repeat task.wait() until not Hub.alive or not tbl8.AntiExplosion or not root.Parent or os.clock()>=record.untilTime
+        if explosionAnchors[root]~=record then return end
+        explosionAnchors[root]=nil
+        if root.Parent then
+            if Player.Character==char then
+                if not hum.SeatPart then hum.Sit=false end
+                for _,child in ipairs(char:GetDescendants()) do if child:IsA("BasePart") and child.Name=="RagdollLimbPart" then child.CanCollide=false end end
+                tbl12.ResetVelocity(root)
+            end
+            root.Anchored=record.original
+        end
+    end)
+end)
+
+-- Source extinguisher positioning; resolve lazily and restore position on disable/death.
+local extinguisher,extinguishFrame,fireOverlay,fireOverlayVisible
+local suppressedFire={}
+local function restoreBurn()
+    if extinguisher and extinguisher.Parent and extinguishFrame then extinguisher.CFrame=extinguishFrame end
+    if fireOverlay and fireOverlay.Parent and fireOverlayVisible~=nil then fireOverlay.Visible=fireOverlayVisible end
+    for emitter,value in pairs(suppressedFire) do pcall(function() if emitter.Parent then emitter.Enabled=value end end);suppressedFire[emitter]=nil end
+    extinguisher,extinguishFrame,fireOverlay,fireOverlayVisible=nil,nil,nil,nil
+end
+bind("AntiBurnToggle","AntiBurn",0.03,function()
+    local char,root,hum,alive=charAlive()
+    local fire=root and root:FindFirstChild("FireParticleEmitter")
+    if not alive or not fire then restoreBurn();return end
+    if not extinguisher or not extinguisher.Parent then
+        local map=Workspace:FindFirstChild("Map")
+        local hole=map and map:FindFirstChild("Hole")
+        local small=hole and hole:FindFirstChild("PoisonSmallHole")
+        extinguisher=small and small:FindFirstChild("ExtinguishPart")
+        if not extinguisher then return end
+        extinguishFrame=extinguisher.CFrame
+    end
+    if suppressedFire[fire]==nil then suppressedFire[fire]=fire.Enabled end
+    fire.Enabled=false
+    local playerGui=Player:FindFirstChildOfClass("PlayerGui")
+    local overlay=playerGui and playerGui:FindFirstChild("ScreenOverlayGui")
+    overlay=overlay and overlay:FindFirstChild("FireFade")
+    if overlay then if fireOverlay~=overlay then fireOverlay=overlay;fireOverlayVisible=overlay.Visible end;overlay.Visible=false end
+    extinguisher.CFrame=root.CFrame
+end,restoreBurn)
+
+-- Source manual Anti Lag also disables the sticky-touch script. Preserve original enabled values.
+local lagScripts={}
+local function updateLagScripts(on)
+    local scripts=Player:FindFirstChild("PlayerScripts")
+    if on and scripts then
+        for _,name in ipairs({"CharacterAndBeamMove","StickyPartsTouchDetection"}) do
+            local script=scripts:FindFirstChild(name)
+            if script and script:IsA("LocalScript") then if lagScripts[script]==nil then lagScripts[script]=script.Enabled end;script.Enabled=false end
+        end
+    elseif not on then for script,value in pairs(lagScripts) do pcall(function() if script.Parent then script.Enabled=value end end);lagScripts[script]=nil end end
+end
+local oldAntiLag=Toggles.AntiLagToggle and Toggles.AntiLagToggle.Callback
+if oldAntiLag then Toggles.AntiLagToggle.Callback=function(on) oldAntiLag(on);updateLagScripts(on) end end
+Hub.connect(Player.DescendantAdded,function(child)
+    if Toggles.AntiLagToggle and Toggles.AntiLagToggle.Value and (child.Name=="CharacterAndBeamMove" or child.Name=="StickyPartsTouchDetection") then updateLagScripts(true) end
+end)
+Hub.cleanup(function()
+    touchEpoch+=1;touchModes.paint,touchModes.poison=false,false
+    for part in pairs(touchRecords) do restoreTouch(part) end
+    for root,record in pairs(explosionAnchors) do pcall(function() if root.Parent then root.Anchored=record.original end end) end
+    restoreBurn();updateLagScripts(false)
+end)
+
+-- Supplied PCLD assignment tracking and shuriken anti-kick.
+local v18
+local antiKickRunning=false
+local antiKickStart
+local trackingEpoch=0
+local trackerElapsed=0
+tbl7.PCLD={};tbl7.PCLDParts={};tbl7.PlayerList={}
+tbl7.PCLDTracker={PartStates={},Players={},Positions={},Confirmations=3,MaxDistance=6,MinMargin=0.75}
+tbl7.AntiKickSettings={Highlight=false,HighlightFill=Color3.new(1,0,0),HighlightOutl=Color3.new(1,1,1),HighlightFT=0.5,HighlightOT=0,Transparency=0.9}
+tbl7.CharacterHighlightAffects={}
+tbl9.AKType="Shuriken"
+local highlight=Hub.new("Highlight");highlight.Enabled=false
+						tbl12.IsWaitingPCLD = function(arg)
+							return arg and arg.Position == Vector3.zero
+						end
+						tbl12.ClearPCLDAssignment = function(arg, arg2)
+							if not arg2 then
+								return
+							end
+							local player = arg2 and arg2.Player
+
+							if player and tbl7.PCLD[player] == arg then
+								tbl7.PCLD[player] = nil
+							end
+
+							table.clear(arg2)
+							arg2.Hits = 0
+
+							if arg and arg.Parent then
+								arg:SetAttribute("CurrentlyAssignedTo", nil)
+							end
+
+							if tbl8.PCLDESP and tbl12.UpdatePCLDESP then
+								tbl12.UpdatePCLDESP(arg)
+							end
+						end
+						tbl12.UpdatePCLDAssignments = function()
+							local pcldTracker = tbl7.PCLDTracker
+							local players = pcldTracker.Players
+							local positions = pcldTracker.Positions
+							table.clear(players)
+							table.clear(positions)
+							local flag12 = false
+
+							for k in tbl7.PCLDParts, nil, nil do
+								local v23 = pcldTracker.PartStates[k]
+								local flag13 = k.Parent and k.Name == "PlayerCharacterLocationDetector" and not tbl12.IsWaitingPCLD(k)
+
+								if flag13 then
+									flag13 = not v23 or not v23.Player or v23.Player.Parent ~= Players
+								end
+
+								if flag13 then
+									flag12 = true
+									break
+								end
+							end
+
+							if flag12 then
+								for _, v23 in ipairs(tbl7.PlayerList) do
+									local v24, v25, v26 = tbl12.Char(v23)
+
+									if v25 and v26 and v26.Health > 0 then
+										players[#players + 1] = v23
+										positions[#positions + 1] = v25.Position
+									end
+								end
+							end
+
+							for k in tbl7.PCLDParts, nil, nil do
+								if not k.Parent or k.Name ~= "PlayerCharacterLocationDetector" then
+									local v23 = pcldTracker.PartStates[k]
+
+									if v23 then
+										tbl12.ClearPCLDAssignment(k, v23)
+									end
+
+									pcldTracker.PartStates[k] = nil
+									tbl7.PCLDParts[k] = nil
+								else
+									local tbl18 = pcldTracker.PartStates[k]
+
+									if not tbl18 then
+										tbl18 = { Hits = 0 }
+										pcldTracker.PartStates[k] = tbl18
+									end
+
+									if tbl12.IsWaitingPCLD(k) then
+										if tbl18.Player or tbl18.Candidate or tbl18.Hits ~= 0 or k:GetAttribute("CurrentlyAssignedTo") ~= nil then
+											tbl12.ClearPCLDAssignment(k, tbl18)
+										end
+									else
+										if tbl8.PCLDESP and tbl12.CreatePCLDESP then
+											tbl12.CreatePCLDESP(k)
+										end
+
+										local position, huge, huge2, v23, n36, v24, v25, v26, flag13, pcldesp, updatePCLDESP
+
+										if tbl18.Player then
+											if tbl18.Player.Parent == Players then
+												tbl7.PCLD[tbl18.Player] = k
+
+												if tbl8.PCLDESP and tbl12.UpdatePCLDESP then
+													tbl12.UpdatePCLDESP(k)
+												end
+											else
+												tbl12.ClearPCLDAssignment(k, tbl18)
+												position = k.Position
+												huge = math.huge
+												huge2 = math.huge
+												v23 = nil
+
+												for i, player in ipairs(players) do
+													n36 = position - positions[i]
+													v24 = n36:Dot(n36)
+
+													if v24 < huge then
+														huge2 = huge
+														v23 = player
+														huge = v24
+													elseif v24 < huge2 then
+														huge2 = v24
+													end
+												end
+
+												v25 = math.sqrt(huge)
+												v26 = math.sqrt(huge2)
+												flag13 = v23 and not tbl7.PCLD[v23] and v25 <= pcldTracker.MaxDistance and v26 - v25 >= pcldTracker.MinMargin
+
+												if flag13 then
+													if tbl18.Candidate == v23 then
+														tbl18.Hits = tbl18.Hits + 1
+													else
+														tbl18.Candidate = v23
+														tbl18.Hits = 1
+													end
+
+													if tbl18.Hits >= pcldTracker.Confirmations then
+														tbl18.Player = v23
+														tbl18.Candidate = nil
+														tbl18.Hits = 0
+														tbl7.PCLD[v23] = k
+														k:SetAttribute("CurrentlyAssignedTo", v23.Name)
+														pcldesp = tbl8.PCLDESP
+														updatePCLDESP = pcldesp and tbl12.UpdatePCLDESP
+
+														if updatePCLDESP then
+															tbl12.UpdatePCLDESP(k)
+														end
+													end
+												else
+													tbl18.Candidate = nil
+													tbl18.Hits = 0
+												end
+											end
+										else
+											position = k.Position
+											huge = math.huge
+											huge2 = math.huge
+											v23 = nil
+
+											for i, player in ipairs(players) do
+												n36 = position - positions[i]
+												v24 = n36:Dot(n36)
+
+												if v24 < huge then
+													huge2 = huge
+													v23 = player
+													huge = v24
+												elseif v24 < huge2 then
+													huge2 = v24
+												end
+											end
+
+											v25 = math.sqrt(huge)
+											v26 = math.sqrt(huge2)
+											flag13 = v23 and not tbl7.PCLD[v23] and v25 <= pcldTracker.MaxDistance and v26 - v25 >= pcldTracker.MinMargin
+
+											if flag13 then
+												if tbl18.Candidate == v23 then
+													tbl18.Hits = tbl18.Hits + 1
+												else
+													tbl18.Candidate = v23
+													tbl18.Hits = 1
+												end
+
+												if tbl18.Hits >= pcldTracker.Confirmations then
+													tbl18.Player = v23
+													tbl18.Candidate = nil
+													tbl18.Hits = 0
+													tbl7.PCLD[v23] = k
+													k:SetAttribute("CurrentlyAssignedTo", v23.Name)
+													pcldesp = tbl8.PCLDESP
+													updatePCLDESP = pcldesp and tbl12.UpdatePCLDESP
+
+													if updatePCLDESP then
+														tbl12.UpdatePCLDESP(k)
+													end
+												end
+											else
+												tbl18.Candidate = nil
+												tbl18.Hits = 0
+											end
+										end
+									end
+								end
+							end
+						end
+						tbl12.DetectPCLD = function(arg)
+							return tbl7.PCLD[arg]
+						end
+local function trackPCLD(part)
+    if tbl8.AntiKick and part:IsA("BasePart") and part.Name=="PlayerCharacterLocationDetector" then tbl7.PCLDParts[part]=true end
+end
+Hub.connect(Workspace.DescendantAdded,trackPCLD)
+Hub.connect(Workspace.DescendantRemoving,function(part)
+    if tbl7.PCLDParts[part] then
+        local state=tbl7.PCLDTracker.PartStates[part]
+        if state then tbl12.ClearPCLDAssignment(part,state) end
+        tbl7.PCLDParts[part]=nil;tbl7.PCLDTracker.PartStates[part]=nil
+    end
+end)
+Hub.connect(RunService.Heartbeat,function(dt)
+    if not tbl8.AntiKick then return end
+    trackerElapsed+=dt;if trackerElapsed<0.1 then return end;trackerElapsed=0
+    tbl7.PlayerList=Players:GetPlayers();tbl12.UpdatePCLDAssignments()
+end)
+local stickyEvents=ReplicatedStorage:FindFirstChild("PlayerEvents")
+local stickyRemote=stickyEvents and stickyEvents:FindFirstChild("StickyPartEvent")
+tbl11.StickyPartEvent={FireServer=function(_,...) if stickyRemote then Hub.fire(stickyRemote,...) end end}
+tbl12.WaitForRuntimeToggle=function(key)
+    while not flag11 and Hub.alive and not tbl8[key] do task.wait(0.2) end
+    return not flag11 and Hub.alive and tbl8[key]
+end
+local function clearKick()
+    if v18 then tbl12.DestroyToy(v18);v18=nil end
+    for part,state in pairs(tbl7.PCLDTracker.PartStates) do tbl12.ClearPCLDAssignment(part,state) end
+    table.clear(tbl7.PCLDParts);table.clear(tbl7.PCLDTracker.PartStates);table.clear(tbl7.PCLD)
+end
+		do
+			local function fn21()
+				local n36 = os.clock() + 0.35
+
+				repeat
+					local v22 = tbl12.DetectPCLD(localPlayer)
+					if v22 and v22.Parent and not tbl12.IsWaitingPCLD(v22) then
+						return v22
+					end
+					task.wait(0.05)
+				until flag11 or not tbl8.AntiKick or os.clock() >= n36
+			end
+
+			local function fn22(arg)
+				local NinjaShuriken = tbl12.SpawnToy("NinjaShuriken", arg.CFrame + Vector3.new(0, 15, 0), 3, true)
+				local stickyPart = NinjaShuriken and NinjaShuriken:WaitForChild("StickyPart", 1.5)
+				local stickyWeld = stickyPart and stickyPart:WaitForChild("StickyWeld", 1.5)
+				if stickyPart and stickyWeld and tbl12.SNO(stickyPart) then
+					return NinjaShuriken, stickyPart, stickyWeld
+				end
+				tbl12.DestroyToy(NinjaShuriken)
+			end
+
+			local function sourceAntiKickWorker()
+				while task.wait(0.03) do
+					if flag11 then
+						return
+					end
+
+					if not tbl8.AntiKick then
+						if v18 then
+							tbl12.DestroyToy(v18)
+							v18 = nil
+						end
+
+						if not tbl12.WaitForRuntimeToggle("AntiKick") then
+							return
+						end
+					end
+
+					local antiKickSettings = tbl7.AntiKickSettings
+					local v22, v23, v24 = tbl12.Char()
+					local ragdollTouchedHitbox = v23 and v23:FindFirstChild("RagdollTouchedHitbox")
+
+					if v23 and v24 and ragdollTouchedHitbox and v24.Health > 0 then
+						if localPlayer.InPlot.Value then
+							while true do
+								task.wait()
+								if not (not localPlayer.InPlot.Value or localPlayer.InOwnedPlot.Value) then
+									continue
+								end
+								break
+							end
+						end
+
+						if tbl9.AKType == "Shuriken" then
+							local parent2, shurHighlight, highlight2, antiKick, forcefieldChar, transparency, isMeshPart
+
+							if not (v18 and v18.Name == "ShurikenRSC" and v18:FindFirstChild("StickyPart") and v18.StickyPart:FindFirstChild("StickyWeld") and v18.StickyPart.StickyWeld.Part1 == ragdollTouchedHitbox) then
+								local stickyPart = nil
+								local stickyWeld, now3, flag12, flag13
+
+								if not v18 or not v18.Parent then
+									tbl12.DestroyToy(v18)
+									v18 = nil
+									local v25 = fn21()
+									stickyWeld = nil
+
+									if v25 then
+										local v26
+										v26, stickyPart, stickyWeld = fn22(v25)
+										v18 = v26
+									end
+
+									if not v18 then
+										local v26
+										v26, stickyPart, stickyWeld = fn22(v23)
+										v18 = v26
+
+										if v18 then
+											v18.Name = "ShurikenRSC"
+
+											task.spawn(function()
+												local touchInterest = stickyPart:WaitForChild("TouchInterest", 2.5)
+
+												if touchInterest then
+													touchInterest:Destroy()
+												end
+											end)
+
+											tbl11.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
+											now3 = tick()
+
+											while true do
+												fn20()
+												flag12 = stickyWeld.Part1 == ragdollTouchedHitbox or not stickyWeld.Parent or not ragdollTouchedHitbox.Parent or not v24.Parent
+												flag13 = flag12 or v24.Health == 0 or tick() - now3 > 0.5
+												if not flag13 then
+													continue
+												end
+												break
+											end
+
+											parent2 = v18 and v18.Parent
+
+											if parent2 then
+												if not tbl8.AntiKick then
+													tbl12.DestroyToy(v18)
+													v18 = nil
+												else
+													shurHighlight = v18:FindFirstChild("ShurHighlight")
+
+													if not shurHighlight then
+														shurHighlight = Instance.new("Highlight")
+														shurHighlight.Name = "ShurHighlight"
+														shurHighlight.Adornee = v18
+														shurHighlight.Parent = v18
+													end
+
+													if shurHighlight.Enabled ~= antiKickSettings.Highlight then
+														shurHighlight.Enabled = antiKickSettings.Highlight
+													end
+
+													if shurHighlight.FillColor ~= antiKickSettings.HighlightFill then
+														shurHighlight.FillColor = antiKickSettings.HighlightFill
+													end
+
+													if shurHighlight.OutlineColor ~= antiKickSettings.HighlightOutl then
+														shurHighlight.OutlineColor = antiKickSettings.HighlightOutl
+													end
+
+													if shurHighlight.FillTransparency ~= antiKickSettings.HighlightFT then
+														shurHighlight.FillTransparency = antiKickSettings.HighlightFT
+													end
+
+													if shurHighlight.OutlineTransparency ~= antiKickSettings.HighlightOT then
+														shurHighlight.OutlineTransparency = antiKickSettings.HighlightOT
+													end
+
+													highlight2 = antiKickSettings.Highlight
+
+													if highlight2 then
+														antiKick = highlight2
+													else
+														forcefieldChar = tbl8.ForcefieldChar
+														antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
+													end
+
+													if antiKick then
+														transparency = 0
+													else
+														transparency = antiKickSettings.Transparency
+													end
+
+													for _, child in ipairs(v18:GetChildren()) do
+														if child:IsA("BasePart") then
+															if tbl12.ApplyCharacterHighlightPart then
+																tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
+															end
+
+															isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
+
+															if isMeshPart then
+																child.Transparency = transparency
+															end
+
+															if child.CanCollide then
+																child.CanCollide = false
+															end
+
+															if child.CanQuery then
+																child.CanQuery = false
+															end
+														end
+													end
+												end
+											end
+										end
+									elseif v18 then
+										v18.Name = "ShurikenRSC"
+
+										task.spawn(function()
+											local touchInterest = stickyPart:WaitForChild("TouchInterest", 2.5)
+
+											if touchInterest then
+												touchInterest:Destroy()
+											end
+										end)
+
+										tbl11.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
+										now3 = tick()
+
+										while true do
+											fn20()
+											flag12 = stickyWeld.Part1 == ragdollTouchedHitbox or not stickyWeld.Parent or not ragdollTouchedHitbox.Parent or not v24.Parent
+											flag13 = flag12 or v24.Health == 0 or tick() - now3 > 0.5
+											if not flag13 then
+												continue
+											end
+											break
+										end
+
+										parent2 = v18 and v18.Parent
+
+										if parent2 then
+											if not tbl8.AntiKick then
+												tbl12.DestroyToy(v18)
+												v18 = nil
+											else
+												shurHighlight = v18:FindFirstChild("ShurHighlight")
+
+												if not shurHighlight then
+													shurHighlight = Instance.new("Highlight")
+													shurHighlight.Name = "ShurHighlight"
+													shurHighlight.Adornee = v18
+													shurHighlight.Parent = v18
+												end
+
+												if shurHighlight.Enabled ~= antiKickSettings.Highlight then
+													shurHighlight.Enabled = antiKickSettings.Highlight
+												end
+
+												if shurHighlight.FillColor ~= antiKickSettings.HighlightFill then
+													shurHighlight.FillColor = antiKickSettings.HighlightFill
+												end
+
+												if shurHighlight.OutlineColor ~= antiKickSettings.HighlightOutl then
+													shurHighlight.OutlineColor = antiKickSettings.HighlightOutl
+												end
+
+												if shurHighlight.FillTransparency ~= antiKickSettings.HighlightFT then
+													shurHighlight.FillTransparency = antiKickSettings.HighlightFT
+												end
+
+												if shurHighlight.OutlineTransparency ~= antiKickSettings.HighlightOT then
+													shurHighlight.OutlineTransparency = antiKickSettings.HighlightOT
+												end
+
+												highlight2 = antiKickSettings.Highlight
+
+												if highlight2 then
+													antiKick = highlight2
+												else
+													forcefieldChar = tbl8.ForcefieldChar
+													antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
+												end
+
+												if antiKick then
+													transparency = 0
+												else
+													transparency = antiKickSettings.Transparency
+												end
+
+												for _, child in ipairs(v18:GetChildren()) do
+													if child:IsA("BasePart") then
+														if tbl12.ApplyCharacterHighlightPart then
+															tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
+														end
+
+														isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
+
+														if isMeshPart then
+															child.Transparency = transparency
+														end
+
+														if child.CanCollide then
+															child.CanCollide = false
+														end
+
+														if child.CanQuery then
+															child.CanQuery = false
+														end
+													end
+												end
+											end
+										end
+									end
+								else
+									stickyPart = v18:WaitForChild("StickyPart", 1.5)
+									stickyWeld = stickyPart and stickyPart:WaitForChild("StickyWeld", 1.5)
+
+									if not (stickyPart and stickyWeld) or not tbl12.SNO(stickyPart) then
+										tbl12.DestroyToy(v18)
+										v18 = nil
+									elseif v18 then
+										v18.Name = "ShurikenRSC"
+
+										task.spawn(function()
+											local touchInterest = stickyPart:WaitForChild("TouchInterest", 2.5)
+
+											if touchInterest then
+												touchInterest:Destroy()
+											end
+										end)
+
+										tbl11.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
+										now3 = tick()
+
+										while true do
+											fn20()
+											flag12 = stickyWeld.Part1 == ragdollTouchedHitbox or not stickyWeld.Parent or not ragdollTouchedHitbox.Parent or not v24.Parent
+											flag13 = flag12 or v24.Health == 0 or tick() - now3 > 0.5
+											if not flag13 then
+												continue
+											end
+											break
+										end
+
+										parent2 = v18 and v18.Parent
+
+										if parent2 then
+											if not tbl8.AntiKick then
+												tbl12.DestroyToy(v18)
+												v18 = nil
+											else
+												shurHighlight = v18:FindFirstChild("ShurHighlight")
+
+												if not shurHighlight then
+													shurHighlight = Instance.new("Highlight")
+													shurHighlight.Name = "ShurHighlight"
+													shurHighlight.Adornee = v18
+													shurHighlight.Parent = v18
+												end
+
+												if shurHighlight.Enabled ~= antiKickSettings.Highlight then
+													shurHighlight.Enabled = antiKickSettings.Highlight
+												end
+
+												if shurHighlight.FillColor ~= antiKickSettings.HighlightFill then
+													shurHighlight.FillColor = antiKickSettings.HighlightFill
+												end
+
+												if shurHighlight.OutlineColor ~= antiKickSettings.HighlightOutl then
+													shurHighlight.OutlineColor = antiKickSettings.HighlightOutl
+												end
+
+												if shurHighlight.FillTransparency ~= antiKickSettings.HighlightFT then
+													shurHighlight.FillTransparency = antiKickSettings.HighlightFT
+												end
+
+												if shurHighlight.OutlineTransparency ~= antiKickSettings.HighlightOT then
+													shurHighlight.OutlineTransparency = antiKickSettings.HighlightOT
+												end
+
+												highlight2 = antiKickSettings.Highlight
+
+												if highlight2 then
+													antiKick = highlight2
+												else
+													forcefieldChar = tbl8.ForcefieldChar
+													antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
+												end
+
+												if antiKick then
+													transparency = 0
+												else
+													transparency = antiKickSettings.Transparency
+												end
+
+												for _, child in ipairs(v18:GetChildren()) do
+													if child:IsA("BasePart") then
+														if tbl12.ApplyCharacterHighlightPart then
+															tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
+														end
+
+														isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
+
+														if isMeshPart then
+															child.Transparency = transparency
+														end
+
+														if child.CanCollide then
+															child.CanCollide = false
+														end
+
+														if child.CanQuery then
+															child.CanQuery = false
+														end
+													end
+												end
+											end
+										end
+									end
+								end
+							else
+								parent2 = v18 and v18.Parent
+
+								if parent2 then
+									if not tbl8.AntiKick then
+										tbl12.DestroyToy(v18)
+										v18 = nil
+									else
+										shurHighlight = v18:FindFirstChild("ShurHighlight")
+
+										if not shurHighlight then
+											shurHighlight = Instance.new("Highlight")
+											shurHighlight.Name = "ShurHighlight"
+											shurHighlight.Adornee = v18
+											shurHighlight.Parent = v18
+										end
+
+										if shurHighlight.Enabled ~= antiKickSettings.Highlight then
+											shurHighlight.Enabled = antiKickSettings.Highlight
+										end
+
+										if shurHighlight.FillColor ~= antiKickSettings.HighlightFill then
+											shurHighlight.FillColor = antiKickSettings.HighlightFill
+										end
+
+										if shurHighlight.OutlineColor ~= antiKickSettings.HighlightOutl then
+											shurHighlight.OutlineColor = antiKickSettings.HighlightOutl
+										end
+
+										if shurHighlight.FillTransparency ~= antiKickSettings.HighlightFT then
+											shurHighlight.FillTransparency = antiKickSettings.HighlightFT
+										end
+
+										if shurHighlight.OutlineTransparency ~= antiKickSettings.HighlightOT then
+											shurHighlight.OutlineTransparency = antiKickSettings.HighlightOT
+										end
+
+										highlight2 = antiKickSettings.Highlight
+
+										if highlight2 then
+											antiKick = highlight2
+										else
+											forcefieldChar = tbl8.ForcefieldChar
+											antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
+										end
+
+										if antiKick then
+											transparency = 0
+										else
+											transparency = antiKickSettings.Transparency
+										end
+
+										for _, child in ipairs(v18:GetChildren()) do
+											if child:IsA("BasePart") then
+												if tbl12.ApplyCharacterHighlightPart then
+													tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
+												end
+
+												isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
+
+												if isMeshPart then
+													child.Transparency = transparency
+												end
+
+												if child.CanCollide then
+													child.CanCollide = false
+												end
+
+												if child.CanQuery then
+													child.CanQuery = false
+												end
+											end
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		antiKickStart=sourceAntiKickWorker
+end
+local function setAntiKick(on)
+    tbl8.AntiKick=on;trackingEpoch+=1;local ticket=trackingEpoch
+    Hub.requestSave()
+    if not on then clearKick();return end
+    if not stickyRemote then tbl8.AntiKick=false;fn18("StickyPartEvent is unavailable.","Anti Kick");return end
+    Hub.scanDescendants(Workspace,trackPCLD,function() return tbl8.AntiKick and trackingEpoch==ticket end)
+    if antiKickRunning then return end
+    antiKickRunning=true
+    task.spawn(function()
+        local ok,message=xpcall(antiKickStart,debug.traceback)
+        antiKickRunning=false
+        clearKick()
+        if not ok then tbl8.AntiKick=false;warn("[Source Anti Kick] "..tostring(message)) end
+    end)
+end
+if Toggles.ShurikenAntiKick then Toggles.ShurikenAntiKick.Callback=setAntiKick end
+settings:AddToggle("SourceAntiKickHighlight",{Text="Anti Kick, highlight shuriken",Default=false,Callback=function(on) tbl7.AntiKickSettings.Highlight=on;Hub.requestSave() end})
+for _,info in ipairs({{"SourceAntiKickFillAlpha","Anti Kick, fill transparency","HighlightFT",0.5},{"SourceAntiKickOutlineAlpha","Anti Kick, outline transparency","HighlightOT",0},{"SourceAntiKickToyAlpha","Anti Kick, shuriken transparency","Transparency",0.9}}) do
+    local property=info[3]
+    settings:AddSlider(info[1],{Text=info[2],Default=info[4],Min=0,Max=1,Rounding=2,Callback=function(value) tbl7.AntiKickSettings[property]=value;Hub.requestSave() end})
+end
+Hub.cleanup(function() tbl8.AntiKick=false;trackingEpoch+=1;clearKick();highlight:Destroy() end)
+
+local rainbowFill,rainbowOutline=false,false
+local baseFill,baseOutline=tbl7.AntiKickSettings.HighlightFill,tbl7.AntiKickSettings.HighlightOutl
+local function parseHex(value)
+    local hex=tostring(value):gsub("^#","")
+    if not hex:match("^%x%x%x%x%x%x$") then return end
+    return Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16))
+end
+settings:AddInput("SourceAntiKickFillColor",{Text="Anti Kick fill colour, hex",Default="FF0000",Finished=true,Callback=function(value) local color=parseHex(value);if color then baseFill=color;if not rainbowFill then tbl7.AntiKickSettings.HighlightFill=color end;Hub.requestSave() end end})
+settings:AddInput("SourceAntiKickOutlineColor",{Text="Anti Kick outline colour, hex",Default="FFFFFF",Finished=true,Callback=function(value) local color=parseHex(value);if color then baseOutline=color;if not rainbowOutline then tbl7.AntiKickSettings.HighlightOutl=color end;Hub.requestSave() end end})
+settings:AddToggle("SourceAntiKickRainbowFill",{Text="Anti Kick rainbow fill",Default=false,Callback=function(on) rainbowFill=on;if not on then tbl7.AntiKickSettings.HighlightFill=baseFill end;Hub.requestSave() end})
+settings:AddToggle("SourceAntiKickRainbowOutline",{Text="Anti Kick rainbow outline",Default=false,Callback=function(on) rainbowOutline=on;if not on then tbl7.AntiKickSettings.HighlightOutl=baseOutline end;Hub.requestSave() end})
+Hub.connect(RunService.Heartbeat,function()
+    if not rainbowFill and not rainbowOutline then return end
+    local color=Color3.fromHSV(os.clock()%5/5,1,1)
+    if rainbowFill then tbl7.AntiKickSettings.HighlightFill=color end
+    if rainbowOutline then tbl7.AntiKickSettings.HighlightOutl=color end
+end)
+
+-- Other local defensive utilities from the supplied protection section.
+local collisionGroups={}
+local function restoreGroups()
+    for part,value in pairs(collisionGroups) do pcall(function() if part.Parent then part.CollisionGroup=value end end);collisionGroups[part]=nil end
+end
+add("SourceAntiObjectFling","Anti-Fling, objects noclip","AntiObjectFling",0.1,function()
+    local char=Player.Character;if not char then return end
+    for _,part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then
+        if collisionGroups[part]==nil then collisionGroups[part]=part.CollisionGroup end
+        part.CollisionGroup="PlotPlayers"
+    end end
+end,restoreGroups)
+local barrierStates={}
+local barrierOn=false
+local function restoreBarriers()
+    for part,value in pairs(barrierStates) do pcall(function() if part.Parent then part.CanCollide=value end end);barrierStates[part]=nil end
+end
+local function inspectBarrier(part)
+    if not barrierOn or not part:IsA("BasePart") or part.Name~="PlotBarrier" then return end
+    local plots=Workspace:FindFirstChild("Plots")
+    if plots and part:IsDescendantOf(plots) then if barrierStates[part]==nil then barrierStates[part]=part.CanCollide end;part.CanCollide=false end
+end
+defenseGroup:AddToggle("SourceNoclipBarrier",{Text="Noclip plot barriers locally",Default=false,Callback=function(on)
+    barrierOn=on
+    if on then Hub.scanDescendants(Workspace,inspectBarrier,function() return barrierOn end) else restoreBarriers() end
+    Hub.requestSave()
+end})
+Hub.connect(Workspace.DescendantAdded,inspectBarrier)
+local grabbedLabel=defenseGroup:AddLabel("Last person who grabbed you: nobody")
+local function ownerChanged(value)
+    if value.Name~="PartOwner" or not (value:IsA("ObjectValue") or value:IsA("StringValue")) then return end
+    local owner=value.Value
+    local name=typeof(owner)=="Instance" and owner.Name or tostring(owner)
+    if name~="" and name~=Player.Name then grabbedLabel:SetText("Last person who grabbed you: "..name) end
+end
+local ownerListeners={}
+local function bindOwners(char)
+    for _,connection in ipairs(ownerListeners) do connection:Disconnect() end;table.clear(ownerListeners)
+    if not char then return end
+    local function observe(value)
+        if value.Name=="PartOwner" and (value:IsA("ObjectValue") or value:IsA("StringValue")) then
+            table.insert(ownerListeners,Hub.connect(value.Changed,function() ownerChanged(value) end));ownerChanged(value)
+        end
+    end
+    table.insert(ownerListeners,Hub.connect(char.DescendantAdded,observe))
+    for _,value in ipairs(char:GetDescendants()) do observe(value) end
+end
+bindOwners(Player.Character)
+Hub.connect(Player.CharacterAdded,bindOwners)
+Hub.cleanup(function() barrierOn=false;restoreGroups();restoreBarriers();for _,connection in ipairs(ownerListeners) do connection:Disconnect() end end)
+
+-- Supplied far-coordinate StickyWeld lag filter. Detached welds are restored locally.
+local lagWelds={}
+local weldLagOn=false
+local function ordinary(part)
+    if not part or not part:IsA("BasePart") then return false end
+    local p=part.Position
+    return math.abs(math.abs(p.X)-2147483648)>1e9 and math.abs(math.abs(p.Z)-2147483648)>1e9
+end
+local function clearLagWeld(weld,restore)
+    local record=lagWelds[weld];if not record then return end
+    lagWelds[weld]=nil
+    for _,connection in ipairs(record.connections) do connection:Disconnect() end
+    if restore and not weld.Parent and record.parent and record.parent.Parent then pcall(function() weld.Parent=record.parent end) end
+end
+local function inspectLagWeld(weld)
+    if not weldLagOn or weld.Name~="StickyWeld" or not weld:IsA("WeldConstraint") or lagWelds[weld] then return end
+    local record={parent=weld.Parent,connections={}};lagWelds[weld]=record
+    local function update()
+        if not weldLagOn or lagWelds[weld]~=record then return end
+        if weld.Part0 and weld.Part1 and not (ordinary(weld.Part0) and ordinary(weld.Part1)) then
+            if weld.Parent then record.parent=weld.Parent;weld.Parent=nil end
+        elseif not weld.Parent and record.parent and record.parent.Parent then weld.Parent=record.parent end
+    end
+    for _,property in ipairs({"Enabled","Part0","Part1"}) do table.insert(record.connections,Hub.connect(weld:GetPropertyChangedSignal(property),update)) end
+    table.insert(record.connections,Hub.connect(weld.Destroying,function() clearLagWeld(weld,false) end))
+    update()
+end
+local weldEpoch=0
+local function setWeldLag(on)
+    weldLagOn=on;weldEpoch+=1;local ticket=weldEpoch
+    if on then Hub.scanDescendants(Workspace,inspectLagWeld,function() return weldLagOn and weldEpoch==ticket end)
+    else local list={};for weld in pairs(lagWelds) do table.insert(list,weld) end;for _,weld in ipairs(list) do clearLagWeld(weld,true) end end
+end
+local lagCallback=Toggles.AntiLagToggle and Toggles.AntiLagToggle.Callback
+if lagCallback then Toggles.AntiLagToggle.Callback=function(on) lagCallback(on);setWeldLag(on) end end
+Hub.connect(Workspace.DescendantAdded,inspectLagWeld)
+Hub.cleanup(function() setWeldLag(false) end)
+
+    local remover=Toggles.DestroyTargetGucci
+    if remover then remover.Callback=function(on)
+        local running,ownsRun=Hub.beginTargetLoop("DestroyTargetGucci",on)
+        Hub.requestSave()
+        if not on or not ownsRun then return end
+        task.spawn(function()
+            local _,root=tbl12.Char();local saved=root and root.CFrame
+            while running() and not flag11 do
+                local target=Hub.nextLoopTarget("destroyGucci")
+                if target and Hub.canHarm(target) then
+                    local ok,message=pcall(tbl12.RemoveGucci,target)
+                    if not ok then warn("[Source Remove Gucci] "..tostring(message)) end
+                end
+                task.wait(0.2)
+            end
+            if saved and root and root.Parent then root.CFrame=saved;root.AssemblyLinearVelocity=Vector3.zero end
+        end)
+    end end
+    Hub.sourceGucci={remove=tbl12.RemoveGucci,set=tbl12.SetGucciAntiGrab,state=tbl8,settings=tbl9,helpers=tbl12}
+    Hub.updateGucciStatus=function() end
+    DefenseExtra:AddToggle("SourceRagdollOnRemoveGucci",{Text="Ragdoll target during Remove Gucci",Default=false,Callback=function(on) tbl8.RagdollInRG=on;Hub.requestSave() end})
+    local status=DefenseExtra:AddLabel("Gucci: supplied seat/weld controller, off")
+    local function setGucci(on)
+        if on and Hub.stopBlobFlight then Hub.stopBlobFlight() end
+        tbl12.SetGucciAntiGrab(on)
+        status:SetText(on and "Gucci: supplied controller running, awaiting seat and weld confirmation" or "Gucci: off")
+        Hub.requestSave()
+    end
+    -- Replace the old callbacks, not a second competing controller.
+    Toggles.AutoGucciBlobToggle.Callback=setGucci
+    startAntiGucci=function() if Toggles.AutoGucciBlobToggle.Value then setGucci(true) end end
+    stopAntiGucci=function() setGucci(false) end
+    if Toggles.AutoGucciTrainToggle then
+        Toggles.AutoGucciTrainToggle.Callback=function(on)
+            if on then tbl9.GucciType="Train";Toggles.AutoGucciBlobToggle:SetValue(true)
+            elseif tbl9.GucciType=="Train" then Toggles.AutoGucciBlobToggle:SetValue(false) end
+        end
+        startAntiGucciTrain=function() if Toggles.AutoGucciTrainToggle.Value then tbl9.GucciType="Train";setGucci(true) end end
+        stopAntiGucciTrain=function() if tbl9.GucciType=="Train" then setGucci(false) end end
+    end
+    DefenseExtra:AddDropdown("SourceGucciVehicle",{Text="Gucci vehicle",Values={"CreatureBlobman","TractorGreen","SantaSleigh","Train"},Default=1,Callback=function(value) tbl9.GucciType=value;Hub.requestSave() end})
+    DefenseExtra:AddButton({Text="Stop supplied Gucci and clean its toy",Func=function() Toggles.AutoGucciBlobToggle:SetValue(false) end})
+    Hub.cleanup(function()
+        flag11=true;tbl12.SetGucciAntiGrab(false)
+        for model in pairs(spawned) do tbl12.DestroyToy(model) end
+        for _,connection in pairs(runtimeConnections) do connection:Disconnect() end
+        for connection in pairs(sourceConnections) do connection:Disconnect() end
+        Hub.sourceDefense=nil
+        Hub.sourceGucci=nil
+    end)
+end)()
+end
+
+-- Source Anti Invis behavior: repair foreign root mass and disabled seat welds locally.
+do
+(function()
+    local enabled=false
+    local savedMass,savedWeld={},{}
+    local elapsed=0
+    local function restore()
+        for part,value in pairs(savedMass) do pcall(function() if part.Parent then part.Massless=value end end);savedMass[part]=nil end
+        for weld,value in pairs(savedWeld) do pcall(function() if weld.Parent then weld.Enabled=value end end);savedWeld[weld]=nil end
+    end
+    DefenseGroup:AddToggle("SourceAntiInvis",{Text="Anti Invis (supplied method)",Default=false,Callback=function(on) enabled=on;if not on then restore() end;Hub.requestSave() end})
+    Hub.connect(RunService.Heartbeat,function(dt)
+        if not enabled then return end
+        elapsed+=dt;if elapsed<0.1 then return end;elapsed=0
+        for _,other in ipairs(Players:GetPlayers()) do if other~=Player then
+            local char=other.Character
+            local root=char and char:FindFirstChild("HumanoidRootPart")
+            local hum=char and char:FindFirstChildOfClass("Humanoid")
+            if root then if savedMass[root]==nil then savedMass[root]=root.Massless end;root.Massless=false end
+            local seat=hum and hum.Sit and hum.SeatPart
+            local weld=seat and seat:FindFirstChild("SeatWeld")
+            if weld and not weld.Enabled then if savedWeld[weld]==nil then savedWeld[weld]=weld.Enabled end;weld.Enabled=true end
+        end end
+        for part in pairs(savedMass) do if not part.Parent then savedMass[part]=nil end end
+        for weld in pairs(savedWeld) do if not weld.Parent then savedWeld[weld]=nil end end
+    end)
+    Hub.cleanup(function() enabled=false;restore() end)
+end)()
+end
+
 -- UI Settings
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
 do
@@ -9561,7 +14197,7 @@ do
         if not own(model) or model:FindFirstChildOfClass("Humanoid") then return false end
         for _,p in ipairs(model:GetDescendants()) do
             if p:IsA("BasePart") then
-                if (Hub.toyBuildClaims and Hub.toyBuildClaims[p.AssemblyRootPart or p]) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[p.AssemblyRootPart or p]) then return false end
+                if (Hub.isMissileReserved and Hub.isMissileReserved(p)) or (Hub.toyBuildClaims and Hub.toyBuildClaims[p.AssemblyRootPart or p]) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[p.AssemblyRootPart or p]) then return false end
                 if p.Anchored or p:IsA("Seat") or p:IsA("VehicleSeat") then return false end
                 for _,q in ipairs(p:GetConnectedParts(true)) do
                     if not q:IsDescendantOf(model) then return false end
@@ -10373,7 +15009,7 @@ end)
 Hub.connect(Player.CharacterAdded, function(char)
 	char:WaitForChild("HumanoidRootPart", 5)
 	if not Hub.alive or Player.Character ~= char then return end
-	if Toggles.PaintDeleteToggle and Toggles.PaintDeleteToggle.Value then setTouchQuery(false) end
+	if not Hub.sourceDefense and Toggles.PaintDeleteToggle and Toggles.PaintDeleteToggle.Value then setTouchQuery(false) end
 end)
 
 -- Autosave is scheduled after setting changes; no permanent polling loop.
@@ -10381,3 +15017,4 @@ end)
 -- Send loaded message
 
 notify("Arriva Core Hub 2.0", "Hub loaded. Your saved settings and controls are ready.", 5)
+
