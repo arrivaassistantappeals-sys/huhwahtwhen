@@ -7648,6 +7648,7 @@ do
     local enabled,generation=true,0
     local active=nil
     local flights={}
+    local retryModels={}
     local loopOn,loopCount,nextLoop=false,0,0
     local toyName,action,aim="BombMissile","Throw","Camera"
     local interval,maxCycles,speed,lifetime=1,10,500,3
@@ -7704,6 +7705,18 @@ do
         return Hub.alive and enabled and active==op and generation==op.ticket
             and Player.Character==op.character and op.humanoid.Health>0
     end
+    local function fail(op,reason)
+        if active~=op then return end
+        Hub.lastMissileError=tostring(reason):sub(1,240)
+        if op.mode=="Cache" and op.toy and op.toy.Parent==Workspace:FindFirstChild(Player.Name.."SpawnedInToys") then
+            retryModels[op.name]=op.toy
+            Hub.missileKeptModels=Hub.missileKeptModels or {};Hub.missileKeptModels[op.toy]=true
+        end
+        cancelWorker(op.worker)
+        releaseFlight(op)
+        finish(op)
+        status:SetText("Missile action will retry: "..Hub.lastMissileError)
+    end
     local function reserve(op,model)
         if op.toy==model then return end
         if op.toy then releaseFlight(op) end
@@ -7743,15 +7756,20 @@ do
         local hum=char and char:FindFirstChildOfClass("Humanoid")
         local camera=Workspace.CurrentCamera
         if not root or not hum or hum.Health<=0 or not camera then status:SetText("Wait for your character and camera.");return false end
-        local allowed,reason=available(name);if not allowed then stop(reason);return false end
         local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+        local reuse=mode=="Cache" and retryModels[name] or nil
+        if reuse and (reuse.Parent~=folder or reserved[reuse]) then retryModels[name]=nil;reuse=nil end
+        if not reuse then
+            local allowed,reason=available(name)
+            if not allowed then Hub.lastMissileError=reason;status:SetText(reason);return false end
+        end
         local toys=ReplicatedStorage:FindFirstChild("MenuToys")
         local spawn=toys and toys:FindFirstChild("SpawnToyRemoteFunction")
         local grabs=ReplicatedStorage:FindFirstChild("GrabEvents")
         local owner=grabs and grabs:FindFirstChild("SetNetworkOwner")
         local events=ReplicatedStorage:FindFirstChild("BombEvents")
         local explode=events and events:FindFirstChild("BombExplode")
-        if not folder or not spawn or not owner or (mode=="Explode" and not explode) then stop("Toy remotes or your toy folder are not ready.");return false end
+        if not folder or not spawn or not owner or (mode=="Explode" and not explode) then Hub.lastMissileError="Toy remotes or your toy folder are not ready.";status:SetText(Hub.lastMissileError);return false end
         local direction=camera.CFrame.LookVector
         if aim=="Mouse" then
             local delta=mouse.Hit.Position-root.Position
@@ -7759,9 +7777,10 @@ do
         end
         local spawnPosition=root.Position+direction*6+Vector3.new(0,1,0)
         local spawnFrame=Hub.safeLookAt(spawnPosition,spawnPosition+direction) or root.CFrame
-        local op={ticket=generation,character=char,humanoid=hum,claimed={},before={},deadline=os.clock()+(mode=="Cache" and 12 or 6),name=name,mode=mode}
+        local op={ticket=generation,character=char,humanoid=hum,claimed={},before={},deadline=os.clock()+(mode=="Cache" and 12 or 6),name=name,mode=mode,phase="Parts"}
         active=op
         for _,model in ipairs(folder:GetChildren()) do op.before[model]=true end
+        if reuse then reserve(op,reuse);retryModels[name]=nil end
         local function capture(model)
             if not current(op) or op.before[model] or model.Parent~=folder or model.Name~=name or not model:IsA("Model") then return end
             if not op.toy then reserve(op,model) end
@@ -7769,17 +7788,17 @@ do
         op.listener=Hub.connect(folder.ChildAdded,capture)
         status:SetText("Spawning "..name.."...")
         -- Replication can arrive before InvokeServer returns. Prepare that model immediately.
-        op.spawnWorker=task.spawn(function()
+        if not reuse then op.spawnWorker=task.spawn(function()
             local ok,result=pcall(function() return Hub.invoke(spawn,name,spawnFrame,Vector3.zero) end)
             if not current(op) then return end
             if not ok then
                 Hub.lastMissileError=tostring(result):sub(1,240)
-                stop("Missile spawn failed: "..Hub.lastMissileError)
+                if not op.toy then fail(op,"Missile spawn failed: "..Hub.lastMissileError) end
                 return
             end
-            if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder
+            if not op.toy and typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder
                 and result.Name==name and not op.before[result] then reserve(op,result) end
-        end)
+        end) end
         op.worker=task.spawn(function()
             local ok,err=xpcall(function()
                 local hit,body
@@ -7801,26 +7820,36 @@ do
                 Hub.fire(owner,hit,facing)
                 -- Claim the actual physics part before applying forces or requesting an explosion.
                 local physics=body
-                local deadline=math.min(op.deadline,os.clock()+(mode=="Cache" and 8 or 3))
-                if physics~=hit then Hub.fire(owner,physics,Hub.lookAt(physics.Position,physics.Position+direction) or physics.CFrame) end
-                if type(CheckNetworkOwnerShipOnPart)~="function" then
-                    error("Network ownership checks are unavailable; retry after the hub finishes loading.")
-                end
-                local nextRequest=os.clock()+0.5
-                while current(op) and not CheckNetworkOwnerShipOnPart(physics) and os.clock()<deadline do
+                op.phase="Ownership"
+                -- Ownership can arrive late: keep the same toy and retry instead of cancelling the cache.
+                op.deadline=math.huge
+                local attempts,nextRequest,nextNotice=0,0,0
+                while current(op) do
                     if not op.toy or op.toy.Parent~=folder or not physics.Parent or not hit.Parent then
                         error("The spawned toy disappeared before ownership was confirmed.")
                     end
-                    if os.clock()>=nextRequest then
-                        nextRequest=os.clock()+0.5
+                    local check=CheckNetworkOwnerShipOnPart
+                    local checked,confirmed=false,false
+                    if type(check)=="function" then checked,confirmed=pcall(check,physics) end
+                    if checked and confirmed then break end
+                    local now=os.clock()
+                    if now>=nextRequest then
+                        attempts+=1
+                        nextRequest=now+math.min(2,0.5*2^math.min(attempts-1,2))
                         if Player:DistanceFromCharacter(physics.Position)<=30 then
                             Hub.fire(owner,physics,Hub.lookAt(root.Position,physics.Position) or physics.CFrame)
                         end
                     end
-                    task.wait()
+                    if now>=nextNotice then
+                        nextNotice=now+4
+                        local detail=Player:DistanceFromCharacter(physics.Position)>30 and "move within 30 studs" or "waiting for confirmation"
+                        status:SetText("Retrying "..name.." ownership, "..detail..". Cancel missile actions to stop.")
+                    end
+                    task.wait(0.1)
                 end
                 if not current(op) then return end
-                if not CheckNetworkOwnerShipOnPart(physics) then error("Network ownership was not confirmed for "..name..".") end
+                Hub.lastMissileError=nil
+                op.phase="Ready"
                 if mode=="Cache" then
                     local primary=op.toy.PrimaryPart or physics
                     local force=Hub.new(name=="DiceSmall" and "BodyPosition" or "BodyVelocity",primary);op.force=force
@@ -7849,30 +7878,41 @@ do
                 end
                 loopCount+=1;finish(op)
             end,debug.traceback)
-            if not ok and current(op) then Hub.lastMissileError=tostring(err):sub(1,240);stop("Missile action paused: "..Hub.lastMissileError) end
+            if not ok and current(op) then fail(op,err) end
         end)
         return true
     end
     Hub.throwMissile=function(value) if type(value)=="string" then return false end;return start("BombMissile","Throw") end
     Hub.explodeMissile=function(name) return start(name,"Explode") end
     Hub.prepareExplosive=function(name,callback) return start(name,"Cache",callback) end
+    Hub.missileHasRetry=function(name)
+        local model=retryModels[name]
+        return model~=nil and model.Parent==Workspace:FindFirstChild(Player.Name.."SpawnedInToys") and not reserved[model]
+    end
     Hub.missileWorkBusy=function() return active~=nil end
     Hub.cancelMissileWork=stop
     shortcuts:AddLabel("Explode Bomb"):AddKeyPicker("ExplodeBombKey",{Default="J",Text="Explode Bomb",Callback=function(value) if type(value)~="string" then Hub.explodeMissile("BombMissile") end end})
     shortcuts:AddLabel("Explode Firework"):AddKeyPicker("ExplodeFireworkKey",{Default="N",Text="Explode Firework",Callback=function(value) if type(value)~="string" then Hub.explodeMissile("FireworkMissile") end end})
-    shortcuts:AddToggle("MissileThrowEnabled",{Text="Enable missile actions",Default=true,Callback=function(on) enabled=on;if not on then stop("Missile actions disabled.") end end})
+    shortcuts:AddToggle("MissileThrowEnabled",{Text="Enable missile actions",Default=true,Callback=function(on)
+        enabled=on
+        if not on then
+            if Hub.stopBlitzExplosions then Hub.stopBlitzExplosions("Missile actions disabled.") else stop("Missile actions disabled.") end
+        end
+    end})
     shortcuts:AddButton({Text="Throw Bomb",Func=Hub.throwMissile})
     shortcuts:AddButton({Text="Explode Bomb",Func=function() Hub.explodeMissile("BombMissile") end})
     shortcuts:AddButton({Text="Explode Firework",Func=function() Hub.explodeMissile("FireworkMissile") end})
-    shortcuts:AddButton({Text="Cancel missile actions",Func=function() stop("Missile actions stopped.") end})
+    shortcuts:AddButton({Text="Cancel missile actions",Func=function()
+        if Hub.stopBlitzExplosions then Hub.stopBlitzExplosions("Missile actions stopped.") else stop("Missile actions stopped.") end
+    end})
     aimGroup:AddDropdown("MissileAimMode",{Text="Throw direction",Values={"Camera","Mouse"},Default=1,Callback=function(value) aim=value end})
     aimGroup:AddSlider("MissileLaunchSpeed",{Text="Launch speed",Default=500,Min=100,Max=500,Rounding=0,Callback=function(value) speed=value end})
     aimGroup:AddSlider("MissileForceLifetime",{Text="Launch force lifetime (seconds)",Default=3,Min=0.5,Max=10,Rounding=1,Callback=function(value) lifetime=value end})
-    aimGroup:AddLabel("Uses your own newly spawned missile or firework. Throw starts after its physics part is ready and network ownership is confirmed. Each loop waits for completion and stops on spawn failure, toy limits, death or respawn.")
+    aimGroup:AddLabel("Uses your own newly spawned missile or firework. Throw starts after its physics part is ready and network ownership is confirmed. Ownership retries keep the same toy without pausing the cache. Other temporary failures retry with backoff. Cancel, disable or respawn stops the action.")
     Hub.connect(RunService.Heartbeat,function()
         local now=os.clock()
         if active and not current(active) then stop("Character became unavailable, missile actions stopped.")
-        elseif active and now>=active.deadline then Hub.lastMissileError="Spawn/replication timed out.";stop("Spawn timed out. No further spawn requests queued.") end
+        elseif active and now>=active.deadline then fail(active,"Spawn/replication timed out.") end
         local expired={};for op,deadline in pairs(flights) do if now>=deadline or not op.toy or not op.toy.Parent then table.insert(expired,op) end end
         for _,op in ipairs(expired) do releaseFlight(op) end
         if loopOn and not active and now>=nextLoop then
@@ -7880,7 +7920,7 @@ do
         end
     end)
     Hub.connect(Player.CharacterRemoving,function() stop("Character changed, missile actions stopped.") end)
-    Hub.cleanup(function() enabled=false;loopOn=false;cancel();Hub.throwMissile=nil;Hub.explodeMissile=nil;Hub.missileReservedModels=nil;Hub.isMissileReserved=nil;Hub.prepareExplosive=nil;Hub.missileWorkBusy=nil;Hub.cancelMissileWork=nil end)
+    Hub.cleanup(function() enabled=false;loopOn=false;cancel();Hub.throwMissile=nil;Hub.explodeMissile=nil;Hub.missileReservedModels=nil;Hub.isMissileReserved=nil;Hub.prepareExplosive=nil;Hub.missileWorkBusy=nil;Hub.missileHasRetry=nil;Hub.cancelMissileWork=nil end)
 end)()
 end
 
@@ -7897,7 +7937,7 @@ do
     local cache,queue,retired={},{},{}
     local aimEntry,pending=nil,nil
     local epoch,nextSpawn,nextFire,lastAim=0,0,0,0
-    local paused=false
+    local retryDelay,retryReason=0.5,nil
     local retained={}
     local status=group:AddLabel("Off.")
     local picker
@@ -7931,7 +7971,7 @@ do
     end
     local function stop(reason)
         if stopping then return end;stopping=true
-        enabled=false;held=false;epoch+=1;pending=nil
+        enabled=false;held=false;epoch+=1;pending=nil;retryDelay=0.5;retryReason=nil
         clearCache()
         if Hub.cancelMissileWork then Hub.cancelMissileWork(reason or "Explosion cache stopped.") end
         local toggle=Toggles.BlitzExplodeEnabled
@@ -7969,7 +8009,7 @@ do
             params.FilterDescendantsInstances=folder and {char,folder} or {char}
             params.IgnoreWater=true
             local hit=Workspace:Raycast(cf.Position,cf.LookVector*5000,params)
-            if hit then return aimEntry.position,hit.Position end
+            return aimEntry.position,hit and hit.Position or (cf.Position+cf.LookVector*5000)
         end
         return nil
     end
@@ -7982,25 +8022,32 @@ do
         local used,cap=Player:FindFirstChild("UsedToyPoints"),Player:FindFirstChild("ToysLimitCap")
         return not used or not cap or used.Value+10<=cap.Value
     end
-    local function pause(reason)
-        paused=true;pending=nil;held=false
-        status:SetText("Paused, "..reason.." Use Retry cache when ready. Toys are kept.")
+    local function canPrepare(name)
+        return (Hub.missileHasRetry and Hub.missileHasRetry(name)) or spawnBudget()
+    end
+    local function retry(reason)
+        pending=nil
+        retryReason=tostring(reason)
+        nextSpawn=os.clock()+retryDelay
+        status:SetText(string.format("Retrying cache in %.1fs: %s. Ready explosives remain usable.",retryDelay,retryReason))
+        retryDelay=math.min(8,retryDelay*2)
     end
     local function prepare(name,isAim)
         local ticket=epoch
         Hub.lastMissileError=nil
-        pending={aim=isAim,time=os.clock()}
+        local request={aim=isAim,time=os.clock()}
+        pending=request
         local accepted=Hub.prepareExplosive(name,function(entry)
-            if not enabled or ticket~=epoch then dispose(entry);return end
-            pending=nil;nextSpawn=os.clock()
+            if not enabled or ticket~=epoch or pending~=request then dispose(entry);return end
+            pending=nil;nextSpawn=os.clock();retryDelay=0.5;retryReason=nil
             Hub.lastMissileError=nil
             if isAim then aimEntry=entry else table.insert(cache,entry) end
             status:SetText(string.format("%d/%d %s cached, %s trigger, %s target.",#cache,amount,kind,trigger,targetMode))
         end)
-        if not accepted then pause(Hub.lastMissileError or "cannot prepare toy, check missile actions, ownership and toy points") end
+        if not accepted and pending==request then retry(Hub.lastMissileError or "cannot prepare toy yet; check missile actions, ownership and toy points") end
     end
     local function step()
-        if not enabled or paused then return end
+        if not enabled then return end
         local char=Player.Character
         local hum=char and char:FindFirstChildOfClass("Humanoid")
         if not hum or hum.Health<=0 then stop("Character unavailable, explosion cache stopped.");return end
@@ -8014,15 +8061,15 @@ do
             else cooling+=1 end
         end
         for model in pairs(retained) do if not model.Parent then retained[model]=nil end end
-        for i=#cache,1,-1 do if not own(cache[i]) then cache[i].release();table.remove(cache,i) end end
-        if aimEntry and not own(aimEntry) then aimEntry.release();aimEntry=nil end
+        for i=#cache,1,-1 do if not own(cache[i]) then dispose(cache[i]);table.remove(cache,i) end end
+        if aimEntry and not own(aimEntry) then dispose(aimEntry);aimEntry=nil end
         if aimEntry and now-lastAim>=0.05 and aimEntry.force then
             lastAim=now
             aimEntry.force.Position=Vector3.new(math.floor(now/0.05)%2==0 and 1000 or -1000,400,10000)
         end
-        if pending and not Hub.missileWorkBusy() then pause(Hub.lastMissileError or "toy preparation failed or was cancelled");return end
+        if pending and not Hub.missileWorkBusy() then retry(Hub.lastMissileError or "toy preparation failed or was cancelled") end
         if wantsAim() and not aimEntry then
-            if not pending and spawnBudget() and now>=nextSpawn and not Hub.missileWorkBusy() then prepare("DiceSmall",true) end
+            if not pending and canPrepare("DiceSmall") and now>=nextSpawn and not Hub.missileWorkBusy() then prepare("DiceSmall",true) end
             return
         end
         -- Amount is a cache capacity, not a barrier: fire whatever is ready.
@@ -8035,24 +8082,31 @@ do
             if positionPart then
                 local events=ReplicatedStorage:FindFirstChild("BombEvents")
                 local remote=events and events:FindFirstChild("BombExplode")
-                if not remote then stop("BombExplode is unavailable.");return end
+                if not remote then nextFire=now+1;status:SetText("Waiting for BombExplode; retrying automatically.");return end
                 local count=delay>0 and 1 or #queue
+                local failed=false
                 for _=1,count do
                     local entry=table.remove(queue,1)
                     if own(entry) then
                         -- Preserve Blitz's minimal Hitbox/PositionPart protocol.
-                        Hub.fire(remote,{Hitbox=entry.hit,PositionPart=positionPart},position)
+                        local sent,err=pcall(function() Hub.fire(remote,{Hitbox=entry.hit,PositionPart=positionPart},position) end)
+                        if not sent then
+                            table.insert(queue,1,entry);failed=true
+                            status:SetText("Explosion request failed; retrying automatically: "..tostring(err):sub(1,140))
+                            break
+                        end
                         retired[entry]=now+2;cooling+=1
                     else entry.release() end
                 end
-                nextFire=now+delay
+                nextFire=now+(failed and math.max(0.5,delay) or delay)
             end
         end
-        if not pending and #cache+#queue+cooling<amount and now>=nextSpawn and not Hub.missileWorkBusy() and spawnBudget() then prepare(types[kind],false) end
+        if not pending and #cache+#queue+cooling<amount and now>=nextSpawn and not Hub.missileWorkBusy() and canPrepare(types[kind]) then prepare(types[kind],false) end
         if now>=nextStatus and not pending then
             nextStatus=now+0.5
             local detail
-            if not readyToFire() then detail="waiting for held Trigger Bombs"
+            if retryReason and now<nextSpawn then detail=string.format("retrying preparation in %.1fs",nextSpawn-now)
+            elseif not readyToFire() then detail="waiting for held Trigger Bombs"
             elseif not target() then detail=targetMode=="Player" and "waiting for an eligible selected player outside a plot" or "waiting for a valid target surface/reference"
             elseif cooling>0 then detail="cooldown, surviving toys will return to the cache"
             elseif #cache+#queue==0 and not spawnBudget() then detail="toy limit/cooldown reached, no live cached explosive available"
@@ -8064,7 +8118,7 @@ do
         if stopping then return end
         if not on then stop();return end
         if Toggles.MissileLoopEnabled and Toggles.MissileLoopEnabled.Value then Toggles.MissileLoopEnabled:SetValue(false) end
-        enabled=true;paused=false;held=false;epoch+=1;nextSpawn=0;nextFire=0
+        enabled=true;held=false;epoch+=1;nextSpawn=0;nextFire=0;retryDelay=0.5;retryReason=nil
         status:SetText("Filling explosive cache...")
     end})
     group:AddDropdown("BlitzExplosionType",{Text="Explosion Type",Values={"Firework","Missile","Void","Ballon","Small Present","Big Present"},Default=1,Callback=function(value)
@@ -8072,7 +8126,7 @@ do
             local wasEnabled=enabled
             epoch+=1;pending=nil;held=false;clearCache()
             if Hub.cancelMissileWork then Hub.cancelMissileWork("Explosive type changed, toys kept.") end
-            kind=value;paused=false;nextSpawn=0;nextFire=0
+            kind=value;nextSpawn=0;nextFire=0;retryDelay=0.5;retryReason=nil
             enabled=wasEnabled
             status:SetText(wasEnabled and "Type changed, refilling cache. Previous toys kept." or "Ready.")
         end
@@ -8088,7 +8142,8 @@ do
     group:AddButton({Text="Stop, keep toys",Func=function() stop() end})
     group:AddButton({Text="Retry cache",Func=function()
         if not enabled then status:SetText("Enable Explode first. Your previous toys were kept.");return end
-        paused=false;pending=nil;nextSpawn=os.clock();status:SetText("Retry requested. Preparing one toy at a time.")
+        if pending and Hub.missileWorkBusy() then status:SetText("The current toy is already retrying automatically.");return end
+        pending=nil;nextSpawn=os.clock();retryDelay=0.5;retryReason=nil;status:SetText("Retry requested. Preparing one toy at a time.")
     end})
     group:AddButton({Text="Delete this tool's cached toys",Func=function()
         local models={};for model in pairs(retained) do models[model]=true end
@@ -8104,7 +8159,7 @@ do
     end})
     help:AddLabel("Mouse targeting uses Press/Hold Trigger Bombs, even in Automatic mode, matching Blitz. Player targeting needs Target = Player and a selected unprotected player outside a plot.")
     help:AddLabel("The cache is created from your own toys and parked at height 10000 after ownership is confirmed. Prediction and mouse aiming use an owned DiceSmall as Blitz's replicated aim reference. This tool does not buy toys.")
-    help:AddLabel("Ready explosives fire immediately, even while another toy is being prepared. Cache capacity sets the number of reusable explosives to keep, without requiring a full cache. Spawning remains serialized and respects server cooldowns and toy limits. Stop and unload keep toys.")
+    help:AddLabel("Ready explosives fire immediately, even while another toy is being prepared. Cache capacity sets the number of reusable explosives to keep, without requiring a full cache. Spawning remains serialized and respects server cooldowns and toy limits. Ownership retries reuse the same toy; temporary preparation failures retry automatically with backoff. Stop and unload keep toys.")
     Hub.connect(UserInputService.InputBegan,function(input,processed)
         if processed or not enabled or UserInputService:GetFocusedTextBox() or Hub.keybindCaptureActive then return end
         if Hub.matchesKeybind("BlitzTriggerBombsKey",input,"F") then held=true end
@@ -15656,4 +15711,3 @@ end
 -- Send loaded message
 
 notify("Arriva Core Hub 2.0", "Hub loaded. Your saved settings and controls are ready.", 5)
-
