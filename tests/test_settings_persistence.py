@@ -126,12 +126,14 @@ class SettingsPersistence(unittest.TestCase):
         source=(ROOT/'dist/resonance.lua').read_text()
         self.assertLess(source.index('MenuGroup:AddSlider("StartupFeatureDelay"'),source.index('local success,loadError=SaveManager:Load("AutoSave")'))
 
-    def test_rejoin_reload_and_hop_stay_on_feature_branch(self):
+    def test_private_distribution_has_no_server_hop_or_remote_autoload(self):
         source=(ROOT/'dist/resonance.lua').read_text()
-        self.assertNotIn('huhwahtwhen/main/dist/resonance.lua',source)
-        self.assertEqual(source.count('huhwahtwhen/codex/resonance-feature-port/dist/resonance.lua'),3)
-        self.assertIn('local saved,saveError=Hub.flushSettings()',source)
-        self.assertIn('if Hub.flushSettings then',source)
+        removed=('queue_on_teleport','queueonteleport','hopPublicServer','choosePublicServer',
+                 'PackAutoServerHop','PackAutoRejoin','PackKeepScript','PackServerSort',
+                 'Rejoin + Auto Execute','Reload Hub','huhwahtwhen/codex/resonance-feature-port/dist/resonance.lua')
+        for name in removed:
+            self.assertNotIn(name,source)
+        self.assertIn('local success,loadError=SaveManager:Load("AutoSave")',source)
         self.assertIn('Hub.connect(Player.OnTeleport',source)
 
     def test_distributions_match(self):
