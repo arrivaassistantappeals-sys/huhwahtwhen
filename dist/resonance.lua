@@ -10765,6 +10765,69 @@ do
 						local tbl16 = nil
 						local flag12 = nil
 
+                        -- GUCCI CONFIRMATION BEGIN
+                        local function clearGucciConfirmation(record,announce)
+                            if not record then return end
+                            record.ConfirmEpoch=(record.ConfirmEpoch or 0)+1
+                            record.Confirmed=false
+                            if Hub.gucciVerifiedRun==record then Hub.gucciVerifiedRun=nil end
+                            local worker=record.ConfirmWorker;record.ConfirmWorker=nil
+                            if worker and coroutine.status(worker)~="dead" and worker~=coroutine.running() then
+                                pcall(Hub.nativeTask.cancel,worker);Hub.threads[worker]=nil
+                            end
+                            if announce and Hub.alive and not flag11 and tbl8.GucciAntiGrab and tbl16==record
+                                and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end
+                        end
+                        local function beginGucciConfirmation(record,isValid,weldObserved)
+                            clearGucciConfirmation(record,false)
+                            if not weldObserved then return end
+                            local ticket=record.ConfirmEpoch
+                            if Hub.reportGucciStatus then Hub.reportGucciStatus("Verifying") end
+                            record.ConfirmWorker=task.spawn(function()
+                                local stableSince
+                                while Hub.alive and not flag11 and tbl8.GucciAntiGrab and tbl16==record
+                                    and record.ConfirmEpoch==ticket do
+                                    local checked,valid=pcall(isValid)
+                                    if not checked or not valid then clearGucciConfirmation(record,true);return end
+                                    local hum,hrp=record.Hum,record.HRP
+                                    local seat,vehicle=record.Seat,record.Vehicle
+                                    local ragdolled=hum and hum:FindFirstChild("Ragdolled")
+                                    local weld=seat and seat:FindFirstChild("SeatWeld")
+                                    local ready=Player.Character==record.Char and hum and hum.Parent==record.Char
+                                        and hum.Health>0 and hrp and hrp.Parent==record.Char
+                                        and vehicle and vehicle.Parent and seat and seat.Parent and seat:IsDescendantOf(vehicle)
+                                        and not hum.Sit and hum.SeatPart==nil and not record.Ragdoll
+                                        and ragdolled and not ragdolled.Value and not isHeld.Value
+                                        and (not seat.Occupant or seat.Occupant==hum)
+                                        and (not weld or not weld.Enabled)
+                                    if ready and record.Type~="Train" then
+                                        local root=record.Root
+                                        local ok,owned=false,false
+                                        if root and root.Parent and type(tbl12.IsNetworkOwner)=="function" then ok,owned=pcall(tbl12.IsNetworkOwner,root) end
+                                        ready=ok and owned and record.BP and record.BP.Parent==root
+                                    end
+                                    if ready then
+                                        stableSince=stableSince or os.clock()
+                                        if not record.Confirmed and os.clock()-stableSince>=1 then
+                                            record.Confirmed=true
+                                            Hub.gucciVerifiedRun=record
+                                            if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+                                        end
+                                    else
+                                        stableSince=nil
+                                        if record.Confirmed then
+                                            record.Confirmed=false
+                                            if Hub.gucciVerifiedRun==record then Hub.gucciVerifiedRun=nil end
+                                            if Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end
+                                        end
+                                    end
+                                    task.wait(0.1)
+                                end
+                                clearGucciConfirmation(record,false)
+                            end)
+                        end
+                        -- GUCCI CONFIRMATION END
+
 						local function fn21(arg)
 							if not arg.Parent or arg.Health <= 0 then
 								return
@@ -10780,6 +10843,7 @@ do
 						end
 
 						local function fn22()
+                            clearGucciConfirmation(tbl16,true)
 							if not tbl16 then
 								return
 							end
@@ -11017,7 +11081,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
-                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+                                                                beginGucciConfirmation(v27,fn25,flag14)
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11198,7 +11262,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
-                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+                                                                beginGucciConfirmation(v27,fn25,flag14)
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11402,7 +11466,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
-                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+                                                                beginGucciConfirmation(v27,fn25,flag14)
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11583,7 +11647,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
-                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+                                                                beginGucciConfirmation(v27,fn25,flag14)
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11780,7 +11844,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
-                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+                                                                beginGucciConfirmation(v27,fn25,flag14)
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -11961,7 +12025,7 @@ do
 																		v26.Sit = false
 																		now4 = os.clock()
 																		n37 = now4 + 0.15
-                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+                                                                beginGucciConfirmation(v27,fn25,flag14)
 
 																		if now4 < n36 then
 																			tbl12.Teleport(v25, cFrame2)
@@ -12153,7 +12217,7 @@ do
 													v26.Sit = false
 													now4 = os.clock()
 													n37 = now4 + 0.15
-                                                                if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+                                                                beginGucciConfirmation(v27,fn25,flag14)
 
 													if now4 < n36 then
 														tbl12.Teleport(v25, cFrame2)
@@ -14261,13 +14325,19 @@ Hub.cleanup(function() setWeldLag(false) end)
     local messages={
         Starting="Gucci starting; preparing the seat/weld controller.",
         Retrying="Gucci retrying; waiting for seat/weld confirmation.",
-        Active="Gucci active; the seat/weld sequence is running.",
+        Verifying="Gucci is verifying seat release, ownership and controller stability.",
+        Active="Gucci active. Setup complete; seat release and controller checks are stable.",
         ["Waiting for respawn"]="Gucci is waiting for your character to respawn.",
         Disabled="Gucci disabled.",
         Error="Gucci stopped because its controller encountered an error.",
     }
     Hub.reportGucciStatus=function(phase,message)
         if not Hub.alive then return end
+        local proof=Hub.gucciVerifiedRun
+        if phase=="Active" and (not tbl8.GucciAntiGrab or not proof or not proof.Confirmed or proof.Char~=Player.Character) then
+            phase="Verifying";message=nil
+        end
+        if phase~="Active" then Hub.gucciVerifiedRun=nil end
         Hub.gucciStage=phase
         status:SetText("Gucci: "..phase)
         if previousStatus then previousStatus() end
@@ -14314,7 +14384,7 @@ Hub.cleanup(function() setWeldLag(false) end)
         for connection in pairs(sourceConnections) do connection:Disconnect() end
         Hub.sourceDefense=nil
         Hub.sourceGucci=nil
-        Hub.reportGucciStatus=nil
+        Hub.reportGucciStatus=nil;Hub.gucciVerifiedRun=nil
     end)
 end)()
 end
