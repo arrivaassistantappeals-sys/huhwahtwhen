@@ -1,5 +1,7 @@
 # Supplied Resonance feature comparison
 
+Private distribution: load the script manually. The hub no longer downloads itself, queues execution after teleport, fetches server lists or offers server-hop/auto-rejoin controls. Historical comparison entries below describe the earlier import.
+
 Base: main commit `980549990efb367e93740e7c41a4aecf9cadb2eb` (2 November 2026). The upload contains eight embedded source modules; its Main section has 365 literal UI-control construction sites. These are controls, not 365 distinct features. Dynamically generated method menus and option values require additional runtime context.
 
 The uploaded Intro/Library/ThemeManager/SaveManager/Bootstrap are not executed or substituted into the existing hub. Its paid-access/crack wrapper and global remote hooks are not imported. Existing user modifications, current missile/cache implementation, tab order, icon table and previous feature removals are preserved.
@@ -11,7 +13,7 @@ The uploaded Intro/Library/ThemeManager/SaveManager/Bootstrap are not executed o
 - Sticky and Blackhole world ESP with streamed-in discovery, label/color/range/depth/transparency controls.
 - All twelve supplied grab-line textures, nine-stop gradient defaults and editable colors, optional server gradient sharing (2 Hz maximum), and object name/distance/mass/owner information.
 - Current own-toy-group noclip and highlighting, restoring per-part values when selection changes.
-- Public server browser with population filters, FPS/ping/population/random sorting, cancellation, four-page limit, optional auto-hop/rejoin, and queue-on-teleport integration. No unsupported region prediction.
+- Server browser, server-hop, auto-rejoin, teleport auto-execute and remote Reload Hub were removed for the private distribution. Local settings saving and restoration remain available.
 - Visible camera Aim Assist, right-mouse/always activation, protected/selected/visible-target filters, aim part, FOV circle/radius and smoothing. No silent-aim hook or protection bypass.
 - Reversible local part selection, decollision/hiding/highlight/path copy and optional cancellable smooth click teleport using existing validated landing checks.
 - Existing crosshair gains custom image assets and size up to 128; existing particle emitter gains texture/max-speed controls; existing audio filter gains explosion muting.
