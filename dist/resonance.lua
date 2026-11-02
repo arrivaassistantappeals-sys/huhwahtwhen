@@ -857,12 +857,18 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				for _, entry in ipairs(tab.entries) do
 					if not entry.section then
 						local match = query == "" or (tab.name .. " " .. (entry.group or "") .. " " .. entry.name):lower():find(query,1,true) ~= nil
-						entry.frame.Visible = match
+						entry.frame.Visible = match and (query~="" or not (tab.collapsedSections and tab.collapsedSections[entry.group]))
 						if match then any = true; sectionMatches[entry.group or ""] = true end
 					end
 				end
 				for _, entry in ipairs(tab.entries) do
-					if entry.section then entry.frame.Visible = query == "" or sectionMatches[entry.name] == true end
+					if entry.section then
+                        entry.frame.Visible = query == "" or sectionMatches[entry.name] == true
+                        if entry.collapsible then
+                            local collapsed=query=="" and tab.collapsedSections[entry.name]
+                            entry.frame.Text=(collapsed and "+  " or "−  ")..entry.name
+                        end
+                    end
 				end
 				tab.nav.Visible = query == "" or any
 				if tab.nav.Visible and not first then first = tab end
@@ -885,6 +891,26 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			return row,title
 		end
 		local Tab = {}
+        -- BEGIN NAVIGATION METHODS
+        function Tab:SetSectionCollapsed(name,collapsed)
+            self.collapsedSections=self.collapsedSections or {}
+            self.collapsedSections[name]=collapsed==true
+            filter()
+        end
+        function Tab:MoveEntriesTo(target,selectGroup)
+            local remaining={}
+            for _,entry in ipairs(self.entries) do
+                local group=not entry.section and selectGroup(entry)
+                if group then
+                    entry.group=group
+                    entry.frame.Parent=target.page
+                    table.insert(target.entries,entry)
+                else table.insert(remaining,entry) end
+            end
+            self.entries=remaining
+        end
+        -- END NAVIGATION METHODS
+
         -- Presentation only: preserve control instances, callbacks and saved IDs.
         function Tab:Organize(layout)
             local buckets, order, seen = {}, {}, {}
@@ -896,8 +922,13 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
                 if entry.section then
                     entry.frame:Destroy()
                 else
-                    local title=(layout.controls or {})[entry.controlId]
-                        or (layout.rename or {})[entry.group] or entry.group or "Other"
+                    local title=(layout.controls or {})[entry.controlId] or (layout.names or {})[entry.name]
+                    if not title and entry.controlId then
+                        for _,rule in ipairs(layout.prefixes or {}) do
+                            if entry.controlId:sub(1,#rule[1])==rule[1] then title=rule[2];break end
+                        end
+                    end
+                    title=title or (layout.rename or {})[entry.group] or entry.group or "Other"
                     if not seen[title] then
                         seen[title]=true;buckets[title]={};table.insert(order,title)
                     end
@@ -912,7 +943,15 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
                 local entries=buckets[title]
                 if #entries>0 then
                     self:CreateSection(title)
-                    position+=1;self.entries[#self.entries].frame.LayoutOrder=position
+                    local heading=self.entries[#self.entries]
+                    if layout.collapsible then
+                        self.collapsedSections=self.collapsedSections or {}
+                        if self.collapsedSections[title]==nil then self.collapsedSections[title]=title~=layout.openSection end
+                        heading.collapsible=true
+                        local hit=button(heading.frame,"",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1})
+                        Hub.connect(hit.Activated,function() self:SetSectionCollapsed(title,not self.collapsedSections[title]) end)
+                    end
+                    position+=1;heading.frame.LayoutOrder=position
                     local ranks={}
                     for index,id in ipairs((layout.order or {})[title] or {}) do ranks[id]=index end
                     for index,entry in ipairs(entries) do entry.menuIndex=index end
@@ -927,7 +966,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
                 end
             end
             self.section=nil
-            if UI.search.Text~="" then filter() end
+            filter()
         end
 		function Tab:CreateSection(name)
 			self.section = tostring(name)
@@ -2058,9 +2097,9 @@ local Window = Library:CreateWindow({
 
 local Tabs = {
     Player = Window:AddTab("Player", "user"),
-    Defense = Window:AddTab("Defense", "shield"),
+    Defense = Window:AddTab("Protections", "shield"),
     Target = Window:AddTab("Loop Players", "crosshair"),
-    AntiLag = Window:AddTab("Anti Lag", "activity"),
+    AntiLag = Window:AddTab("Performance", "activity"),
     Blob = Window:AddTab("Blobman", "bot"),
     Aura = Window:AddTab("Player Auras", "sparkles"),
     Grab = Window:AddTab("Grab options", "hand"),
@@ -2070,6 +2109,7 @@ local Tabs = {
     Whitelist = Window:AddTab("Protected Players", "user-round-check"),
     Explosions = Window:AddTab("Missiles & Explosions", "orbit"),
     KeyBinds = Window:AddTab("KeyBinds", "keyboard"),
+    Sound = Window:AddTab("Sound", "volume-2"),
     Notifications = Window:AddTab("Notifications", "bell"),
     Customization = Window:AddTab("Appearance", "palette"),
     ["UI Settings"] = Window:AddTab("Settings", "settings"),
@@ -9761,7 +9801,7 @@ do
     Hub.cleanup(function() gravityOn,timeOn,syncTime=false,false,false;for key in pairs(owned) do restore(key) end end)
 end)();
 (function()
-    local group=Tabs.Misc:AddRightGroupbox("Toy Audio")
+    local group=Tabs.Sound:AddRightGroupbox("Toy Audio")
     local boombox,jukebox=false,false
     local saved={};local watcher;local epoch=0
     local function matches(sound)
@@ -10175,7 +10215,7 @@ do
     toggle(visual,"PrivateHideDecals","Hide world decals and textures","decals")
     toggle(visual,"PrivateSimpleMaterials","Simple world materials","material")
     toggle(visual,"PrivateForcefieldCharacter","Forcefield character appearance","character")
-    local audio=Tabs.Visual:AddRightGroupbox("Local sound filters")
+    local audio=Tabs.Sound:AddRightGroupbox("Game Sound Filters")
     toggle(audio,"PrivateMuteAmbience","Mute ambience","ambience")
     toggle(audio,"PrivateMuteScreams","Mute screams","screams")
     toggle(audio,"PrivateMuteSoundwaves","Mute soundwaves","soundwaves")
@@ -15581,7 +15621,7 @@ end
 -- BEGIN NOTIFICATION SOUND LIBRARY
 do
 (function()
-    local group=Tabs.Notifications:AddRightGroupbox("Sound library")
+    local group=Tabs.Sound:AddRightGroupbox("Notification Sounds")
     local presets={
         Pop="rbxassetid://124815381429574",
         ["Bubble Pop"]="rbxassetid://106994752352532",
@@ -15790,16 +15830,57 @@ end)
 
 -- Keep sidebar order fixed; arrange existing rows by purpose after construction.
 do
+    -- Move existing rows; keep the original handles, callbacks, and saved IDs.
+    if Tabs.Sound.native and Tabs.Defense.native then
+        for _,key in ipairs({"Visual","Misc","Notifications"}) do
+            Tabs[key].native:MoveEntriesTo(Tabs.Sound.native,function(entry)
+                if entry.controlId=="LoopNotifySounds" then return "Loop Alert Sounds" end
+                if entry.controlId=="PackBlackholeSound" or entry.controlId=="PackBlackholeSoundOn" then return "Blackhole Audio" end
+            end)
+        end
+        Tabs.Defense.native:MoveEntriesTo(Tabs.AntiLag.native,function(entry)
+            if entry.controlId=="AntiLagToggle" then return "Manual Line Protection" end
+            if entry.controlId=="SourceLowFpsAntiLag" or entry.controlId=="SourceLowFpsThreshold" then return "Low FPS Protection" end
+        end)
+    end
     local layouts = {
         Player={sections={"Movement","Flight","Camera","Spectator Camera","Follow Player Position","Character animations","Plot Barriers","Performance"},
             rename={["View & Movement"]="Movement"},
             controls={ThirdPersonToggle="Camera",ToolFirstPerson="Camera",FOVSlider="Camera"},
             order={Movement={"SpeedModifierToggle","SpeedValue","JumpModifierToggle","JumpValue","infJumpToggle","SelfNoclipToggle","ToolGravity","ToolGravityValue","SpinToggle","SpinSpeed"}}},
-        Defense={sections={"Core Protections","Safe Zone","Local hazard filters","Recovery","Extra Protections"},
-            rename={["Defense Main"]="Core Protections",["Extra Defense"]="Extra Protections"},
-            controls={AutoResetToggle="Recovery",RecoverMovementAfterGrab="Recovery"}},
+        Defense={sections={"Grab & Seat Protection","Gucci Protection","Anti Kick","Anti Kick Appearance","Movement & Void Recovery","World Hazards","Input Protection","Collision Protection","Safe Zone","Movement Warnings","Advanced & Countermeasures"},
+            collapsible=true,openSection="Grab & Seat Protection",
+            rename={["Defense Main"]="Grab & Seat Protection",["Extra Defense"]="Advanced & Countermeasures",["Local hazard filters"]="World Hazards"},
+            controls={
+                AntiGrabObsidian="Grab & Seat Protection",RecoverMovementAfterGrab="Grab & Seat Protection",AntiBlobmanToggle="Grab & Seat Protection",LocalUnwantedSeatProtection="Grab & Seat Protection",AntiStickyToggle="Grab & Seat Protection",
+                AutoGucciBlobToggle="Gucci Protection",AutoGucciTrainToggle="Gucci Protection",GucciAutoDeleteBlob="Gucci Protection",SourceGucciVehicle="Gucci Protection",SourceRagdollOnRemoveGucci="Gucci Protection",
+                ShurikenAntiKick="Anti Kick",SourceBreakPCLD="Anti Kick",
+                AntiVoidToggle="Movement & Void Recovery",SourceDisableVoid="Movement & Void Recovery",LocalMotionProtection="Movement & Void Recovery",LocalMotionLinearLimit="Movement & Void Recovery",LocalMotionAngularLimit="Movement & Void Recovery",LoopTP="Movement & Void Recovery",
+                AntiExplosionToggle="World Hazards",AntiBurnToggle="World Hazards",PaintDeleteToggle="World Hazards",SourceAntiBanana="World Hazards",SourceAntiSnowball="World Hazards",
+                AntiInputLag="Input Protection",SourceInputToy="Input Protection",SourceInputDelay="Input Protection",SourceInputTransparency="Input Protection",
+                SourceAntiObjectFling="Collision Protection",SourceNoclipBarrier="Collision Protection",SourceAntiInvis="Collision Protection",
+                MovementWarningMonitor="Movement Warnings",AutoResetToggle="Movement Warnings",SourceCorrectionLeave="Movement Warnings",
+            },
+            prefixes={{"SourceAntiKick","Anti Kick Appearance"}},
+            names={
+                ["Release local grab freeze"]="Grab & Seat Protection",
+                ["Anti Sticky uses the supplied connected-part method."]="Grab & Seat Protection",
+                ["Last person who grabbed you: nobody"]="Grab & Seat Protection",
+                ["Gucci uses the supplied seat/weld controller."]="Gucci Protection",
+                ["Gucci: supplied seat/weld controller, off"]="Gucci Protection",
+                ["Stop supplied Gucci and clean its toy"]="Gucci Protection",
+                ["Anti Void uses the supplied height-threshold recovery method."]="Movement & Void Recovery",
+                ["Record safe ground here"]="Movement & Void Recovery",["Return to last safe ground"]="Movement & Void Recovery",["Motion recovery status"]="Movement & Void Recovery",
+                ["Anti Banana uses the source's leg-breaking method, respawn restores missing limbs."]="World Hazards",
+                ["Movement warning count"]="Movement Warnings",["Clear observed warning count"]="Movement Warnings",
+            },
+            order={
+                ["Grab & Seat Protection"]={"AntiGrabObsidian","RecoverMovementAfterGrab","AntiBlobmanToggle","LocalUnwantedSeatProtection","AntiStickyToggle"},
+                ["Gucci Protection"]={"AutoGucciBlobToggle","SourceGucciVehicle","GucciAutoDeleteBlob","AutoGucciTrainToggle","SourceRagdollOnRemoveGucci"},
+                ["Movement & Void Recovery"]={"AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","LocalMotionLinearLimit","LocalMotionAngularLimit","LoopTP"},
+            }},
         Target={sections={"Target Interaction","Aim Assist"}},
-        AntiLag={sections={"Automatic Line Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
+        AntiLag={collapsible=true,openSection="Manual Line Protection",sections={"Manual Line Protection","Automatic Line Protection","Low FPS Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
         Blob={sections={"Controls","Seating","Flight"},
             controls={AutoReseatBlobLoops="Seating",BlobReseatInterval="Seating",AutoSitZ="Seating",BlobFlySpeed="Flight"}},
         Aura={sections={"Player Auras","Attraction & Tornado","Range & Alerts"}},
@@ -15807,13 +15888,16 @@ do
             rename={["Line Texture & Gradient"]="Line Appearance"}},
         Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
             rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
-        Visual={sections={"Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Local environment","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance","Local sound filters"}},
-        Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Toy Audio"},
+        Visual={sections={"Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Local environment","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance"}},
+        Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools"},
             rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
         Whitelist={sections={"Protected Players"}},
         Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
         KeyBinds={sections={"Menu & emergency","Action shortcuts","Missile throw"}},
-        Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Sound library","Notification theme","Position & Appearance"}},
+        Sound={collapsible=true,openSection="Game Sound Filters",sections={"Game Sound Filters","Toy Audio","Notification Sounds","Info Notifications","Warning Notifications","Success Notifications","Danger Notifications","Loop Alert Sounds","Blackhole Audio"},
+            prefixes={{"NoticeInfo","Info Notifications"},{"NoticeWarning","Warning Notifications"},{"NoticeSuccess","Success Notifications"},{"NoticeDanger","Danger Notifications"}},
+            names={["Preview info sound"]="Info Notifications",["Preview warning sound"]="Warning Notifications",["Preview success sound"]="Success Notifications",["Preview danger sound"]="Danger Notifications"}},
+        Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Notification theme","Position & Appearance"}},
         Customization={sections={"Hub Theme","Appearance","Custom Theme Colors","On-screen FPS & Ping","Anchor Appearance","Touch Action Buttons"}},
         ["UI Settings"]={sections={"Menu","Saved settings"}},
     }
