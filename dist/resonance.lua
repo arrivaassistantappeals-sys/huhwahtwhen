@@ -116,29 +116,40 @@ function Hub.queueSavedCallbacks(records,invoke)
     Hub.restoreEpoch=(Hub.restoreEpoch or 0)+1
     local ticket=Hub.restoreEpoch
     local delayed={}
-    Hub.restoreProgress={total=0,started=0,done=false}
-    local progress=Hub.restoreProgress
+    local progress={total=#records,started=0,completed=0,failed=0,skipped=0,done=#records==0,errors={}}
+    Hub.restoreProgress=progress
     local function run(record)
+        if not Hub.alive or ticket~=Hub.restoreEpoch then return end
         local control=record.control
-        if not Hub.alive or ticket~=Hub.restoreEpoch or control.revision~=record.revision then return end
-        Hub.lastRestoreControl=control.Id or "saved control"
-        invoke(control.Callback,record.value)
+        if control.revision~=record.revision then
+            progress.skipped+=1
+        else
+            progress.started+=1
+            Hub.lastRestoreControl=control.Id or "saved control"
+            local ok,err=invoke(control.Callback,record.value)
+            if ok==false then
+                progress.failed+=1
+                progress.errors[control.Id or "saved control"]=tostring(err)
+            end
+        end
+        progress.completed+=1
+        progress.done=progress.completed==progress.total
     end
     for _,record in ipairs(records) do
-        if record.control.Type=="Toggle" and record.value==true then table.insert(delayed,record)
+        -- Restore manual line protection without the optional startup feature delay.
+        if record.control.Type=="Toggle" and record.value==true and record.control.Id~="AntiLagToggle" then
+            table.insert(delayed,record)
         else task.defer(function() run(record) end) end
     end
-    progress.total=#delayed
+    if #delayed==0 then return end
     task.spawn(function()
         local setting=Hub.library and Hub.library.Options.StartupFeatureDelay
         task.wait(math.clamp(tonumber(setting and setting.Value) or 3,0,10))
         for _,record in ipairs(delayed) do
             if not Hub.alive or ticket~=Hub.restoreEpoch then return end
             task.spawn(function() run(record) end)
-            progress.started+=1
             task.wait(0.1)
         end
-        if ticket==Hub.restoreEpoch then progress.done=true end
     end)
 end
 
@@ -214,18 +225,26 @@ function Hub.pollSettings()
 	end
 	Hub.lastSnapshotError = nil
 	if fingerprint ~= Hub.lastSettings then
-		Hub.lastSettings = fingerprint
 		Hub.requestSave()
 	end
 end
 function Hub.requestSave()
 	if not Hub.ready or not Hub.storage or Hub.configLoading or Hub.configLoadFailed then return end
 	if Hub.saveThread then pcall(Hub.nativeTask.cancel, Hub.saveThread); Hub.threads[Hub.saveThread] = nil end
-	Hub.saveThread = task.delay(1, function()
+	Hub.saveThread = task.delay(0.25, function()
 		Hub.saveThread = nil
 		local ok, err = Hub.persistSettings()
 		if not ok then warn("[Arriva autosave] " .. tostring(err)) end
 	end)
+end
+function Hub.flushSettings()
+    if Hub.saveThread then
+        pcall(Hub.nativeTask.cancel,Hub.saveThread)
+        Hub.threads[Hub.saveThread]=nil
+        Hub.saveThread=nil
+    end
+    if not Hub.ready or not Hub.storage then return true end
+    return Hub.persistSettings()
 end
 function Hub.installConfigLoading(saveManager)
 	local original = saveManager.LoadJSON
@@ -1628,7 +1647,10 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	end
 	local function notifyError(err) Hub.lastUIError=tostring(err);warn("[Arriva Rayfield] " .. tostring(err)) end
 	local function invoke(callback, value)
-		if callback then local ok, err = pcall(callback, value); if not ok then notifyError(err) end end
+		if not callback then return true end
+		local ok,err=pcall(callback,value)
+		if not ok then notifyError(err) end
+		return ok,err
 	end
 	function Library:Notify(info)
 		Rayfield:Notify({Title = info.Title or "Arriva", Content = info.Description or info.Content or "",
@@ -1677,8 +1699,9 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			self.busy = true
 			local ok, err = pcall(function() self.handle:Set(self:toRayfield(normalized)) end)
 			self.busy = false
-			if not ok then notifyError(err); return end
+			if not ok then notifyError(err); return false,tostring(err) end
 			self:commit(normalized)
+			return true
 		end
 		function control:normalize(value) return value end
 		function control:toRayfield(value) return value end
@@ -1895,8 +1918,10 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				if control and not self.ignored[id] then
 					local value=record.value
 					if control.Type=="KeyPicker" then value=record.key or record.value end
-					local applied,reason=pcall(function() control:SetValue(value) end)
-					if not applied then table.insert(errors,tostring(record.idx) .. ": " .. tostring(reason)) end
+					local called,applied,reason=pcall(function() return control:SetValue(value) end)
+					if not called or applied==false then
+						table.insert(errors,tostring(record.idx) .. ": " .. tostring(called and reason or applied))
+					end
 				end
 			end
 		end
@@ -13288,7 +13313,8 @@ local lagScripts={}
 local function updateLagScripts(on)
     local scripts=Player:FindFirstChild("PlayerScripts")
     if on and scripts then
-        for _,name in ipairs({"CharacterAndBeamMove","StickyPartsTouchDetection"}) do
+        -- CharacterAndBeamMove is already owned/restored by the core Anti Lag watcher.
+        for _,name in ipairs({"StickyPartsTouchDetection"}) do
             local script=scripts:FindFirstChild(name)
             if script and script:IsA("LocalScript") then if lagScripts[script]==nil then lagScripts[script]=script.Enabled end;script.Enabled=false end
         end
@@ -14573,11 +14599,14 @@ do
         return candidates[1]
     end
     local function queue()
+        if Hub.flushSettings then
+            local ok,err=Hub.flushSettings()
+            if not ok then status:SetText("Settings could not save before teleport: "..tostring(err));return false end
+        end
         if not loadScript then return true end
         local enqueue=queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
         if type(enqueue)~="function" then status:SetText("Queue-on-teleport is unavailable; disable Keep script.");return false end
-        if Hub.pollSettings then pcall(Hub.pollSettings) end
-        local loader="loadstring(game:HttpGet('https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/main/dist/resonance.lua'))()"
+        local loader="loadstring(game:HttpGet('https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/codex/resonance-feature-port/dist/resonance.lua'))()"
         local ok=pcall(enqueue,loader)
         if not ok then status:SetText("Could not queue the script.") end
         return ok
@@ -15489,7 +15518,7 @@ do
 if not game:IsLoaded() then game.Loaded:Wait() end
 task.wait(2)
 local ok,err=pcall(function()
-    local source=game:HttpGet("https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/main/dist/resonance.lua")
+    local source=game:HttpGet("https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/codex/resonance-feature-port/dist/resonance.lua")
     local run,compileError=loadstring(source)
     if not run then error(compileError) end
     run()
@@ -15501,7 +15530,8 @@ if not ok then warn("[Arriva auto execute] " .. tostring(err)) end
 			queued=true
 		end
 		busy=true
-		if Hub.pollSettings then pcall(Hub.pollSettings) end
+		local saved,saveError=Hub.flushSettings()
+		if not saved then busy=false;notify("Save error","Rejoin stopped because settings could not be saved: "..tostring(saveError),8);return end
 		local ok,err=pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId,Player) end)
 		if not ok then busy=false;notify("Rejoin error",tostring(err),6) end
 		task.delay(10,function() busy=false end)
@@ -15578,7 +15608,7 @@ do
 		reloading=true
 		notify("Reload Hub","Checking the latest hub version...",3)
 		local ok,compiled=pcall(function()
-			local source=game:HttpGet("https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/main/dist/resonance.lua")
+			local source=game:HttpGet("https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/codex/resonance-feature-port/dist/resonance.lua")
 			local run,err=loadstring(source)
 			if not run then error(err) end
 			return run
@@ -15620,6 +15650,8 @@ end})
 Hub.keybindGroups.interface:AddLabel("Toggle menu"):AddKeyPicker("MenuKeybind", { Default = "M", NoUI = true, Text = "Menu keybind" })
 Library.ToggleKeybind = Options.MenuKeybind
 
+-- Register every saved control before loading settings.
+MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
 -- Session customization does not require executor file-storage support.
 ThemeManager:ApplyToTab(Tabs.Customization)
 Hub.storage = type(isfile)=="function" and type(readfile)=="function" and type(writefile)=="function" and type(isfolder)=="function" and type(makefolder)=="function"
@@ -15642,7 +15674,15 @@ if Hub.storage then
 else
 	notify("Config", "File storage unavailable. Settings work for this session.")
 end
--- Defer until SaveManager's deferred load callbacks have finished.
+-- External teleports also flush the current values before the client leaves.
+if Player.OnTeleport then
+    Hub.connect(Player.OnTeleport,function(state)
+        if state~=Enum.TeleportState.Started then return end
+        local ok,err=Hub.flushSettings()
+        if not ok then warn("[Arriva teleport save] "..tostring(err)) end
+    end)
+end
+-- The control values are loaded; enabled callbacks may still be starting.
 task.defer(function()
 	if not Hub.loadedSafety then Hub.readSafety() end
 	if Hub.refreshWhitelistUI then Hub.refreshWhitelistUI() end
@@ -15652,14 +15692,13 @@ task.defer(function()
 	Hub.startupSeconds=os.clock()-Hub.startupBegan
 	if not Hub.configLoaded and not Hub.configLoadFailed then Hub.requestSave() end
 end)
-MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
 MenuGroup:AddButton({Text="Startup diagnostics",Func=function()
     local listeners,workers=0,0
     for connection in pairs(Hub.connections) do if connection.Connected then listeners+=1 end end
     for thread in pairs(Hub.threads) do if coroutine.status(thread)~="dead" then workers+=1 end end
     local progress=Hub.restoreProgress
     local message=string.format("UI startup %.2fs, %d listeners, %d tracked workers.",Hub.startupSeconds or 0,listeners,workers)
-    if progress then message..=string.format(" Saved enabled features started: %d/%d%s.",progress.started,progress.total,progress.done and " (finished)" or " (starting)") end
+    if progress then message..=string.format(" Saved callbacks completed: %d/%d, %d failed, %d superseded%s.",progress.completed,progress.total,progress.failed,progress.skipped,progress.done and " (finished)" or " (starting)") end
     if Hub.lastRestoreControl then message..=" Last restored: "..Hub.lastRestoreControl.."." end
     if Hub.lastUIError then message..=" Last callback error: "..Hub.lastUIError:sub(1,180) end
     if Hub.lastCallbackError then message..=" Last event error: "..Hub.lastCallbackError:sub(1,180) end
