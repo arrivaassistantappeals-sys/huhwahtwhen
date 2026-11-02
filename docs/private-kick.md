@@ -17,6 +17,23 @@ The test-only player picker and duration slider are gone. Non-Void methods perfo
 
 Grab-Drop and Grab-Release require you to be seated in your own Blobman with an empty right hand. Ownership and Void do not need a Blobman. Start within 30 studs of the target; protected players and players inside a plot remain excluded. Existing whitelist settings are respected and are not automatically disabled.
 
+## Original-style method settings
+
+**Target → Kick Settings** controls the ownership method:
+
+- **Kick Height:** default 15, range 0–28. Ownership uses the upload's world-space ring with radius 10 studs at this height.
+- **Delay Mode:** Normal releases ownership on the next frame; Faster but worse schedules the release after 0.2 seconds. Delayed callbacks are cancelled/guarded when an action stops.
+- **Loop Ragdoll:** enabled by default. Uses the supplied `PalletLightBrown`/SoundPart approach, with at most one helper worker per action. It requires the toy to be available and ownership confirmed; temporary forces and the helper toy are cleaned up.
+
+**Blobman → Kick Settings** controls Grab-Drop and Grab-Release:
+
+- **X Offset:** default 0, range −5 to 5.
+- **Y Offset:** default 25, range 10–40.
+- **Z Offset:** default 0, range −5 to 5.
+- **Net Owner Spam (Grab-Drop):** disabled by default; adds grab/drop ownership requests at the bounded action cadence. Grab-Release includes its own ownership/ragdoll step.
+
+Height and offsets update the active hold position when changed. These method settings are saved in the private build's configuration. They do not change the Void destination or its 0.35-second release timing. This restores the listed controls; hidden-property improvements, anti-kick-removal controls and server-wide flooding are not imported.
+
 ## Callable functions
 
 The hub uses the same functions as its UI. They are available as `Hub.privateKick` internally and `getgenv().ArrivaPrivateKick` externally while this build is running:
