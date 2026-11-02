@@ -4559,6 +4559,10 @@ do
     local showHP,showUsername,showDisplayName,boldText=true,true,true,true
     -- tool Visual/ESP: independently configurable fill and outline.
     local outlineColor,outlineAlpha=Color3.new(1,1,1),0.2
+    local showPlate,showIcon,showHighlight=true,true,true
+    local fontFamily,textSize,yOffset,maxDistance="GothamSSm",16,3,1200
+    local textColor,strokeColor,strokeAlpha=Color3.new(1,1,1),Color3.new(0,0,0),0
+    local rainbowFill,rainbowOutline,rainbowText=false,false,false
     local entries={};local elapsed=0
     local function clear(p) local e=entries[p];if e then e.gui:Destroy();e.highlight:Destroy();entries[p]=nil end end
     local function update()
@@ -4578,9 +4582,22 @@ do
                     text.BackgroundTransparency=1;text.TextSize=16;text.TextWrapped=true
                     text.Font=Enum.Font.GothamBold;text.TextStrokeColor3=Color3.new(0,0,0);text.TextStrokeTransparency=0
                     local highlight=Hub.new("Highlight",char);highlight.Adornee=char
-                    e={gui=gui,text=text,highlight=highlight,character=char};entries[p]=e
+                    e={gui=gui,text=text,avatar=avatar,highlight=highlight,character=char};entries[p]=e
                 end
-                e.gui.AlwaysOnTop=through;e.text.TextColor3=Color3.new(1,1,1);e.highlight.FillColor=color;e.highlight.OutlineColor=outlineColor
+                local hue=Color3.fromHSV((os.clock()*0.15)%1,1,1)
+                e.gui.AlwaysOnTop=through;e.gui.MaxDistance=maxDistance
+                e.gui.StudsOffset=Vector3.new(0,yOffset,0)
+                e.gui.Size=UDim2.fromOffset(220,math.max(58,textSize*3+10))
+                e.avatar.Visible=showPlate and showIcon
+                e.text.Position=UDim2.fromOffset(showIcon and 36 or 0,0)
+                e.text.Size=UDim2.new(1,showIcon and -36 or 0,1,0)
+                e.text.TextSize=textSize
+                e.text.TextColor3=rainbowText and hue or textColor
+                e.text.TextStrokeColor3=strokeColor;e.text.TextStrokeTransparency=strokeAlpha
+                e.highlight.FillColor=rainbowFill and hue or color
+                e.highlight.OutlineColor=rainbowOutline and hue or outlineColor
+                local ownRoot=Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                e.highlight.Enabled=showHighlight and ownRoot~=nil and (head.Position-ownRoot.Position).Magnitude<=maxDistance
                 e.highlight.FillTransparency=alpha;e.highlight.OutlineTransparency=outlineAlpha
                 e.highlight.DepthMode=through and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
                 local name=""
@@ -4590,8 +4607,11 @@ do
                 if name~="" then table.insert(lines,name) end
                 if showHP then table.insert(lines,string.format("HP %.0f",hum.Health)) end
                 e.text.Text=table.concat(lines,"\n")
-                e.text.Visible=#lines>0
-                e.text.Font=boldText and Enum.Font.GothamBold or Enum.Font.Gotham
+                e.text.Visible=showPlate and #lines>0
+                local ok=pcall(function()
+                    e.text.FontFace=Font.new("rbxasset://fonts/families/"..fontFamily..".json",boldText and Enum.FontWeight.Bold or Enum.FontWeight.Regular,Enum.FontStyle.Normal)
+                end)
+                if not ok then e.text.Font=boldText and Enum.Font.GothamBold or Enum.Font.Gotham end
             else clear(p) end
         end end
     end
@@ -4615,7 +4635,24 @@ do
             outlineColor=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16));update()
         end
     end})
-    Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.5 then elapsed=0;update() end end)
+    group:AddToggle("PackESPHighlight",{Text="Character highlight",Default=true,Callback=function(on) showHighlight=on;update() end})
+    group:AddToggle("PackESPNameplate",{Text="Nameplate",Default=true,Callback=function(on) showPlate=on;update() end})
+    group:AddToggle("PackESPAvatar",{Text="Avatar icon",Default=true,Callback=function(on) showIcon=on;update() end})
+    group:AddDropdown("PackESPFont",{Text="Name font",Values={"GothamSSm","Arial","SourceSansPro","RobotoMono"},Default=1,Callback=function(value) fontFamily=value;update() end})
+    group:AddSlider("PackESPTextSize",{Text="Name size",Default=16,Min=8,Max=32,Rounding=0,Callback=function(value) textSize=value;update() end})
+    group:AddSlider("PackESPNameOffset",{Text="Name height",Default=3,Min=0,Max=8,Rounding=1,Callback=function(value) yOffset=value;update() end})
+    group:AddSlider("PackESPMaxDistance",{Text="ESP distance",Default=1200,Min=50,Max=5000,Rounding=0,Callback=function(value) maxDistance=value;update() end})
+    group:AddSlider("PackESPTextOutline",{Text="Name outline transparency",Default=0,Min=0,Max=100,Rounding=0,Callback=function(value) strokeAlpha=value/100;update() end})
+    local function parse(value)
+        local hex=tostring(value):gsub("#","")
+        if #hex==6 and hex:match("^%x+$") then return Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16)) end
+    end
+    group:AddInput("PackESPTextColor",{Text="Name color hex",Default="FFFFFF",Finished=true,Callback=function(value) textColor=parse(value) or textColor;update() end})
+    group:AddInput("PackESPStrokeColor",{Text="Name outline hex",Default="000000",Finished=true,Callback=function(value) strokeColor=parse(value) or strokeColor;update() end})
+    group:AddToggle("PackESPRainbowFill",{Text="Rainbow fill",Default=false,Callback=function(on) rainbowFill=on;update() end})
+    group:AddToggle("PackESPRainbowOutline",{Text="Rainbow outline",Default=false,Callback=function(on) rainbowOutline=on;update() end})
+    group:AddToggle("PackESPRainbowText",{Text="Rainbow name",Default=false,Callback=function(on) rainbowText=on;update() end})
+    Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=((rainbowFill or rainbowOutline or rainbowText) and 0.1 or 0.5) then elapsed=0;update() end end)
     Hub.connect(Players.PlayerRemoving,clear)
     Hub.cleanup(function() enabled=false;for p in pairs(entries) do clear(p) end end)
 end)()
@@ -5014,7 +5051,7 @@ do
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         local seat = Hub.getBlobSeat()
         if not Hub.heavyBlobEnabled or not seat or not root or not hum or hum.Health <= 0
-            or Hub.blobFlightActive or (Hub.isBlobFlightActive and Hub.isBlobFlightActive()) then clearHeavy(); return end
+            or Hub.blobFlightActive or Hub.characterFlightActive or (Hub.isBlobFlightActive and Hub.isBlobFlightActive()) then clearHeavy(); return end
         if heldRoot ~= root or lastSeat ~= seat or not hold or not hold.Parent then
             clearHeavy()
             heldRoot, lastSeat, holdPosition = root, seat, root.Position
@@ -7226,8 +7263,8 @@ do
         end
     end
     group:AddToggle("ToolInvisibleLine",{Text="Invisible line (local)",Default=false,Callback=function(on) hidden=on;refresh() end})
-    group:AddToggle("ToolLineTint",{Text="Custom line color (local)",Default=false,Callback=function(on) colored=on;refresh() end})
-    group:AddToggle("ToolRainbowLine",{Text="RGB line (local)",Default=false,Callback=function(on) rainbow=on;refresh() end})
+    group:AddToggle("ToolLineTint",{Text="Custom line color (local)",Default=false,Callback=function(on) if on and Toggles.PackGradientLine then Toggles.PackGradientLine:SetValue(false) end;colored=on;refresh() end})
+    group:AddToggle("ToolRainbowLine",{Text="RGB line (local)",Default=false,Callback=function(on) if on and Toggles.PackGradientLine then Toggles.PackGradientLine:SetValue(false) end;rainbow=on;refresh() end})
     group:AddInput("ToolLineColor",{Text="Line color hex",Default="FF0000",Finished=true,Callback=function(value)
         local hex=tostring(value):gsub("#","")
         if #hex==6 and hex:match("^%x+$") then
@@ -7996,7 +8033,9 @@ Hub.clickTeleport=function()
             if (position-root.Position).Magnitude>512 or position.Y<=Workspace.FallenPartsDestroyHeight+8 then return end
             -- A real collidable toy is a valid landing surface, regardless of anchoring or ownership.
             local clearance=math.max(3,hum.HipHeight+root.Size.Y/2+0.5)
-            root.CFrame=CFrame.new(position+Vector3.new(0,clearance,0))*root.CFrame.Rotation
+            local destination=CFrame.new(position+Vector3.new(0,clearance,0))*root.CFrame.Rotation
+            if Hub.smoothTeleport and Hub.smoothTeleport(root,destination) then return end
+            root.CFrame=destination
             root.AssemblyLinearVelocity=Vector3.zero
             root.AssemblyAngularVelocity=Vector3.zero
 end
@@ -8663,6 +8702,19 @@ do
             elseif name=="Star" then
                 local width=index%2==0 and 0.45 or 1
                 return Vector3.new(math.cos(angle)*width,math.sin(angle)*width,0)
+            elseif name=="Wings" then
+                local side=index%2==0 and 1 or -1
+                local span=math.floor((index-1)/2)/math.max(math.ceil(total/2)-1,1)
+                return Vector3.new(side*(0.1+span*0.9),math.sin(span*math.pi)*0.5,0.15+span*0.4)
+            elseif name=="Cape" then
+                local column=(index-1)%4
+                local row=math.floor((index-1)/4)
+                return Vector3.new(column/3-0.5,-row/math.max(math.ceil(total/4)-1,1),0.25+math.sin(rotation+row)*0.08)
+            elseif name=="67" then
+                local points={{-1.75,1.65},{-0.65,1.65},{-1.75,0.55},{-1.75,-0.55},{-0.65,-0.55},{-1.75,-1.65},{-0.65,-1.65},
+                    {0.5,1.65},{1.6,1.65},{2.7,1.65},{2.15,0.55},{1.6,-0.55},{1.05,-1.65}}
+                local point=points[(index-1)%#points+1]
+                return Vector3.new((point[1]-0.475)/2.225,point[2]/2.225,0)
             elseif name=="Helix" then
 				return Vector3.new(math.cos(angle),(fraction-0.5)*2,math.sin(angle))
 			end
@@ -8825,7 +8877,7 @@ do
 			Callback=function(on) enabled=on;start() end})
 		shapes:AddDropdown("CreativeAuraSource",{Text="Objects to use",Values={"Local decorations","My spawned toys"},Default=1,
 			Callback=function(value) mode=value;start() end})
-		settings:AddDropdown("CreativeAuraShape",{Text="Shape",Values={"Heart","Ring","Helix","Figure Eight","Tornado","Blackhole","Star"},Default=1,
+		settings:AddDropdown("CreativeAuraShape",{Text="Shape",Values={"Heart","Ring","Helix","Figure Eight","Tornado","Blackhole","Star","Wings","Cape","67"},Default=1,
 			Callback=function(value) shape=value end})
 		settings:AddSlider("CreativeAuraCount",{Text="Maximum objects",Default=24,Min=8,Max=40,Rounding=0,
 			Callback=function(value) count=value;start() end})
@@ -9652,9 +9704,9 @@ end
 do
 (function()
     local group=Tabs.Misc:AddLeftGroupbox("Plots & Slots")
-    local slotOn,houseOn=false,false
+    local slotOn,houseOn,claimOn=false,false,false
     local selectedPlot="Plot3"
-    local nextSlot,nextHouse=0,0
+    local nextSlot,nextHouse,nextClaim=0,0,0
     local visit
     local function selfRoot()
         local char=Player.Character
@@ -9662,7 +9714,7 @@ do
         local hum=char and char:FindFirstChildOfClass("Humanoid")
         local held=Player:FindFirstChild("IsHeld")
         if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
-            or (held and held.Value) or Hub.safeZoneLoopActive or Hub.blobFlightActive then return end
+            or (held and held.Value) or Hub.safeZoneLoopActive or Hub.blobFlightActive or Hub.characterFlightActive then return end
         for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
         return root,char
     end
@@ -9689,20 +9741,26 @@ do
         end
     end
     group:AddDropdown("ToolPlot",{Text="Plot",Values={"Plot1","Plot2","Plot3","Plot4","Plot5"},Default=3,Callback=function(value) selectedPlot=value end})
-    group:AddButton({Text="Claim selected plot (nearby)",Func=function()
+    local function claim(onlyEmpty)
         local plots=Workspace:FindFirstChild("Plots")
         local plot=plots and plots:FindFirstChild(selectedPlot)
         local sign=plot and plot:FindFirstChild("PlotSign")
+        local owners=sign and sign:FindFirstChild("ThisPlotsOwners")
+        if onlyEmpty and owners and #owners:GetChildren()>0 then return false end
         local plus=sign and sign:FindFirstChild("Plus")
-        local part=plus and plus:FindFirstChild("PlusGrabPart")
-        if not grabOnce(part) then notify("Plot","Stand within 30 studs of the selected plot's claim sign. Character and grab remotes must be ready.",5) end
+        return grabOnce(plus and plus:FindFirstChild("PlusGrabPart"))
+    end
+    group:AddButton({Text="Claim selected plot (nearby)",Func=function()
+        if not claim(false) then notify("Plot","Stand within 30 studs of the selected plot's claim sign. Character and grab remotes must be ready.",5) end
     end})
+    group:AddToggle("PackAutoClaimPlot",{Text="Auto-claim selected empty plot",Default=false,Callback=function(on) claimOn=on;nextClaim=0 end})
     group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (nearby)",Default=false,Callback=function(on) slotOn=on;nextSlot=0 end})
     group:AddToggle("ToolAutoSaveHouse",{Text="Auto save house time",Default=false,Callback=function(on)
         houseOn=on;nextHouse=0;if not on then finishVisit() end
     end})
     function Hub.sampleToolAutomation()
         local now=os.clock()
+        if claimOn and now>=nextClaim then nextClaim=now+5;claim(true) end
         if slotOn and now>=nextSlot then
             nextSlot=now+3
             local slots=Workspace:FindFirstChild("Slots")
@@ -9741,7 +9799,7 @@ do
     end
     local elapsed=0
     Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.5 then elapsed=0;Hub.sampleToolAutomation() end end)
-    Hub.cleanup(function() slotOn,houseOn=false,false;finishVisit();Hub.sampleToolAutomation=nil end)
+    Hub.cleanup(function() slotOn,houseOn,claimOn=false,false,false;finishVisit();Hub.sampleToolAutomation=nil end)
 end)();
 (function()
     TargetGroup:AddButton({Text="Stop all action loops",Func=function()
@@ -9749,7 +9807,8 @@ end)();
         for id in pairs(Toggles) do
             local key=tostring(id):lower()
             if (key:find("loop",1,true) and id~="AutoReseatBlobLoops") or key:find("aura",1,true)
-                or id=="ToolAutoSpin" or id=="ToolAutoSaveHouse" then table.insert(ids,id) end
+                or id=="ToolAutoSpin" or id=="ToolAutoSaveHouse" or id=="PackCharacterFlight"
+                or id=="PackAimAssist" or id=="PackAutoServerHop" or id=="PackAutoClaimPlot" then table.insert(ids,id) end
         end
         for _,id in ipairs(ids) do
             local toggle=Toggles[id]
@@ -9818,7 +9877,10 @@ do
     local epoch=0
     local color=Color3.fromRGB(120,190,255)
     local crossSize,particleRate,particleSize=18,12,0.3
-    local crossGui,crossLabel,hat,attachment,emitter
+    local crossGui,crossLabel,crossImage,hat,attachment,emitter
+    local crossAsset=""
+    local particleTexture="rbxasset://textures/particles/sparkles_main.dds"
+    local particleSpeed=2
     local function forget(instance)
         for _,connection in ipairs(watches[instance] or {}) do connection:Disconnect();Hub.connections[connection]=nil end
         watches[instance]=nil
@@ -9858,7 +9920,8 @@ do
             while ancestor and ancestor~=Workspace do if ancestor.Name=="MapNoises" then ambient=true;break end;ancestor=ancestor.Parent end
             if (states.ambience and ambient) or (states.screams and instance.Name=="Scream" and parent and parent.Name=="HumanoidRootPart")
                 or (states.soundwaves and instance.Name=="SineWave") or (states.rhythm and instance.Name:lower():match("^sound[1-8]$"))
-                or (states.instruments and parent and parent.Name=="MusicPart") then override(instance,"Volume",0) end
+                or (states.instruments and parent and parent.Name=="MusicPart")
+                or (states.explosions and parent and parent:IsA("BasePart") and parent.Name=="Part" and parent.Parent==Workspace) then override(instance,"Volume",0) end
         end
         if states.poison and isPoison(instance) then override(instance,"CanTouch",false) end
         if states.blur and instance:IsA("BlurEffect") then override(instance,"Enabled",false) end
@@ -9914,6 +9977,7 @@ do
     toggle(audio,"PrivateMuteSoundwaves","Mute soundwaves","soundwaves")
     toggle(audio,"PrivateMuteRhythm","Mute rhythm makers","rhythm")
     toggle(audio,"PrivateMuteInstruments","Mute instruments","instruments")
+    toggle(audio,"PackMuteExplosions","Mute explosions","explosions")
     local shadowOriginal
     visual:AddToggle("PrivateNoShadows",{Text="Disable global shadows",Default=false,Callback=function(on)
         if on then
@@ -9941,8 +10005,8 @@ do
         if states.cosmeticParticles and root then
             attachment=Hub.new("Attachment",root);attachment.Name="ArrivaLocalParticles"
             emitter=Hub.new("ParticleEmitter",attachment)
-            emitter.Texture="rbxasset://textures/particles/sparkles_main.dds"
-            emitter.Rate=particleRate;emitter.Lifetime=NumberRange.new(1,2);emitter.Speed=NumberRange.new(0.5,2)
+            emitter.Texture=particleTexture
+            emitter.Rate=particleRate;emitter.Lifetime=NumberRange.new(1,2);emitter.Speed=NumberRange.new(0,particleSpeed)
             emitter.Size=NumberSequence.new(particleSize);emitter.Color=ColorSequence.new(color)
             emitter.LightEmission=0.6;emitter.SpreadAngle=Vector2.new(180,180)
         end
@@ -9952,18 +10016,34 @@ do
     visual:AddSlider("PrivateParticleRate",{Text="Particle rate",Default=12,Min=1,Max=50,Rounding=0,Callback=function(value) particleRate=value;if emitter then emitter.Rate=value end;Hub.requestSave() end})
     visual:AddSlider("PrivateParticleSize",{Text="Particle size",Default=0.3,Min=0.1,Max=2,Rounding=1,Callback=function(value) particleSize=value;if emitter then emitter.Size=NumberSequence.new(value) end;Hub.requestSave() end})
     local function crosshair()
-        if not states.crosshair then destroy(crossGui);crossGui,crossLabel=nil,nil;return end
+        if not states.crosshair then destroy(crossGui);crossGui,crossLabel,crossImage=nil,nil,nil;return end
         local parent=Player:FindFirstChildOfClass("PlayerGui")
         if not parent then return end
         if not crossGui or not crossGui.Parent then
             crossGui=Hub.new("ScreenGui",parent);crossGui.Name="ArrivaLocalCrosshair";crossGui.ResetOnSpawn=false;crossGui.IgnoreGuiInset=true
             crossLabel=Hub.new("TextLabel",crossGui);crossLabel.BackgroundTransparency=1;crossLabel.AnchorPoint=Vector2.new(0.5,0.5)
             crossLabel.Font=Enum.Font.GothamBold;crossLabel.Text="+";crossLabel.TextStrokeTransparency=0.4;crossLabel.Active=false
+            crossImage=Hub.new("ImageLabel",crossLabel);crossImage.BackgroundTransparency=1;crossImage.Size=UDim2.fromScale(1,1);crossImage.Active=false
         end
         crossLabel.Size=UDim2.fromOffset(crossSize*2,crossSize*2);crossLabel.TextSize=crossSize;crossLabel.TextColor3=color
+        crossLabel.Text=crossAsset=="" and "+" or ""
+        crossImage.Image=crossAsset;crossImage.ImageColor3=color;crossImage.Visible=crossAsset~=""
     end
     visual:AddToggle("PrivateCrosshair",{Text="Custom crosshair",Default=false,Callback=function(on) states.crosshair=on and true or nil;crosshair();Hub.requestSave() end})
-    visual:AddSlider("PrivateCrosshairSize",{Text="Crosshair size",Default=18,Min=8,Max=48,Rounding=0,Callback=function(value) crossSize=value;crosshair();Hub.requestSave() end})
+    visual:AddSlider("PrivateCrosshairSize",{Text="Crosshair size",Default=18,Min=8,Max=128,Rounding=0,Callback=function(value) crossSize=value;crosshair();Hub.requestSave() end})
+    local function asset(value)
+        local text=tostring(value):match("^%s*(.-)%s*$")
+        if text=="" then return "" end
+        local id=text:match("^(%d+)$") or text:match("^rbxassetid://(%d+)$") or text:match("[?&]id=(%d+)") or text:match("roblox.com/library/(%d+)")
+        if id then return "rbxassetid://"..id end
+    end
+    visual:AddInput("PackCrosshairImage",{Text="Crosshair image ID",Default="",Finished=true,Callback=function(value)
+        local resolved=asset(value);if resolved then crossAsset=resolved;crosshair() end
+    end})
+    visual:AddInput("PackParticleTexture",{Text="Particle texture ID",Default="",Finished=true,Callback=function(value)
+        local resolved=asset(value);if resolved and resolved~="" then particleTexture=resolved;if emitter then emitter.Texture=resolved end end
+    end})
+    visual:AddSlider("PackParticleMaxSpeed",{Text="Particle max speed",Default=2,Min=0,Max=30,Rounding=1,Callback=function(value) particleSpeed=value;if emitter then emitter.Speed=NumberRange.new(0,value) end end})
     visual:AddDropdown("PrivateCosmeticColor",{Text="Cosmetic colour",Values={"Blue","White","Pink","Green","Orange","Purple"},Default=1,Callback=function(value)
         local palette={Blue=Color3.fromRGB(120,190,255),White=Color3.fromRGB(255,255,255),Pink=Color3.fromRGB(255,120,190),Green=Color3.fromRGB(120,255,160),Orange=Color3.fromRGB(255,170,80),Purple=Color3.fromRGB(190,120,255)}
         color=palette[value] or color;if hat then hat.Color=color end;if emitter then emitter.Color=ColorSequence.new(color) end;crosshair();Hub.requestSave()
@@ -14167,6 +14247,647 @@ do
     Hub.cleanup(function() enabled=false;restore() end)
 end)()
 end
+
+-- Feature pack: standalone flight and local humanoid controls.
+do
+(function()
+    local group=Tabs.Player:AddLeftGroupbox("Flight")
+    local enabled=false
+    local speed=50
+    local flight
+    local function stop()
+        if not flight then Hub.characterFlightActive=false;return end
+        local old=flight;flight=nil;Hub.characterFlightActive=false
+        for _,object in ipairs({old.velocity,old.gyro}) do
+            Hub.instances[object],Hub.assetTargets[object]=nil,nil;object:Destroy()
+        end
+        pcall(function()
+            if old.hum.Parent then
+                old.hum.PlatformStand=old.platform
+                old.hum.AutoRotate=old.rotate
+            end
+        end)
+    end
+    local function update()
+        if not enabled then stop();return end
+        local char=Player.Character
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored or Hub.safeZoneLoopActive then stop();return end
+        if flight and (flight.char~=char or flight.root~=root or not flight.velocity.Parent or not flight.gyro.Parent) then stop() end
+        if not flight then
+            if Hub.stopBlobFlight then Hub.stopBlobFlight() end
+            flight={char=char,root=root,hum=hum,platform=hum.PlatformStand,rotate=hum.AutoRotate}
+            flight.velocity=Hub.new("BodyVelocity",root);flight.velocity.Name="ArrivaFlightVelocity"
+            flight.velocity.MaxForce=Vector3.new(9e9,9e9,9e9);flight.velocity.Velocity=Vector3.zero
+            flight.gyro=Hub.new("BodyGyro",root);flight.gyro.Name="ArrivaFlightGyro"
+            flight.gyro.MaxTorque=Vector3.new(9e9,9e9,9e9);flight.gyro.P=90000;flight.gyro.CFrame=root.CFrame
+            hum.PlatformStand=true;hum.AutoRotate=false;Hub.characterFlightActive=true
+        end
+        local camera=Workspace.CurrentCamera
+        if not camera then flight.velocity.Velocity=Vector3.zero;return end
+        local move=Vector3.zero
+        if not UserInputService:GetFocusedTextBox() and not Hub.keybindCaptureActive then
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move+=camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move-=camera.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move-=camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move+=camera.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.E) then move+=camera.CFrame.UpVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Q) then move-=camera.CFrame.UpVector end
+        end
+        if move.Magnitude>1 then move=move.Unit end
+        flight.velocity.Velocity=move*speed;flight.gyro.CFrame=camera.CFrame
+    end
+    Hub.sampleCharacterFlight=update
+    group:AddToggle("PackCharacterFlight",{Text="Flight",Default=false,Callback=function(on) enabled=on;if not on then stop() end end})
+    group:AddSlider("PackCharacterFlightSpeed",{Text="Flight speed",Default=50,Min=5,Max=250,Rounding=0,Callback=function(value) speed=value end})
+    Hub.keybindGroups.actions:AddLabel("Flight"):AddKeyPicker("PackFlightKey",{Default="H",Text="Flight",Callback=function()
+        if not UserInputService:GetFocusedTextBox() then Toggles.PackCharacterFlight:SetValue(not enabled) end
+    end})
+    table.insert(Hub.keybindDefinitions,{id="PackFlightKey",label="Flight",default="H"})
+    Hub.connect(RunService.PreSimulation or RunService.Heartbeat,update)
+    Hub.connect(Player.CharacterRemoving,stop)
+    Hub.cleanup(function() enabled=false;stop();Hub.sampleCharacterFlight=nil end)
+end)();
+(function()
+    local group=Tabs.Visual:AddRightGroupbox("Water Controls")
+    local swimOn=false
+    local states={}
+    local function restoreSwim()
+        for hum,value in pairs(states) do pcall(function() if hum.Parent then hum:SetStateEnabled(Enum.HumanoidStateType.Swimming,value) end end) end
+        table.clear(states)
+    end
+    local function sample()
+        if not swimOn then return end
+        local char=Player.Character
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health<=0 then return end
+        if states[hum]==nil then states[hum]=hum:GetStateEnabled(Enum.HumanoidStateType.Swimming) end
+        hum:SetStateEnabled(Enum.HumanoidStateType.Swimming,false)
+        if not hum.SeatPart and hum:GetState()==Enum.HumanoidStateType.Swimming then hum:ChangeState(Enum.HumanoidStateType.GettingUp) end
+    end
+    Hub.sampleNoSwim=sample
+    group:AddToggle("PackNoSwimming",{Text="Non-swimmable water",Default=false,Callback=function(on) swimOn=on;if on then sample() else restoreSwim() end end})
+    Hub.connect(RunService.Heartbeat,sample)
+    Hub.connect(Player.CharacterRemoving,restoreSwim)
+    Hub.cleanup(function() swimOn=false;restoreSwim();Hub.sampleNoSwim=nil end)
+end)()
+end
+-- End player feature pack
+
+-- Feature pack: line textures, gradient colors and held-object information.
+do
+(function()
+    local group=Tabs.Grab:AddRightGroupbox("Line Texture & Gradient")
+    local textures={Laser="rbxassetid://8922958725",Chain="rbxassetid://81358145120405",["Chain 2"]="rbxassetid://132910145874066",
+        ["Chain 3"]="rbxassetid://128466395060514",["Chain 4"]="rbxassetid://73368670987191",Pulse="rbxassetid://82163767314193",
+        Rope="rbxassetid://78999022056924",Dots="rbxassetid://9169659357",Bubbles="rbxassetid://1249690853",Spring="rbxassetid://18837732116",
+        Gamepass="rbxassetid://8933355899",["Non-Gamepass"]="rbxassetid://8933346550"}
+    local names={};for name in pairs(textures) do table.insert(names,name) end;table.sort(names)
+    local textured,gradient,share=false,false,false
+    local choice=names[1]
+    local defaults={"FF0000","FFA500","FFFF00","00FF00","00FFFF","0000FF","AA00FF","FFFFFF","FFFFFF"}
+    local colors={}
+    for index,hex in ipairs(defaults) do colors[index]=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16)) end
+    local saved={};local lastSent=-math.huge
+    local function restore(beam)
+        local record=saved[beam];if not record then return end;saved[beam]=nil
+        pcall(function() if beam.Parent then
+            if record.textureOwned then beam.Texture=record.texture end
+            if record.colorOwned then beam.Color=record.color end
+        end end)
+    end
+    local function sequence()
+        local keys={};for index,color in ipairs(colors) do keys[index]=ColorSequenceKeypoint.new((index-1)/8,color) end
+        return ColorSequence.new(keys)
+    end
+    function Hub.sampleLineStyles()
+        local model=Workspace:FindFirstChild("GrabParts")
+        for beam in pairs(saved) do
+            if not model or not beam:IsDescendantOf(model) or (not textured and not gradient) then restore(beam) end
+        end
+        if not textured and not gradient then return end
+        local color=gradient and sequence() or nil
+        for _,beam in ipairs(model and model:GetDescendants() or {}) do
+            if beam:IsA("Beam") then
+                if not saved[beam] then saved[beam]={} end
+                local record=saved[beam]
+                if textured then
+                    if not record.textureOwned then record.texture=beam.Texture;record.textureOwned=true end
+                    beam.Texture=textures[choice]
+                elseif record.textureOwned then beam.Texture=record.texture;record.textureOwned=false end
+                if gradient then
+                    if not record.colorOwned then record.color=beam.Color;record.colorOwned=true end
+                    beam.Color=color
+                elseif record.colorOwned then beam.Color=record.color;record.colorOwned=false end
+            end
+        end
+        if share and gradient and os.clock()-lastSent>=0.5 then
+            local events=ReplicatedStorage:FindFirstChild("DataEvents")
+            local remote=events and events:FindFirstChild("UpdateLineColorsEvent")
+            if remote then lastSent=os.clock();Hub.fire(remote,color,table.unpack(colors)) end
+        end
+    end
+    group:AddDropdown("PackLineTexture",{Text="Line texture",Values=names,Default=1,Callback=function(value) choice=value end})
+    group:AddToggle("PackCustomLine",{Text="Custom line texture",Default=false,Callback=function(on) textured=on;Hub.sampleLineStyles() end})
+    group:AddToggle("PackGradientLine",{Text="Gradient line",Default=false,Callback=function(on)
+        gradient=on
+        if on then
+            for _,id in ipairs({"ToolLineTint","ToolRainbowLine"}) do if Toggles[id] then Toggles[id]:SetValue(false) end end
+        end
+        Hub.sampleLineStyles()
+    end})
+    group:AddToggle("PackShareLineGradient",{Text="Share gradient with server",Default=false,Callback=function(on) share=on end})
+    for index=1,9 do
+        local position=index
+        group:AddInput("PackLineColor"..index,{Text=index==9 and "End color hex" or "Gradient color "..index,Default=defaults[index],Finished=true,Callback=function(value)
+            local hex=tostring(value):gsub("#","")
+            if #hex==6 and hex:match("^%x+$") then colors[position]=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16)) end
+        end})
+    end
+    local elapsed=0
+    Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.1 then elapsed=0;Hub.sampleLineStyles() end end)
+    Hub.cleanup(function() textured,gradient,share=false,false,false;for beam in pairs(saved) do restore(beam) end;Hub.sampleLineStyles=nil end)
+end)();
+(function()
+    local group=Tabs.Grab:AddRightGroupbox("Held Object")
+    local enabled=false
+    local label=group:AddLabel("Object information off.")
+    function Hub.sampleHeldInformation()
+        if not enabled then return end
+        local model=Workspace:FindFirstChild("GrabParts")
+        local grab=model and model:FindFirstChild("GrabPart",true)
+        local weld=grab and grab:FindFirstChildWhichIsA("WeldConstraint")
+        local part=weld and weld.Part1
+        if not part or not part:IsA("BasePart") or not part.Parent then label:SetText("Nothing held.");return end
+        local root=Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+        local owner=Hub.playerOf(part)
+        label:SetText(string.format("%s | %.1f studs | mass %.1f | %s | %s",part.Name,root and (root.Position-part.Position).Magnitude or 0,
+            part.AssemblyMass,part.Anchored and "anchored" or "free",owner and owner.Name or "unassigned"))
+    end
+    group:AddToggle("PackHeldInformation",{Text="Grabbed object information",Default=false,Callback=function(on) enabled=on;if on then Hub.sampleHeldInformation() else label:SetText("Object information off.") end end})
+    group:AddButton({Text="Copy held-object path",Func=function()
+        local model=Workspace:FindFirstChild("GrabParts")
+        local grab=model and model:FindFirstChild("GrabPart",true)
+        local weld=grab and grab:FindFirstChildWhichIsA("WeldConstraint")
+        local part=weld and weld.Part1
+        if part and setclipboard then setclipboard(part:GetFullName()) end
+    end})
+    local elapsed=0
+    Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.25 then elapsed=0;Hub.sampleHeldInformation() end end)
+    Hub.cleanup(function() enabled=false;Hub.sampleHeldInformation=nil end)
+end)()
+end
+-- End line and object feature pack
+
+-- Feature pack: sticky and blackhole overlays.
+do
+(function()
+    local group=Tabs.Visual:AddRightGroupbox("World ESP")
+    local enabled={sticky=false,blackhole=false}
+    local entries={};local watcher;local epoch=0
+    local distance,labels,through=1200,true,true
+    local tint=Color3.fromRGB(120,180,255)
+    local fill,outline=0.8,0.2
+    local function clear(object)
+        local entry=entries[object];if not entry then return end;entries[object]=nil
+        for _,visual in ipairs({entry.highlight,entry.gui}) do Hub.instances[visual],Hub.assetTargets[visual]=nil,nil;visual:Destroy() end
+    end
+    local function kind(object)
+        if not object:IsA("BasePart") then return end
+        if object.Name=="StickyPart" then return "sticky" end
+        if object.Name=="BlackHoleKick" or object.Name=="StayedBH" then return "blackhole" end
+        if object.Name~="Hole" then return end
+        local parent=object.Parent
+        while parent and parent~=Workspace do
+            if parent.Name=="BlackHoleKick" or parent.Name=="StayedBH" then return "blackhole" end
+            parent=parent.Parent
+        end
+    end
+    local function inspect(object)
+        local name=kind(object)
+        if not name or not enabled[name] or entries[object] then return end
+        local highlight=Hub.new("Highlight",object);highlight.Adornee=object
+        local gui=Hub.new("BillboardGui",object);gui.Adornee=object;gui.Size=UDim2.fromOffset(180,28);gui.StudsOffset=Vector3.new(0,2,0)
+        local text=Hub.new("TextLabel",gui);text.Size=UDim2.fromScale(1,1);text.BackgroundTransparency=1
+        text.TextSize=14;text.Font=Enum.Font.GothamBold;text.TextColor3=Color3.new(1,1,1);text.TextStrokeTransparency=0
+        text.Text=name=="sticky" and "Sticky" or "Blackhole"
+        entries[object]={highlight=highlight,gui=gui,kind=name}
+    end
+    function Hub.sampleWorldESP()
+        local root=Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+        for object,entry in pairs(entries) do
+            if not object.Parent or not enabled[entry.kind] then clear(object)
+            else
+                local near=root and (object.Position-root.Position).Magnitude<=distance
+                entry.highlight.Enabled=near and true or false
+                entry.highlight.FillColor=tint;entry.highlight.OutlineColor=tint
+                entry.highlight.FillTransparency=fill;entry.highlight.OutlineTransparency=outline
+                entry.highlight.DepthMode=through and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+                entry.gui.Enabled=near and labels and true or false;entry.gui.AlwaysOnTop=through;entry.gui.MaxDistance=distance
+            end
+        end
+    end
+    local function refresh()
+        epoch+=1;local ticket=epoch
+        if watcher then watcher:Disconnect();Hub.connections[watcher]=nil;watcher=nil end
+        Hub.sampleWorldESP()
+        if enabled.sticky or enabled.blackhole then
+            watcher=Hub.connect(Workspace.DescendantAdded,inspect)
+            Hub.scanDescendants(Workspace,inspect,function() return epoch==ticket and (enabled.sticky or enabled.blackhole) end)
+        end
+    end
+    group:AddToggle("PackStickyESP",{Text="Sticky ESP",Default=false,Callback=function(on) enabled.sticky=on;refresh() end})
+    group:AddToggle("PackBlackholeESP",{Text="Blackhole ESP",Default=false,Callback=function(on) enabled.blackhole=on;refresh() end})
+    group:AddToggle("PackWorldESPNames",{Text="World ESP labels",Default=true,Callback=function(on) labels=on end})
+    group:AddToggle("PackWorldESPThrough",{Text="World ESP through walls",Default=true,Callback=function(on) through=on end})
+    group:AddSlider("PackWorldESPDistance",{Text="World ESP distance",Default=1200,Min=50,Max=5000,Rounding=0,Callback=function(value) distance=value end})
+    group:AddSlider("PackWorldESPFill",{Text="World fill transparency",Default=80,Min=0,Max=100,Rounding=0,Callback=function(value) fill=value/100 end})
+    group:AddSlider("PackWorldESPOutline",{Text="World outline transparency",Default=20,Min=0,Max=100,Rounding=0,Callback=function(value) outline=value/100 end})
+    group:AddInput("PackWorldESPColor",{Text="World ESP color hex",Default="78B4FF",Finished=true,Callback=function(value)
+        local hex=tostring(value):gsub("#","")
+        if #hex==6 and hex:match("^%x+$") then tint=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16)) end
+    end})
+    local elapsed=0
+    Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.25 then elapsed=0;Hub.sampleWorldESP() end end)
+    Hub.cleanup(function() enabled={};epoch+=1;for object in pairs(entries) do clear(object) end;Hub.sampleWorldESP=nil end)
+end)()
+end
+-- End world overlay feature pack
+
+-- Feature pack: reversible tools for the active own-toy group.
+do
+(function()
+    local group=Tabs.Fun:AddRightGroupbox("Group Appearance")
+    local noclip,highlight=false,false
+    local saved,visuals={},{}
+    local function restore(part)
+        local old=saved[part];if old==nil then return end;saved[part]=nil
+        pcall(function() if part.Parent then part.CanCollide=old end end)
+    end
+    local function clear(model)
+        local visual=visuals[model];if not visual then return end;visuals[model]=nil
+        Hub.instances[visual],Hub.assetTargets[visual]=nil,nil;visual:Destroy()
+    end
+    function Hub.sampleGroupAppearance()
+        local wanted,models={},{}
+        if (noclip or highlight) and Hub.getOwnToySelection then
+            local _,members=Hub.getOwnToySelection()
+            local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+            for model in pairs(members or {}) do
+                if model.Parent==folder and model:IsA("Model") and not model:FindFirstChildOfClass("Humanoid") then
+                    models[model]=true
+                    for _,part in ipairs(model:GetDescendants()) do
+                        if part:IsA("BasePart") and not part:IsA("Seat") and not part:IsA("VehicleSeat") then
+                            local safe=true
+                            for _,connected in ipairs(part:GetConnectedParts(true)) do if not connected:IsDescendantOf(model) then safe=false;break end end
+                            if safe then wanted[part]=true end
+                        end
+                    end
+                end
+            end
+        end
+        for part in pairs(saved) do if not noclip or not wanted[part] then restore(part) end end
+        for model in pairs(visuals) do if not highlight or not models[model] then clear(model) end end
+        if noclip then for part in pairs(wanted) do if saved[part]==nil then saved[part]=part.CanCollide end;part.CanCollide=false end end
+        if highlight then for model in pairs(models) do if not visuals[model] then
+            local visual=Hub.new("Highlight",model);visual.Adornee=model;visual.FillTransparency=0.8
+            visual.OutlineColor=Color3.fromRGB(100,200,255);visuals[model]=visual
+        end end end
+    end
+    group:AddToggle("PackGroupNoclip",{Text="Noclip named group",Default=false,Callback=function(on) noclip=on;Hub.sampleGroupAppearance() end})
+    group:AddToggle("PackGroupHighlight",{Text="Highlight named group",Default=false,Callback=function(on) highlight=on;Hub.sampleGroupAppearance() end})
+    local elapsed=0
+    Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.25 then elapsed=0;Hub.sampleGroupAppearance() end end)
+    Hub.cleanup(function() noclip,highlight=false,false;for part in pairs(saved) do restore(part) end;for model in pairs(visuals) do clear(model) end;Hub.sampleGroupAppearance=nil end)
+end)()
+end
+-- End own-group feature pack
+
+-- Feature pack: bounded public-server browsing and optional rejoin.
+do
+(function()
+    local group=Tabs.Misc:AddRightGroupbox("Servers")
+    local teleport=game:GetService("TeleportService")
+    local http=game:GetService("HttpService")
+    local status=group:AddLabel("Ready.")
+    local minimum,maximum,sortMode=0,Players.MaxPlayers or 30,"Lowest Players"
+    local autoHop,autoRejoin,loadScript=false,false,false
+    local hopDelay,nextHop,lastRejoin=300,math.huge,-math.huge
+    local epoch,busy=0,false
+    local visited={}
+    function Hub.choosePublicServer(records,config)
+        local candidates={}
+        for _,server in ipairs(records) do
+            if type(server)=="table" and type(server.id)=="string" and server.id~=config.current
+                and not (config.visited and config.visited[server.id]) and type(server.playing)=="number"
+                and type(server.maxPlayers)=="number" and server.playing<server.maxPlayers
+                and server.playing>=config.minimum and server.playing<=config.maximum then table.insert(candidates,server) end
+        end
+        if #candidates==0 then return nil end
+        if config.mode=="Random" then return candidates[math.random(1,#candidates)] end
+        table.sort(candidates,function(a,b)
+            local av,bv=a.playing,b.playing
+            if config.mode=="Highest FPS" then av,bv=-(tonumber(a.fps) or 0),-(tonumber(b.fps) or 0)
+            elseif config.mode=="Lowest Ping" then av,bv=tonumber(a.ping) or math.huge,tonumber(b.ping) or math.huge
+            elseif config.mode=="Highest Players" then av,bv=-a.playing,-b.playing end
+            if av==bv then return a.id<b.id end
+            return av<bv
+        end)
+        return candidates[1]
+    end
+    local function queue()
+        if not loadScript then return true end
+        local enqueue=queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+        if type(enqueue)~="function" then status:SetText("Queue-on-teleport is unavailable; disable Keep script.");return false end
+        if Hub.pollSettings then pcall(Hub.pollSettings) end
+        local loader="loadstring(game:HttpGet('https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/main/dist/resonance.lua'))()"
+        local ok=pcall(enqueue,loader)
+        if not ok then status:SetText("Could not queue the script.") end
+        return ok
+    end
+    local function cancel()
+        epoch+=1;busy=false;nextHop=os.clock()+hopDelay;status:SetText("Server search cancelled.")
+    end
+    function Hub.hopPublicServer()
+        if busy or not Hub.alive then return false end
+        if minimum>maximum then status:SetText("Minimum players exceeds maximum.");return false end
+        epoch+=1;local ticket=epoch;busy=true
+        local snapshot={minimum=minimum,maximum=maximum,mode=sortMode,current=game.JobId,visited=visited}
+        status:SetText("Searching public servers...")
+        task.spawn(function()
+            local ok,err=xpcall(function()
+                local records,cursor={},nil
+                for _=1,4 do
+                    if not Hub.alive or ticket~=epoch then return end
+                    local url="https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+                    if cursor then url..="&cursor="..http:UrlEncode(cursor) end
+                    local data=http:JSONDecode(game:HttpGet(url))
+                    if type(data)~="table" or type(data.data)~="table" then error("Server list was not returned") end
+                    for _,server in ipairs(data.data) do table.insert(records,server) end
+                    cursor=type(data.nextPageCursor)=="string" and data.nextPageCursor or nil
+                    if not cursor then break end
+                    task.wait(0.25)
+                end
+                if not Hub.alive or ticket~=epoch then return end
+                local server=Hub.choosePublicServer(records,snapshot)
+                if not server then status:SetText("No matching available server found.");return end
+                if not queue() or ticket~=epoch then return end
+                visited[server.id]=true
+                status:SetText(string.format("Joining server with %d players...",server.playing))
+                teleport:TeleportToPlaceInstance(game.PlaceId,server.id,Player)
+            end,debug.traceback)
+            if ticket==epoch then
+                busy=false;nextHop=os.clock()+hopDelay
+                if not ok then status:SetText("Server hop failed: "..tostring(err)) end
+            end
+        end)
+        return true
+    end
+    group:AddButton({Text="Server-hop",Func=Hub.hopPublicServer})
+    group:AddButton({Text="Cancel server search",Func=cancel})
+    group:AddButton({Text="Rejoin",Func=function() if queue() then teleport:Teleport(game.PlaceId,Player) end end})
+    group:AddDropdown("PackServerSort",{Text="Server selection",Values={"Lowest Players","Highest Players","Highest FPS","Lowest Ping","Random"},Default=1,Callback=function(value) sortMode=value end})
+    group:AddSlider("PackServerMinimum",{Text="Minimum players",Default=0,Min=0,Max=Players.MaxPlayers or 30,Rounding=0,Callback=function(value) minimum=value end})
+    group:AddSlider("PackServerMaximum",{Text="Maximum players",Default=Players.MaxPlayers or 30,Min=0,Max=Players.MaxPlayers or 30,Rounding=0,Callback=function(value) maximum=value end})
+    group:AddToggle("PackKeepScript",{Text="Keep script on teleport",Default=false,Callback=function(on) loadScript=on end})
+    group:AddSlider("PackServerHopDelay",{Text="Server-hop interval (seconds)",Default=300,Min=30,Max=3600,Rounding=0,Callback=function(value) hopDelay=value;nextHop=os.clock()+value end})
+    group:AddToggle("PackAutoServerHop",{Text="Auto server-hop",Default=false,Callback=function(on) autoHop=on;nextHop=on and os.clock()+hopDelay or math.huge end})
+    group:AddToggle("PackAutoRejoin",{Text="Auto rejoin after disconnect",Default=false,Callback=function(on) autoRejoin=on end})
+    Hub.connect(RunService.Heartbeat,function()
+        if autoHop and not busy and os.clock()>=nextHop then nextHop=os.clock()+hopDelay;Hub.hopPublicServer() end
+    end)
+    local ok,signal=pcall(function() return game:GetService("GuiService").ErrorMessageChanged end)
+    if ok and signal then Hub.connect(signal,function(message)
+        if not autoRejoin or type(message)~="string" or message=="" or os.clock()-lastRejoin<15 then return end
+        lastRejoin=os.clock()
+        task.spawn(function() if Hub.alive and autoRejoin and queue() then pcall(function() teleport:Teleport(game.PlaceId,Player) end) end end)
+    end) end
+    if teleport.TeleportInitFailed then Hub.connect(teleport.TeleportInitFailed,function(player)
+        if player==Player then busy=false;nextHop=os.clock()+hopDelay;status:SetText("Teleport failed. Choose another server or retry.") end
+    end) end
+    Hub.cleanup(function() autoHop,autoRejoin=false,false;epoch+=1;busy=false;Hub.hopPublicServer,Hub.choosePublicServer=nil,nil end)
+end)()
+end
+-- End server feature pack
+
+-- Feature pack: visible camera aim assistance, without a global remote hook.
+do
+(function()
+    local group=Tabs.Target:AddRightGroupbox("Aim Assist")
+    local enabled,always,selectedOnly,visibleOnly,showCircle=false,false,false,true,false
+    local partName,radius,smoothing="Head",150,12
+    local gui,circle
+    local function clearCircle()
+        if gui then Hub.instances[gui]=nil;gui:Destroy();gui,circle=nil,nil end
+    end
+    local function canTarget(target,character)
+        return Hub.loopTargetReady(target,character) and (not selectedOnly or Hub.isSelectedTarget(target))
+    end
+    function Hub.findAimTarget(camera,mousePosition)
+        local best,bestDistance=nil,radius
+        local localChar=Player.Character
+        local params
+        if visibleOnly then
+            params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude
+            params.FilterDescendantsInstances=localChar and {localChar} or {};params.IgnoreWater=true
+        end
+        for _,target in ipairs(Players:GetPlayers()) do
+            local char=target.Character
+            local part=char and char:FindFirstChild(partName)
+            if part and canTarget(target,char) then
+                local screen,onScreen=camera:WorldToViewportPoint(part.Position)
+                if onScreen and screen.Z>0 then
+                    local distance=(Vector2.new(screen.X,screen.Y)-mousePosition).Magnitude
+                    if distance<bestDistance then
+                        local hit=params and Workspace:Raycast(camera.CFrame.Position,part.Position-camera.CFrame.Position,params)
+                        if not hit or hit.Instance:IsDescendantOf(char) then best,bestDistance=part,distance end
+                    end
+                end
+            end
+        end
+        return best
+    end
+    local function draw(mousePosition)
+        if not enabled or not showCircle then clearCircle();return end
+        if not gui then
+            local playerGui=Player:FindFirstChildOfClass("PlayerGui");if not playerGui then return end
+            gui=Hub.new("ScreenGui",playerGui);gui.Name="ArrivaAimRadius";gui.IgnoreGuiInset=true;gui.ResetOnSpawn=false
+            circle=Hub.new("Frame",gui);circle.BackgroundTransparency=1;circle.AnchorPoint=Vector2.new(0.5,0.5)
+            local corner=Hub.new("UICorner",circle);corner.CornerRadius=UDim.new(1,0)
+            local stroke=Hub.new("UIStroke",circle);stroke.Color=Color3.fromRGB(140,200,255);stroke.Thickness=1
+        end
+        circle.Position=UDim2.fromOffset(mousePosition.X,mousePosition.Y);circle.Size=UDim2.fromOffset(radius*2,radius*2)
+    end
+    group:AddToggle("PackAimAssist",{Text="Aim assist",Default=false,Callback=function(on) enabled=on;if not on then clearCircle() end end})
+    group:AddToggle("PackAimAlways",{Text="Always aim",Default=false,Callback=function(on) always=on end})
+    group:AddToggle("PackAimSelected",{Text="Aim at selected players only",Default=false,Callback=function(on) selectedOnly=on end})
+    group:AddToggle("PackAimVisible",{Text="Visible targets only",Default=true,Callback=function(on) visibleOnly=on end})
+    group:AddToggle("PackAimCircle",{Text="Aim FOV circle",Default=false,Callback=function(on) showCircle=on;if not on then clearCircle() end end})
+    group:AddDropdown("PackAimPart",{Text="Aim part",Values={"Head","HumanoidRootPart","UpperTorso","Torso"},Default=1,Callback=function(value) partName=value end})
+    group:AddSlider("PackAimRadius",{Text="Aim FOV radius",Default=150,Min=20,Max=600,Rounding=0,Callback=function(value) radius=value end})
+    group:AddSlider("PackAimSmoothing",{Text="Aim responsiveness",Default=12,Min=1,Max=50,Rounding=0,Callback=function(value) smoothing=value end})
+    Hub.connect(RunService.RenderStepped,function(dt)
+        if not enabled then return end
+        local camera=Workspace.CurrentCamera
+        if not camera then return end
+        local mousePosition=UserInputService:GetMouseLocation()
+        local inset=game:GetService("GuiService"):GetGuiInset()
+        local viewportMouse=mousePosition-inset
+        draw(mousePosition)
+        if UserInputService:GetFocusedTextBox() or Hub.keybindCaptureActive
+            or (not always and not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)) then return end
+        local target=Hub.findAimTarget(camera,viewportMouse)
+        if not target then return end
+        local facing=Hub.safeLookAt(camera.CFrame.Position,target.Position,camera.CFrame.LookVector)
+        if facing then camera.CFrame=camera.CFrame:Lerp(facing,1-math.exp(-smoothing*math.clamp(dt,0,0.1))) end
+    end)
+    Hub.cleanup(function() enabled=false;clearCircle();Hub.findAimTarget=nil end)
+end)()
+end
+-- End aim feature pack
+
+-- Feature pack: reversible local part editing and smooth click teleport.
+do
+(function()
+    local group=Tabs.Misc:AddLeftGroupbox("Part Tools")
+    local selecting,showHighlight=false,true
+    local selected,highlight
+    local saved={}
+    local status=group:AddLabel("No part selected.")
+    local function allowed(part)
+        if not part or not part:IsA("BasePart") or not part.Parent or not Hub.canAffect(part) then return false end
+        for _,player in ipairs(Players:GetPlayers()) do if player.Character and part:IsDescendantOf(player.Character) then return false end end
+        return true
+    end
+    local function clearHighlight()
+        if highlight then Hub.instances[highlight],Hub.assetTargets[highlight]=nil,nil;highlight:Destroy();highlight=nil end
+    end
+    function Hub.selectWorldPart(part)
+        if not allowed(part) then status:SetText("Choose a world part, not a character.");return false end
+        clearHighlight();selected=part;selecting=false
+        status:SetText(part:GetFullName())
+        if showHighlight then highlight=Hub.new("Highlight",part);highlight.Adornee=part;highlight.FillTransparency=0.85 end
+        return true
+    end
+    local function restore(part)
+        local values=saved[part];if not values then return end;saved[part]=nil
+        pcall(function() if part.Parent then for key,value in pairs(values) do part[key]=value end end end)
+    end
+    local function modify(hide)
+        if not allowed(selected) then return end
+        if not saved[selected] then saved[selected]={CanCollide=selected.CanCollide,CanTouch=selected.CanTouch,CanQuery=selected.CanQuery,LocalTransparencyModifier=selected.LocalTransparencyModifier} end
+        selected.CanCollide=false
+        if hide then selected.CanTouch=false;selected.CanQuery=false;selected.LocalTransparencyModifier=1 end
+    end
+    group:AddButton({Text="Select world part (next click)",Func=function() selecting=true;status:SetText("Click a world part.") end})
+    group:AddToggle("PackPartHighlight",{Text="Highlight selected part",Default=true,Callback=function(on) showHighlight=on;if not on then clearHighlight() elseif allowed(selected) then Hub.selectWorldPart(selected) end end})
+    group:AddButton({Text="Decollide selected part (local)",Func=function() modify(false) end})
+    group:AddButton({Text="Hide selected part (local)",Func=function() modify(true) end})
+    group:AddButton({Text="Restore selected part",Func=function() if selected then restore(selected) end end})
+    group:AddButton({Text="Restore all edited parts",Func=function() for part in pairs(saved) do restore(part) end end})
+    group:AddButton({Text="Copy selected part path",Func=function() if allowed(selected) and setclipboard then setclipboard(selected:GetFullName()) end end})
+    Hub.connect(UserInputService.InputBegan,function(input,processed)
+        if selecting and not processed and input.UserInputType==Enum.UserInputType.MouseButton1 and not UserInputService:GetFocusedTextBox() then Hub.selectWorldPart(Player:GetMouse().Target) end
+    end)
+    Hub.cleanup(function() selecting=false;clearHighlight();for part in pairs(saved) do restore(part) end;Hub.selectWorldPart=nil end)
+end)();
+(function()
+    local group=Tabs.Misc:AddLeftGroupbox("Travel Settings")
+    local tweenService=game:GetService("TweenService")
+    local enabled,duration=false,0.3
+    local current
+    local function cancel()
+        local old=current;current=nil
+        if not old then return end
+        old.connection:Disconnect();Hub.connections[old.connection]=nil
+        old.tween:Cancel()
+    end
+    function Hub.smoothTeleport(root,destination)
+        cancel()
+        if not enabled then return false end
+        local char=Player.Character
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        if not char or root.Parent~=char or not hum or hum.SeatPart or Hub.blobFlightActive or Hub.characterFlightActive then return false end
+        local entry={root=root,char=char}
+        entry.tween=tweenService:Create(root,TweenInfo.new(duration,Enum.EasingStyle.Linear),{CFrame=destination})
+        current=entry
+        entry.connection=Hub.connect(entry.tween.Completed,function()
+            if current~=entry then return end
+            current=nil;entry.connection:Disconnect();Hub.connections[entry.connection]=nil
+            if Player.Character==char and root.Parent==char then root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero end
+        end)
+        entry.tween:Play()
+        return true
+    end
+    group:AddToggle("PackSmoothClickTP",{Text="Smooth click teleport",Default=false,Callback=function(on) enabled=on;if not on then cancel() end end})
+    group:AddSlider("PackSmoothClickDuration",{Text="Teleport duration",Default=0.3,Min=0.1,Max=2,Rounding=1,Callback=function(value) duration=value end})
+    group:AddButton({Text="Cancel smooth teleport",Func=cancel})
+    Hub.connect(Player.CharacterRemoving,cancel)
+    Hub.connect(RunService.Heartbeat,function() if current and (Player.Character~=current.char or Hub.safeZoneLoopActive) then cancel() end end)
+    Hub.cleanup(function() enabled=false;cancel();Hub.smoothTeleport=nil end)
+end)()
+end
+-- End part and travel feature pack
+
+-- Feature pack: local blackhole image and audio customization.
+do
+(function()
+    local group=Tabs.Visual:AddRightGroupbox("Blackhole Appearance")
+    local imageOn,soundOn=false,false
+    local imageAsset,soundAsset="",""
+    local tint=Color3.new(1,1,1)
+    local saved={};local watcher;local epoch=0
+    local function asset(value)
+        local text=tostring(value):match("^%s*(.-)%s*$")
+        if text=="" then return "" end
+        local id=text:match("^(%d+)$") or text:match("^rbxassetid://(%d+)$") or text:match("[?&]id=(%d+)") or text:match("roblox.com/library/(%d+)")
+        return id and "rbxassetid://"..id or nil
+    end
+    local function inHole(object)
+        local parent=object.Parent
+        while parent and parent~=Workspace do
+            if parent.Name=="BlackHoleKick" or parent.Name=="StayedBH" then return true end
+            parent=parent.Parent
+        end
+        return false
+    end
+    local function restore(object)
+        local record=saved[object];if not record then return end;saved[object]=nil
+        for key,entry in pairs(record) do pcall(function() if object.Parent and object[key]==entry.applied then object[key]=entry.original end end) end
+    end
+    local function set(object,key,value)
+        saved[object]=saved[object] or {}
+        if not saved[object][key] then saved[object][key]={original=object[key]} end
+        object[key]=value;saved[object][key].applied=value
+    end
+    local function inspect(object)
+        if not inHole(object) then return end
+        if imageOn and imageAsset~="" and object:IsA("ImageLabel") and object.Name=="Large" then
+            set(object,"Image",imageAsset);set(object,"ImageColor3",tint)
+        elseif soundOn and soundAsset~="" and object:IsA("Sound") then set(object,"SoundId",soundAsset) end
+    end
+    local function refresh()
+        epoch+=1;local ticket=epoch
+        if watcher then watcher:Disconnect();Hub.connections[watcher]=nil;watcher=nil end
+        for object in pairs(saved) do restore(object) end
+        if imageOn or soundOn then
+            watcher=Hub.connect(Workspace.DescendantAdded,inspect)
+            Hub.scanDescendants(Workspace,inspect,function() return epoch==ticket and (imageOn or soundOn) end)
+        end
+    end
+    group:AddInput("PackBlackholeImage",{Text="Blackhole image ID",Default="",Finished=true,Callback=function(value) local parsed=asset(value);if parsed then imageAsset=parsed;refresh() end end})
+    group:AddToggle("PackBlackholeImageOn",{Text="Custom blackhole image",Default=false,Callback=function(on) imageOn=on;refresh() end})
+    group:AddInput("PackBlackholeTint",{Text="Blackhole image color hex",Default="FFFFFF",Finished=true,Callback=function(value)
+        local hex=tostring(value):gsub("#","")
+        if #hex==6 and hex:match("^%x+$") then tint=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16));refresh() end
+    end})
+    group:AddInput("PackBlackholeSound",{Text="Blackhole sound ID",Default="",Finished=true,Callback=function(value) local parsed=asset(value);if parsed then soundAsset=parsed;refresh() end end})
+    group:AddToggle("PackBlackholeSoundOn",{Text="Custom blackhole sound",Default=false,Callback=function(on) soundOn=on;refresh() end})
+    Hub.cleanup(function() imageOn,soundOn=false,false;epoch+=1;for object in pairs(saved) do restore(object) end end)
+end)()
+end
+-- End blackhole cosmetic feature pack
 
 -- UI Settings
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
