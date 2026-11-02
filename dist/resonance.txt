@@ -7754,34 +7754,39 @@ do
                     if op.toy and op.toy.Parent~=folder then error("The spawned toy disappeared before launch.") end
                     if op.toy then
                         hit=op.toy:FindFirstChild(definitions[name].hit,true)
-                        body=op.toy:FindFirstChild(mode=="Cache" and definitions[name].physics or "Body",true)
+                        body=op.toy:FindFirstChild(definitions[name].physics,true)
                     end
-                    if hit and hit:IsA("BasePart") and not hit.Anchored and ((mode~="Explode" and mode~="Cache") or (body and body:IsA("BasePart"))) then break end
+                    if hit and hit:IsA("BasePart") and not hit.Anchored and (body and body:IsA("BasePart") and not body.Anchored) then break end
                     task.wait()
                 until os.clock()>=op.deadline
                 if not current(op) then return end
-                if not hit or not hit:IsA("BasePart") or hit.Anchored or ((mode=="Explode" or mode=="Cache") and not body) then error("Toy parts did not become ready within six seconds.") end
+                if not hit or not hit:IsA("BasePart") or hit.Anchored or (not body or not body:IsA("BasePart") or body.Anchored) then error("Toy parts did not become ready within six seconds.") end
                 disconnect(op.listener);op.listener=nil
                 local facing=Hub.lookAt(hit.Position,hit.Position+direction) or hit.CFrame
                 Hub.fire(owner,hit,facing)
-                if mode=="Cache" then
-                    local physics=op.toy:FindFirstChild(definitions[name].physics,true) or hit
-                    local deadline=math.min(op.deadline,os.clock()+8)
-                    if physics~=hit then Hub.fire(owner,physics,Hub.lookAt(physics.Position,physics.Position+direction) or physics.CFrame) end
-                    if type(CheckNetworkOwnerShipOnPart)=="function" then
-                        local nextRequest=os.clock()+0.5
-                        while current(op) and not CheckNetworkOwnerShipOnPart(physics) and os.clock()<deadline do
-                            if os.clock()>=nextRequest then
-                                nextRequest=os.clock()+0.5
-                                if Player:DistanceFromCharacter(physics.Position)<=30 then
-                                    Hub.fire(owner,physics,Hub.lookAt(root.Position,physics.Position) or physics.CFrame)
-                                end
-                            end
-                            task.wait()
-                        end
-                        if not current(op) then return end
-                        if not CheckNetworkOwnerShipOnPart(physics) then error("Network ownership was not confirmed for the cached toy.") end
+                -- Claim the actual physics part before applying forces or requesting an explosion.
+                local physics=body
+                local deadline=math.min(op.deadline,os.clock()+(mode=="Cache" and 8 or 3))
+                if physics~=hit then Hub.fire(owner,physics,Hub.lookAt(physics.Position,physics.Position+direction) or physics.CFrame) end
+                if type(CheckNetworkOwnerShipOnPart)~="function" then
+                    error("Network ownership checks are unavailable; retry after the hub finishes loading.")
+                end
+                local nextRequest=os.clock()+0.5
+                while current(op) and not CheckNetworkOwnerShipOnPart(physics) and os.clock()<deadline do
+                    if not op.toy or op.toy.Parent~=folder or not physics.Parent or not hit.Parent then
+                        error("The spawned toy disappeared before ownership was confirmed.")
                     end
+                    if os.clock()>=nextRequest then
+                        nextRequest=os.clock()+0.5
+                        if Player:DistanceFromCharacter(physics.Position)<=30 then
+                            Hub.fire(owner,physics,Hub.lookAt(root.Position,physics.Position) or physics.CFrame)
+                        end
+                    end
+                    task.wait()
+                end
+                if not current(op) then return end
+                if not CheckNetworkOwnerShipOnPart(physics) then error("Network ownership was not confirmed for "..name..".") end
+                if mode=="Cache" then
                     local primary=op.toy.PrimaryPart or physics
                     local force=Hub.new(name=="DiceSmall" and "BodyPosition" or "BodyVelocity",primary);op.force=force
                     force.MaxForce=Vector3.new(math.huge,math.huge,math.huge)
@@ -7791,13 +7796,13 @@ do
                     flights[op]=math.huge
                     if onPrepared then onPrepared({model=op.toy,hit=hit,position=primary,force=force,release=function() releaseFlight(op) end}) end
                 elseif mode=="Throw" then
-                    local assembly=hit.AssemblyRootPart or hit
+                    local assembly=physics.AssemblyRootPart or physics
                     claims[assembly]=op;op.claimed[assembly]=true
-                    local force=Hub.new("BodyVelocity",hit);op.force=force
+                    local force=Hub.new("BodyVelocity",physics);op.force=force
                     force.MaxForce=Vector3.new(math.huge,math.huge,math.huge)
                     force.Velocity=direction*speed
-                    hit.AssemblyAngularVelocity=Vector3.zero
-                    hit.AssemblyLinearVelocity=direction*speed
+                    physics.AssemblyAngularVelocity=Vector3.zero
+                    physics.AssemblyLinearVelocity=direction*speed
                     flights[op]=os.clock()+lifetime
                     status:SetText(string.format("Launched %s at %d studs/sec.",name,speed))
                 else
@@ -7829,7 +7834,7 @@ do
     aimGroup:AddDropdown("MissileAimMode",{Text="Throw direction",Values={"Camera","Mouse"},Default=1,Callback=function(value) aim=value end})
     aimGroup:AddSlider("MissileLaunchSpeed",{Text="Launch speed",Default=500,Min=100,Max=500,Rounding=0,Callback=function(value) speed=value end})
     aimGroup:AddSlider("MissileForceLifetime",{Text="Launch force lifetime (seconds)",Default=3,Min=0.5,Max=10,Rounding=1,Callback=function(value) lifetime=value end})
-    aimGroup:AddLabel("Uses your own newly spawned missile or firework. Throw starts as soon as its physics part is ready. Each loop waits for completion and stops on spawn failure, toy limits, death or respawn.")
+    aimGroup:AddLabel("Uses your own newly spawned missile or firework. Throw starts after its physics part is ready and network ownership is confirmed. Each loop waits for completion and stops on spawn failure, toy limits, death or respawn.")
     Hub.connect(RunService.Heartbeat,function()
         local now=os.clock()
         if active and not current(active) then stop("Character became unavailable, missile actions stopped.")
