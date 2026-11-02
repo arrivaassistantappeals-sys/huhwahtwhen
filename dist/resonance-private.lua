@@ -15535,6 +15535,9 @@ do
     local group=Tabs.Target:AddRightGroupbox("Private Kick")
     local status=group:AddLabel("Select consenting friends in Target, choose a method, then Apply or Loop.")
     local method="Grab-Drop"
+    local kickHeight,delayMode,loopRagdoll=15,"Normal",true
+    local blobX,blobY,blobZ=0,25,0
+    local blobNetworkOwner=false
     local methods={"Grab-Drop","Grab-Release","Ownership","Void"}
     local batchBusy,loopOn,batchGeneration=false,false,0
     local batchWorker
@@ -15556,9 +15559,16 @@ do
     local function cleanup(op)
         if not op or op.cleaned then return end
         op.cleaned=true
+        if op.releaseTask then pcall(Hub.nativeTask.cancel,op.releaseTask);Hub.threads[op.releaseTask]=nil;op.releaseTask=nil end
         -- Release only this action's hand on a Blobman still in our own toy folder.
         if op.finishRemote and op.weld and op.weld.Parent and op.blob and op.blob.Parent==op.folder then
             pcall(function() Hub.fire(op.finishRemote,op.weld) end)
+        end
+        if op.ragdollToy then
+            local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+            local menu=ReplicatedStorage:FindFirstChild("MenuToys")
+            local destroy=menu and menu:FindFirstChild("DestroyToy")
+            if destroy and op.ragdollToy.Parent==folder then pcall(function() Hub.fire(destroy,op.ragdollToy) end) end
         end
         for _,object in ipairs(op.created) do
             Hub.instances[object],Hub.assetTargets[object]=nil,nil
@@ -15595,10 +15605,83 @@ do
             and Player.Character==op.selfCharacter and op.selfRoot.Parent==op.selfCharacter
             and op.selfHumanoid.Health>0 and op.target.Character==op.character
             and op.root.Parent==op.character and Hub.loopTargetReady(op.target,op.character)
-            and (op.voidDispatched or (op.root.Position-op.selfRoot.Position).Magnitude<=40)
+            and (op.voidDispatched or (op.root.Position-op.selfRoot.Position).Magnitude<=41)
     end
     local function owned(op)
         return type(CheckNetworkOwnerShipOnPart)=="function" and CheckNetworkOwnerShipOnPart(op.root)
+    end
+    local function kickPosition(op)
+        if op.blobMethod then return (op.selfRoot.CFrame*CFrame.new(blobX,blobY,blobZ)).Position end
+        -- Reso's ownership kick uses a world-space ring, not the Blobman offset.
+        local targets={}
+        if op.requireSelected then
+            for _,person in pairs(Hub.selectedTargets) do
+                if Hub.isSelectedTarget(person) and Hub.loopTargetReady(person) then table.insert(targets,person) end
+            end
+            table.sort(targets,function(x,y) return x.UserId<y.UserId end)
+        end
+        local index=table.find(targets,op.target) or 1
+        local count=math.max(#targets,1)
+        local angle=2*math.pi/count*(index-1)
+        return op.selfRoot.Position+Vector3.new(math.cos(angle)*10,kickHeight,math.sin(angle)*10)
+    end
+    local function disposeRagdollToy(op,toy)
+        local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+        if typeof(toy)=="Instance" and toy:IsA("Model") and toy.Parent==folder then
+            local menu=ReplicatedStorage:FindFirstChild("MenuToys")
+            local destroy=menu and menu:FindFirstChild("DestroyToy")
+            if destroy then Hub.fire(destroy,toy) end
+        end
+    end
+    local function ragdoll(op)
+        if op.ragdollTask and coroutine.status(op.ragdollTask)~="dead" then return end
+        local head=op.character:FindFirstChild("Head")
+        local torso=op.character:FindFirstChild("Torso")
+        local flag=op.humanoid:FindFirstChild("Ragdolled")
+        if not head or not torso or not flag or flag.Value then return end
+        op.ragdollTask=task.spawn(function()
+            local ok,err=xpcall(function()
+                local toy=op.ragdollToy
+                if not toy or not toy.Parent then
+                    local helpers=Hub.sourceGucci and Hub.sourceGucci.helpers
+                    if not helpers or not helpers.SpawnToy or not valid(op) then return end
+                    -- Reuse the supplied spawn helper: the remote need not return its model.
+                    toy=helpers.SpawnToy("PalletLightBrown",op.selfRoot.CFrame,0.75)
+                    -- A spawn reply can arrive after Stop. Dispose that late own toy.
+                    if not valid(op) then disposeRagdollToy(op,toy);return end
+                    if typeof(toy)~="Instance" or not toy:IsA("Model") then return end
+                    local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+                    if toy.Parent~=folder then return end
+                    op.ragdollToy=toy
+                end
+                local sound=toy:FindFirstChild("SoundPart")
+                local main=toy:FindFirstChild("Main")
+                if not sound or not main then return end
+                if not CheckNetworkOwnerShipOnPart(sound) then
+                    local grabs=ReplicatedStorage:FindFirstChild("GrabEvents")
+                    local owner=grabs and grabs:FindFirstChild("SetNetworkOwner")
+                    if owner then Hub.fire(owner,sound,op.selfRoot.CFrame) end
+                    local deadline=os.clock()+0.5
+                    while valid(op) and sound.Parent and not CheckNetworkOwnerShipOnPart(sound) and os.clock()<deadline do task.wait(0.05) end
+                end
+                if not valid(op) or not sound.Parent or not main.Parent or not CheckNetworkOwnerShipOnPart(sound) then return end
+                for _,part in ipairs(toy:GetDescendants()) do if part:IsA("BasePart") then save(op,part,"CanCollide",false) end end
+                if not op.ragdollForce or not op.ragdollForce.Parent then
+                    local force=Hub.new("BodyPosition",main)
+                    force.Name="RagdollBP";force.D=1500;force.MaxForce=Vector3.new(1e8,1e8,1e8)
+                    force.Position=Vector3.new(0,100000,0)
+                    op.ragdollForce=force;table.insert(op.created,force)
+                end
+                local deadline=os.clock()+0.5
+                repeat
+                    if not valid(op) or not sound.Parent or not torso.Parent then return end
+                    sound.Position=torso.Position
+                    sound.AssemblyLinearVelocity=Vector3.new(0,-10,0)
+                    task.wait(0.1)
+                until flag.Value or not head:FindFirstChild("PartOwner") or os.clock()>=deadline
+            end,debug.traceback)
+            if not ok and valid(op) then status:SetText("Ragdoll helper unavailable: "..tostring(err):sub(1,160)) end
+        end)
     end
     local function setupPhysics(op)
         -- Preserve every edited value, including disabled joints/collisions from before the action.
@@ -15612,7 +15695,7 @@ do
         local force=Hub.new("BodyPosition",op.root);table.insert(op.created,force)
         force.Name="ArrivaPrivateKickAP";force.D=200
         force.MaxForce=Vector3.new(1e8,1e8,1e8)
-        force.Position=(op.selfRoot.CFrame*CFrame.new(0,25,0)).Position
+        force.Position=kickPosition(op)
         local gyro=Hub.new("BodyGyro",op.root);table.insert(op.created,gyro)
         gyro.Name="ArrivaPrivateKickAO";gyro.D=200;gyro.MaxTorque=Vector3.new(1e8,1e8,1e8)
         gyro.CFrame=op.selfRoot.CFrame.Rotation
@@ -15714,20 +15797,39 @@ do
                 deadline=os.clock()+op.seconds
                 while valid(op) and owned(op) and os.clock()<deadline do
                     if op.blob and (op.blob.Parent~=op.folder or Hub.getLoopBlobSeat()~=op.seat) then break end
-                    op.force.Position=(op.selfRoot.CFrame*CFrame.new(0,25,0)).Position
+                    op.force.Position=kickPosition(op)
                     op.root.AssemblyLinearVelocity=Vector3.zero
                     op.root.AssemblyAngularVelocity=Vector3.zero
                     if op.method=="Ownership" then
                         local facing=Hub.lookAt(op.selfRoot.Position,op.root.Position)
                         if facing then Hub.fire(owner,op.root,facing) end
-                        task.wait(0.1)
-                        if not valid(op) then break end
-                        Hub.fire(dropLine,op.root)
+                        if loopRagdoll then ragdoll(op) end
+                        if delayMode=="Faster but worse" then
+                            if not op.releaseTask then
+                                op.releaseTask=task.delay(0.2,function()
+                                    op.releaseTask=nil
+                                    if valid(op) then Hub.fire(dropLine,op.root) end
+                                end)
+                            end
+                        else
+                            task.wait()
+                            if not valid(op) then break end
+                            Hub.fire(dropLine,op.root)
+                        end
                     else
                         Hub.fire(op.grab,nil,op.root,op.weld)
                         task.wait(0.1)
                         if not valid(op) or Hub.getLoopBlobSeat()~=op.seat then break end
                         Hub.fire(op.finishRemote,op.weld)
+                        if op.method=="Grab-Release" then
+                            local facing=Hub.lookAt(op.selfRoot.Position,op.root.Position)
+                            if facing then Hub.fire(owner,op.root,facing) end
+                            ragdoll(op)
+                        elseif blobNetworkOwner then
+                            local facing=Hub.lookAt(op.selfRoot.Position,op.root.Position)
+                            if facing then Hub.fire(owner,op.root,facing) end
+                            if valid(op) then Hub.fire(dropLine,op.root) end
+                        end
                     end
                     task.wait(0.1)
                 end
@@ -15807,6 +15909,25 @@ do
     group:AddDropdown("PrivateKickMethod",{Text="Kick method",Values=methods,Default=1,Callback=function(value)
         stopAll();method=value
     end})
+    local ownershipSettings=Tabs.Target:AddRightGroupbox("Kick Settings")
+    ownershipSettings:AddSlider("PrivateKickHeight",{Text="Kick Height",Default=15,Min=0,Max=28,Rounding=0,
+        Callback=function(value) kickHeight=value end})
+    ownershipSettings:AddDropdown("PrivateKickDelayMode",{Text="Delay Mode",Values={"Normal","Faster but worse"},Default=1,
+        Callback=function(value) stopAll();delayMode=value end})
+    ownershipSettings:AddToggle("PrivateKickRagdoll",{Text="Loop Ragdoll",Default=true,
+        Callback=function(on) loopRagdoll=on end})
+    ownershipSettings:AddLabel("Ownership uses a 10-stud ring at Kick Height. These settings do not change Void.")
+
+    local blobSettings=Tabs.Blob:AddRightGroupbox("Kick Settings")
+    blobSettings:AddSlider("PrivateBlobKickX",{Text="X Offset",Default=0,Min=-5,Max=5,Rounding=1,
+        Callback=function(value) blobX=value end})
+    blobSettings:AddSlider("PrivateBlobKickY",{Text="Y Offset",Default=25,Min=10,Max=40,Rounding=1,
+        Callback=function(value) blobY=value end})
+    blobSettings:AddSlider("PrivateBlobKickZ",{Text="Z Offset",Default=0,Min=-5,Max=5,Rounding=1,
+        Callback=function(value) blobZ=value end})
+    blobSettings:AddToggle("PrivateBlobKickNetworkOwner",{Text="Net Owner Spam (Grab-Drop)",Default=false,
+        Callback=function(on) blobNetworkOwner=on end})
+    blobSettings:AddLabel("Offsets apply to Grab-Drop and Grab-Release. Extra ownership requests remain bounded by the action cadence.")
     group:AddButton({Text="Apply kick to selected",Func=api.ApplySelected})
     group:AddToggle("PrivateKickLoop",{Text="Loop kick selected",Default=false,Callback=function(on)
         if stopping then return end
@@ -15940,9 +16061,9 @@ do
         Defense={sections={"Core Protections","Safe Zone","Local hazard filters","Recovery","Extra Protections"},
             rename={["Defense Main"]="Core Protections",["Extra Defense"]="Extra Protections"},
             controls={AutoResetToggle="Recovery",RecoverMovementAfterGrab="Recovery"}},
-        Target={sections={"Target Interaction","Aim Assist","Private Kick"}},
+        Target={sections={"Target Interaction","Aim Assist","Private Kick","Kick Settings"}},
         AntiLag={sections={"Automatic Line Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
-        Blob={sections={"Controls","Seating","Flight"},
+        Blob={sections={"Controls","Seating","Flight","Kick Settings"},
             controls={AutoReseatBlobLoops="Seating",BlobReseatInterval="Seating",AutoSitZ="Seating",BlobFlySpeed="Flight"}},
         Aura={sections={"Player Auras","Attraction & Tornado","Range & Alerts"}},
         Grab={sections={"Throw & Distance","Grab Modes","Held Object","Line Appearance"},
