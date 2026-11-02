@@ -10441,6 +10441,9 @@ do
     -- Classic R6 dance families and their Animate-script variants.
     -- Source: https://devforum.roblox.com/t/r6-to-r15-animation-list-from-roblox/4079574
     local r6Dances={
+        -- Additional legacy R6 presets: https://github.com/KRNL2/r6animationgui/blob/main/fe
+        ["Happy Dance"]="rbxassetid://248335946",
+        ["Moon Dance 2"]="rbxassetid://27789359",
         ["R6 Dance 1"]="rbxassetid://182435998",
         ["R6 Dance 1 (Alt 1)"]="rbxassetid://182491037",
         ["R6 Dance 1 (Alt 2)"]="rbxassetid://182491065",
