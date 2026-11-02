@@ -850,7 +850,9 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			if UI.active and not UI.active.nav.Visible and first then activate(first) end
 		end
 		local function registerEntry(tab, frame, name, section)
-			table.insert(tab.entries, {frame=frame, name=tostring(name), group=tab.section, section=section})
+			local entry = {frame=frame, name=tostring(name), group=tab.section, section=section}
+            if not section then entry.controlId=tab.pendingControlId;tab.pendingControlId=nil end
+            table.insert(tab.entries, entry)
 			if UI.search.Text ~= "" then filter() end
 		end
 		local function card(tab, name, height)
@@ -863,6 +865,50 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			return row,title
 		end
 		local Tab = {}
+        -- Presentation only: preserve control instances, callbacks and saved IDs.
+        function Tab:Organize(layout)
+            local buckets, order, seen = {}, {}, {}
+            for _, title in ipairs(layout.sections) do
+                buckets[title]={};table.insert(order,title);seen[title]=true
+            end
+            local controls={}
+            for _, entry in ipairs(self.entries) do
+                if entry.section then
+                    entry.frame:Destroy()
+                else
+                    local title=(layout.controls or {})[entry.controlId]
+                        or (layout.rename or {})[entry.group] or entry.group or "Other"
+                    if not seen[title] then
+                        seen[title]=true;buckets[title]={};table.insert(order,title)
+                    end
+                    entry.group=title
+                    table.insert(buckets[title],entry)
+                    table.insert(controls,entry)
+                end
+            end
+            self.entries=controls
+            local position=0
+            for _, title in ipairs(order) do
+                local entries=buckets[title]
+                if #entries>0 then
+                    self:CreateSection(title)
+                    position+=1;self.entries[#self.entries].frame.LayoutOrder=position
+                    local ranks={}
+                    for index,id in ipairs((layout.order or {})[title] or {}) do ranks[id]=index end
+                    for index,entry in ipairs(entries) do entry.menuIndex=index end
+                    table.sort(entries,function(a,b)
+                        local ar,br=ranks[a.controlId] or 10000,ranks[b.controlId] or 10000
+                        if ar~=br then return ar<br end
+                        return a.menuIndex<b.menuIndex
+                    end)
+                    for _,entry in ipairs(entries) do
+                        position+=1;entry.frame.LayoutOrder=position
+                    end
+                end
+            end
+            self.section=nil
+            if UI.search.Text~="" then filter() end
+        end
 		function Tab:CreateSection(name)
 			self.section = tostring(name)
 			local heading = text(self.page,name,{Size=UDim2.new(1,0,0,40), TextColor3=colors.text,
@@ -1599,7 +1645,8 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	function Group:ensureSection()
 		if self.tab.section ~= self.title then self.tab:CreateSection(self.title); self.sectionCreated = true end
 	end
-	local function register(id, kind, info)
+	local function register(id, kind, info, tab)
+        tab.pendingControlId=id
 		assert(not Library.controls[id], "Duplicate UI ID: " .. id)
 		local control = {Id = id, Type = kind, Value = info.Default, Multi = info.Multi or false, Callback = info.Callback,
 			Values = info.Values or {}, NoUI = info.NoUI, Mode = "Toggle"}
@@ -1642,7 +1689,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	end
 	function Group:AddToggle(id, info)
 		self:ensureSection()
-		local control = register(id, "Toggle", info)
+		local control = register(id, "Toggle", info, self.tab)
 		control.Value = info.Default == true
 		function control:normalize(value) return value == true end
 		control.handle = self.tab:CreateToggle({Name = info.Text or id, CurrentValue = control.Value,
@@ -1652,7 +1699,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	end
 	function Group:AddSlider(id, info)
 		self:ensureSection()
-		local control = register(id, "Slider", info)
+		local control = register(id, "Slider", info, self.tab)
 		function control:normalize(value) return math.clamp(tonumber(value) or info.Default, info.Min, info.Max) end
 		control.handle = self.tab:CreateSlider({Name = info.Text or id, Range = {info.Min, info.Max},
 			Increment = 10 ^ -(info.Rounding or 0), CurrentValue = info.Default,
@@ -1662,7 +1709,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	end
 	function Group:AddDropdown(id, info)
 		self:ensureSection()
-		local control = register(id, "Dropdown", info)
+		local control = register(id, "Dropdown", info, self.tab)
 		function control:normalize(value)
 			if id=="SidebarTheme" and value=="Tool Dark" then value="Default" end
 			if not self.Multi then
@@ -1706,7 +1753,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	end
 	function Group:AddInput(id, info)
 		self:ensureSection()
-		local control = register(id, "Input", info)
+		local control = register(id, "Input", info, self.tab)
 		control.Value = info.Default or ""
 		function control:normalize(value) return tostring(value or "") end
 		control.handle = self.tab:CreateInput({Name = info.Text or id, CurrentValue = control.Value,
@@ -1717,7 +1764,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	end
 	function Group:AddKeyPicker(id, info)
 		if self.ensureSection then self:ensureSection() end
-		local control = register(id, "KeyPicker", info)
+		local control = register(id, "KeyPicker", info, self.tab)
         control.Callback = nil -- Settings changes must not execute the bound action.
 		function control:normalize(value)
 			if type(value) == "table" then value = value[1] end
@@ -15734,6 +15781,41 @@ Hub.connect(Player.CharacterAdded, function(char)
 end)
 
 -- Autosave is scheduled after setting changes; no permanent polling loop.
+
+-- Keep sidebar order fixed; arrange existing rows by purpose after construction.
+do
+    local layouts = {
+        Player={sections={"Movement","Flight","Camera","Spectator Camera","Follow Player Position","Character animations","Plot Barriers","Performance"},
+            rename={["View & Movement"]="Movement"},
+            controls={ThirdPersonToggle="Camera",ToolFirstPerson="Camera",FOVSlider="Camera"},
+            order={Movement={"SpeedModifierToggle","SpeedValue","JumpModifierToggle","JumpValue","infJumpToggle","SelfNoclipToggle","ToolGravity","ToolGravityValue","SpinToggle","SpinSpeed"}}},
+        Defense={sections={"Core Protections","Safe Zone","Local hazard filters","Recovery","Extra Protections"},
+            rename={["Defense Main"]="Core Protections",["Extra Defense"]="Extra Protections"},
+            controls={AutoResetToggle="Recovery",RecoverMovementAfterGrab="Recovery"}},
+        Target={sections={"Target Interaction","Aim Assist"}},
+        AntiLag={sections={"Automatic Line Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
+        Blob={sections={"Controls","Seating","Flight"},
+            controls={AutoReseatBlobLoops="Seating",BlobReseatInterval="Seating",AutoSitZ="Seating",BlobFlySpeed="Flight"}},
+        Aura={sections={"Player Auras","Attraction & Tornado","Range & Alerts"}},
+        Grab={sections={"Throw & Distance","Grab Modes","Held Object","Line Appearance"},
+            rename={["Line Texture & Gradient"]="Line Appearance"}},
+        Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
+            rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
+        Visual={sections={"Player ESP","World ESP","Camera and cursor","Camera Effects","Lighting","Local environment","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance","Local sound filters"}},
+        Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Servers","Toy Audio"},
+            rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
+        Whitelist={sections={"Protected Players"}},
+        Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
+        KeyBinds={sections={"Menu & emergency","Action shortcuts","Missile throw"}},
+        Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Position & Appearance"}},
+        Customization={sections={"Hub Theme","Appearance","Custom Theme Colors","On-screen FPS & Ping","Anchor Appearance","Touch Action Buttons"}},
+        ["UI Settings"]={sections={"Menu","Saved settings"}},
+    }
+    for key,layout in pairs(layouts) do
+        local tab=Tabs[key]
+        if tab and tab.native then tab.native:Organize(layout) end
+    end
+end
 
 -- Send loaded message
 
