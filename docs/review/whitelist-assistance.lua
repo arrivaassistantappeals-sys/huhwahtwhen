@@ -16,6 +16,8 @@ do
     local created={}
     local epoch=0
     local allowVisits=false
+    local maskVisits=true
+    local renderName="ArrivaWhitelistAssistVisit"
     local toyLimit=3
     local busy=false
     local spawnBusy=false
@@ -47,6 +49,7 @@ do
     end
     local function owned(part,char,toy)
         local value=partOwner(part,char)
+        if value==me.Name or value==me then return true end
         if toy and created[toy] and toy.Parent==World:FindFirstChild(me.Name.."SpawnedInToys") then
             local marker=toy:FindFirstChild("PartOwner",true)
             value=marker and marker.Value or value
@@ -66,7 +69,7 @@ do
     end
     local function clearToy(record)
         if record.toy then destroyToy(record.toy);record.toy=nil end
-        record.active=false
+        record.active=false;record.attachFailures=0
     end
     local function valid(record,ticket,kind)
         if disposed or not Hub.alive or epoch~=ticket or not modes[kind] or not trusted(record.player)
@@ -86,9 +89,14 @@ do
     end
     local function finishVisit()
         local visit=ownVisit;ownVisit=nil
+        if visit and visit.masked then
+            Run:UnbindFromRenderStep(renderName)
+            if visit.physics then visit.physics:Disconnect();Hub.connections[visit.physics]=nil end
+        end
         if visit and me.Character==visit.char and readySelf()==visit.root
-            and (visit.root.Position-visit.destination).Magnitude<12 then
+            and (visit.masked or (visit.root.Position-visit.destination).Magnitude<12) then
             visit.root.CFrame=visit.original;visit.root.AssemblyLinearVelocity=Vector3.zero
+            if visit.head and visit.head.Parent==visit.char then visit.head.CFrame=visit.headFrame end
         end
         if visit and Hub.interactionVisitLock==visit then Hub.interactionVisitLock=nil end
     end
@@ -103,7 +111,26 @@ do
             if destination.Y<=World.FallenPartsDestroyHeight+8 then return false end
             ownVisit={root=root,char=char,original=root.CFrame,destination=destination}
             Hub.interactionVisitLock=ownVisit
-            root.CFrame=CFrame.new(destination)*root.CFrame.Rotation
+            local visit=ownVisit
+            visit.frame=CFrame.new(destination)*root.CFrame.Rotation
+            visit.head=char:FindFirstChild("Head")
+            visit.headFrame=visit.head and visit.head.CFrame
+            if not visit.headFrame then visit.head=nil end
+            visit.masked=maskVisits
+            if visit.masked then
+                local function live() return ownVisit==visit and Hub.alive and me.Character==char and root.Parent==char end
+                -- Keep the local character at its saved display position before
+                -- the camera renders, while the physics window uses the visit frame.
+                Run:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value-1,function()
+                    if not live() then return end
+                    root.CFrame=visit.original
+                    if visit.head and visit.head.Parent==char then visit.head.CFrame=visit.headFrame end
+                end)
+                visit.physics=Hub.connect(Run.Heartbeat,function()
+                    if live() then root.CFrame=visit.frame end
+                end)
+            end
+            root.CFrame=visit.frame
             root.AssemblyLinearVelocity=Vector3.zero
             task.wait(0.15)
         end
@@ -112,14 +139,16 @@ do
         if not remote then return false end
         for _=1,4 do
             if not valid(record,ticket,kind) or not part.Parent or me.Character~=char or readySelf()~=root then return false end
-            if ownVisit and (root.Position-ownVisit.destination).Magnitude>=12 then return false end
+            if ownVisit and not ownVisit.masked and (root.Position-ownVisit.destination).Magnitude>=12 then return false end
             if owned(part,not toy and record.char or nil,toy) then return true end
             -- Narrow defensive path: ONLY this current trusted player's root,
             -- or a sticky part inside this component's own newly spawned toy.
             local permitted=not toy and part==record.root
                 or toy and created[toy] and toy.Parent==ownFolder() and part:IsDescendantOf(toy)
-            if not permitted or (root.Position-part.Position).Magnitude>30 then return false end
-            local aim=Hub.safeLookAt(root.Position+Vector3.new(0,1.593,0),part.Position)
+            local origin=ownVisit and ownVisit.masked and ownVisit.frame.Position or root.Position
+            if not permitted or (origin-part.Position).Magnitude>30 then return false end
+            if ownVisit and ownVisit.masked then root.CFrame=ownVisit.frame end
+            local aim=Hub.safeLookAt(origin+Vector3.new(0,1.593,0),part.Position)
             if not aim then return false end
             if not toy then record.assistGrabRequested=true end
             remote:FireServer(part,aim)
@@ -212,15 +241,21 @@ do
         local sticky=toy:FindFirstChild("StickyPart")
         local weld=sticky and sticky:FindFirstChild("StickyWeld")
         if not sticky or not hitbox or not weld then return end
-        local attached=weld.Part0==hitbox or weld.Part1==hitbox
+        local attached=weld.Part1==hitbox and weld.Enabled~=false
         record.active=attached
         if attached then return end
         if busy or os.clock()<(record.nextStick or 0) then return end
         record.nextStick=os.clock()+2;busy=true
         local ticket=epoch
         task.spawn(function()
+            local requested=false
+            local confirmed=false
             local ok,err=pcall(function()
-                if not acquire(sticky,record,ticket,"kick",toy) or not valid(record,ticket,"kick") then return end
+                if not acquire(sticky,record,ticket,"kick",toy) then
+                    if valid(record,ticket,"kick") then say("Whitelist anti-kick: waiting for verified ownership of the shuriken.") end
+                    return
+                end
+                if not valid(record,ticket,"kick") then return end
                 if not created[toy] or toy.Parent~=ownFolder() or not sticky:IsDescendantOf(toy) then return end
                 local events=Storage:FindFirstChild("PlayerEvents")
                 local remote=events and events:FindFirstChild("StickyPartEvent")
@@ -229,8 +264,28 @@ do
                 local touch=sticky:FindFirstChild("TouchInterest");if touch then touch:Destroy() end
                 -- Only our managed shuriken -> this trusted player's current hitbox.
                 remote:FireServer(sticky,hitbox,CFrame.new(0,-0.3,0)*CFrame.Angles(math.pi/2,0,0))
+                requested=true
+                for _=1,8 do
+                    if not valid(record,ticket,"kick") or record.toy~=toy or not toy.Parent or not weld.Parent then return end
+                    if weld.Part1==hitbox and weld.Enabled~=false then confirmed=true;break end
+                    task.wait(0.1)
+                end
+                if not confirmed and valid(record,ticket,"kick") and weld.Parent then confirmed=weld.Part1==hitbox and weld.Enabled~=false end
+                record.active=confirmed
+                if confirmed then
+                    record.attachFailures=0
+                    say("Whitelist anti-kick: actual shuriken weld confirmed on @"..record.player.Name..".")
+                end
             end)
             finishVisit();busy=false
+            if requested and not confirmed and valid(record,ticket,"kick") then
+                record.attachFailures=(record.attachFailures or 0)+1
+                say("Whitelist anti-kick: ownership confirmed but server attachment not confirmed; retrying.")
+                if record.attachFailures>=3 then
+                    clearToy(record);nextSpawn=math.max(nextSpawn,os.clock()+4)
+                    say("Whitelist anti-kick: repeated attachment failures; recycling only this helper's toy.")
+                end
+            end
             if not ok then say("Whitelist anti-kick error: "..tostring(err):sub(1,140)) end
         end)
     end
@@ -285,6 +340,7 @@ do
     group:AddToggle("WhitelistAssistKick",{Text="Give whitelist physical anti-kick",Default=false,Callback=function(on) changed("kick",on) end})
     group:AddToggle("WhitelistAssistExplosion",{Text="Give whitelist anti-explosion",Default=false,Callback=function(on) changed("explosion",on) end})
     group:AddToggle("WhitelistAssistVisits",{Text="Allow brief assist visits for distant players",Default=false,Callback=function(on) allowVisits=on;if not on then epoch+=1;finishVisit() end end})
+    group:AddToggle("WhitelistAssistMaskVisits",{Text="Mask assist visits locally",Default=true,Callback=function(on) maskVisits=on;epoch+=1;finishVisit() end})
     group:AddSlider("WhitelistAssistToyLimit",{Text="Maximum assistance shurikens",Default=3,Min=1,Max=10,Rounding=0,Callback=function(v) toyLimit=v end})
     group:AddLabel("Uses the existing whitelist. Skips dead/in-plot characters. Ownership and actual sticky welds must confirm; these are best-effort physical protections, not server-kick immunity.")
     group:AddButton({Text="Whitelist assistance status",Func=function()
@@ -295,7 +351,14 @@ do
     local elapsed=0
     Hub.connect(Run.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.2 then elapsed=0;Hub.sampleWhitelistAssistance() end end)
     Hub.connect(Players.PlayerRemoving,function(person) local record=records[person.UserId];if record then clearToy(record);records[person.UserId]=nil end end)
-    Hub.connect(me.CharacterRemoving,function() epoch+=1;if ownVisit and Hub.interactionVisitLock==ownVisit then Hub.interactionVisitLock=nil end;ownVisit=nil end)
+    Hub.connect(me.CharacterRemoving,function()
+        epoch+=1
+        if ownVisit then
+            if ownVisit.masked then Run:UnbindFromRenderStep(renderName);if ownVisit.physics then ownVisit.physics:Disconnect();Hub.connections[ownVisit.physics]=nil end end
+            if Hub.interactionVisitLock==ownVisit then Hub.interactionVisitLock=nil end
+        end
+        ownVisit=nil
+    end)
     Hub.cleanup(function()
         disposed=true;epoch+=1;finishVisit()
         for _,record in pairs(records) do clearToy(record) end
