@@ -85,6 +85,35 @@ local function runWorker()
 end
 '''
 CASES={
+'missing_sticky_parts_recycle_without_touching_existing_toys':r'''
+    spawnRemote.InvokeServer=function()
+        spawned+=1;local toy=node("NinjaShuriken",{},"Model");toy.Parent=folder
+        table.insert(folder.children,toy);return toy
+    end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    Hub.sampleWhitelistAssistance();assert(#deleted==0)
+    now+=4;Hub.sampleWhitelistAssistance()
+    assert(#deleted==1 and deleted[1]~=originals and originals.Parent==folder)
+''',
+'attachment_preserves_touch_and_collision_before_request':r'''
+    local fire=stickyRemote.FireServer
+    stickyRemote.FireServer=function(self,part,hitbox,offset)
+        assert(part.CanTouch~=false and part.CanCollide~=false)
+        fire(self,part,hitbox,offset)
+    end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    Hub.sampleWhitelistAssistance();runWorker()
+    assert(requests[#requests].kind=="sticky")
+''',
+'failure_status_identifies_target_and_weld_stage':r'''
+    confirmWeld=false
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    Hub.sampleWhitelistAssistance();runWorker()
+    buttons["Whitelist assistance status"]()
+    local text=notices[#notices].Description
+    assert(text:find("@"..a.Name,1,true) and text:find("server weld not confirmed",1,true))
+''',
+
 'direct_toy_owner_takes_precedence_over_empty_model_marker':r'''
     spawnRemote.InvokeServer=function()
         spawned+=1;local toy=makeToy()
