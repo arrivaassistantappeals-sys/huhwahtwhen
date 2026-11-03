@@ -90,9 +90,11 @@ do
             and (visit.root.Position-visit.destination).Magnitude<12 then
             visit.root.CFrame=visit.original;visit.root.AssemblyLinearVelocity=Vector3.zero
         end
+        if visit and Hub.interactionVisitLock==visit then Hub.interactionVisitLock=nil end
     end
     local function acquire(part,record,ticket,kind,toy)
         if not valid(record,ticket,kind) then return false end
+        if Hub.interactionVisitLock and Hub.interactionVisitLock~=ownVisit then say("Assistance waiting: another movement visit is running.");return false end
         local root,char=readySelf()
         if not root then say("Assistance waiting: your character is busy, held, seated or flying.");return false end
         if (root.Position-part.Position).Magnitude>30 then
@@ -100,6 +102,7 @@ do
             local destination=part.Position+Vector3.new(0,3,6)
             if destination.Y<=World.FallenPartsDestroyHeight+8 then return false end
             ownVisit={root=root,char=char,original=root.CFrame,destination=destination}
+            Hub.interactionVisitLock=ownVisit
             root.CFrame=CFrame.new(destination)*root.CFrame.Rotation
             root.AssemblyLinearVelocity=Vector3.zero
             task.wait(0.15)
@@ -110,7 +113,7 @@ do
         for _=1,4 do
             if not valid(record,ticket,kind) or not part.Parent or me.Character~=char or readySelf()~=root then return false end
             if ownVisit and (root.Position-ownVisit.destination).Magnitude>=12 then return false end
-            if owned(part,toy and nil or record.char,toy) then return true end
+            if owned(part,not toy and record.char or nil,toy) then return true end
             -- Narrow defensive path: ONLY this current trusted player's root,
             -- or a sticky part inside this component's own newly spawned toy.
             local permitted=not toy and part==record.root
@@ -122,7 +125,7 @@ do
             remote:FireServer(part,aim)
             task.wait(0.15)
         end
-        return valid(record,ticket,kind) and part.Parent and owned(part,toy and nil or record.char,toy)
+        return valid(record,ticket,kind) and part.Parent and owned(part,not toy and record.char or nil,toy)
     end
     local function restorePosition(record,kind)
         if busy or record.restoring or os.clock()<(record.nextRestore or 0) or not record.saved then return end
@@ -292,7 +295,7 @@ do
     local elapsed=0
     Hub.connect(Run.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.2 then elapsed=0;Hub.sampleWhitelistAssistance() end end)
     Hub.connect(Players.PlayerRemoving,function(person) local record=records[person.UserId];if record then clearToy(record);records[person.UserId]=nil end end)
-    Hub.connect(me.CharacterRemoving,function() epoch+=1;ownVisit=nil end)
+    Hub.connect(me.CharacterRemoving,function() epoch+=1;if ownVisit and Hub.interactionVisitLock==ownVisit then Hub.interactionVisitLock=nil end;ownVisit=nil end)
     Hub.cleanup(function()
         disposed=true;epoch+=1;finishVisit()
         for _,record in pairs(records) do clearToy(record) end
