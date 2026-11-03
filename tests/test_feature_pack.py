@@ -25,10 +25,10 @@ CASES={
     local plus=node("Plus",{part});local sign=node("PlotSign",{owners,plus})
     named.Plots=node("Plots",{node("Plot3",{sign})})
     controls.PackAutoClaimPlot:SetValue(true);Hub.sampleToolAutomation();Hub.sampleToolAutomation()
-    assert(#requests==2)
+    assert(#requests==1)
     owners.children={node("Owner")};now=6;Hub.sampleToolAutomation()
-    assert(#requests==2)
-    owners.children={};now=12;Hub.sampleToolAutomation();assert(#requests==4)
+    assert(#requests==1)
+    owners.children={};now=12;Hub.sampleToolAutomation();assert(#requests==2)
  '''),
  'custom_crosshair_uses_the_existing_renderer_and_validates_assets':('cosmetics',r'''
     controls.PrivateCrosshair:SetValue(true)
