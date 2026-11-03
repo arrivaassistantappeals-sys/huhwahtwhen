@@ -1,0 +1,115 @@
+--- a/dist/resonance.lua
++++ b/dist/resonance.lua
+@@ -10045,9 +10045,10 @@
+             ticket.root.CFrame=ticket.original
+             ticket.root.AssemblyLinearVelocity=Vector3.zero;ticket.root.AssemblyAngularVelocity=Vector3.zero
+         end
++        if Hub.interactionVisitLock==ticket then Hub.interactionVisitLock=nil end
+     end
+     local function visit(kind,part,allowed,action)
+-        if active then return false,"Another plot/slot interaction is running." end
++        if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
+         local root,char=selfRoot()
+         if not root then return false,"Character busy: leave seats/holds and stop flight, safe-zone or action loops." end
+         if not part or not part.Parent or not part:IsA("BasePart") then return false,"Interaction part has not loaded." end
+@@ -10058,7 +10059,7 @@
+         end
+         if destination.Y<=Workspace.FallenPartsDestroyHeight+8 then return false,"Destination is below the safe map height." end
+         local ticket={kind=kind,root=root,char=char,original=root.CFrame,destination=destination}
+-        active=ticket;status:SetText(kind..": visiting; will return when finished.")
++        active=ticket;Hub.interactionVisitLock=ticket;status:SetText(kind..": visiting; will return when finished.")
+         task.spawn(function()
+             local function valid()
+                 return Hub.alive and active==ticket and allowed() and Player.Character==char
+@@ -10124,7 +10125,7 @@
+         if light then return light.Material==Enum.Material.Neon end
+     end
+     local function spin(automatic)
+-        if active then return false,"Another plot/slot interaction is running." end
++        if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
+         local root=selfRoot();if not root then return false,"Character busy: stop flight/loops and leave seats first." end
+         local slots=Workspace:FindFirstChild("Slots");if not slots then return false,"Slot machines have not loaded." end
+         local best,distance
+@@ -10196,7 +10197,7 @@
+     end
+     local elapsed=0
+     Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.5 then elapsed=0;Hub.sampleToolAutomation() end end)
+-    Hub.connect(Player.CharacterRemoving,function() active=nil end)
++    Hub.connect(Player.CharacterRemoving,function() if active and Hub.interactionVisitLock==active then Hub.interactionVisitLock=nil end;active=nil end)
+     Hub.cleanup(function() slotOn=false;houseOn=false;claimOn=false;if active then finish(active) end;Hub.sampleToolAutomation=nil end)
+ end)();
+ 
+@@ -13654,7 +13655,7 @@
+ local lowFps=false
+ local fpsThreshold=3
+ local lowFpsStarted=os.clock()
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     if lowFps and os.clock()-lowFpsStarted>=2.5 and dt>0 and math.floor(1/dt)<fpsThreshold then
+         local toggle=Toggles.AntiLagToggle
+         if toggle and not toggle.Value then toggle:SetValue(true);fn18("Anti Lag enabled, FPS below threshold.","Auto Anti Lag") end
+@@ -14100,7 +14101,7 @@
+         tbl7.PCLDParts[part]=nil;tbl7.PCLDTracker.PartStates[part]=nil
+     end
+ end)
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     if not tbl8.AntiKick then return end
+     trackerElapsed+=dt;if trackerElapsed<0.1 then return end;trackerElapsed=0
+     tbl7.PlayerList=Players:GetPlayers();tbl12.UpdatePCLDAssignments()
+@@ -14412,7 +14413,7 @@
+     updateAntiKickAppearance();Hub.requestSave()
+ end})
+ local appearanceElapsed=0
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     appearanceElapsed+=dt
+     if appearanceElapsed<0.05 then return end
+     appearanceElapsed=0
+@@ -16367,9 +16368,11 @@
+             and (visit.root.Position-visit.destination).Magnitude<12 then
+             visit.root.CFrame=visit.original;visit.root.AssemblyLinearVelocity=Vector3.zero
+         end
++        if visit and Hub.interactionVisitLock==visit then Hub.interactionVisitLock=nil end
+     end
+     local function acquire(part,record,ticket,kind,toy)
+         if not valid(record,ticket,kind) then return false end
++        if Hub.interactionVisitLock and Hub.interactionVisitLock~=ownVisit then say("Assistance waiting: another movement visit is running.");return false end
+         local root,char=readySelf()
+         if not root then say("Assistance waiting: your character is busy, held, seated or flying.");return false end
+         if (root.Position-part.Position).Magnitude>30 then
+@@ -16377,6 +16380,7 @@
+             local destination=part.Position+Vector3.new(0,3,6)
+             if destination.Y<=World.FallenPartsDestroyHeight+8 then return false end
+             ownVisit={root=root,char=char,original=root.CFrame,destination=destination}
++            Hub.interactionVisitLock=ownVisit
+             root.CFrame=CFrame.new(destination)*root.CFrame.Rotation
+             root.AssemblyLinearVelocity=Vector3.zero
+             task.wait(0.15)
+@@ -16387,7 +16391,7 @@
+         for _=1,4 do
+             if not valid(record,ticket,kind) or not part.Parent or me.Character~=char or readySelf()~=root then return false end
+             if ownVisit and (root.Position-ownVisit.destination).Magnitude>=12 then return false end
+-            if owned(part,toy and nil or record.char,toy) then return true end
++            if owned(part,not toy and record.char or nil,toy) then return true end
+             -- Narrow defensive path: ONLY this current trusted player's root,
+             -- or a sticky part inside this component's own newly spawned toy.
+             local permitted=not toy and part==record.root
+@@ -16399,7 +16403,7 @@
+             remote:FireServer(part,aim)
+             task.wait(0.15)
+         end
+-        return valid(record,ticket,kind) and part.Parent and owned(part,toy and nil or record.char,toy)
++        return valid(record,ticket,kind) and part.Parent and owned(part,not toy and record.char or nil,toy)
+     end
+     local function restorePosition(record,kind)
+         if busy or record.restoring or os.clock()<(record.nextRestore or 0) or not record.saved then return end
+@@ -16569,7 +16573,7 @@
+     local elapsed=0
+     Hub.connect(Run.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.2 then elapsed=0;Hub.sampleWhitelistAssistance() end end)
+     Hub.connect(Players.PlayerRemoving,function(person) local record=records[person.UserId];if record then clearToy(record);records[person.UserId]=nil end end)
+-    Hub.connect(me.CharacterRemoving,function() epoch+=1;ownVisit=nil end)
++    Hub.connect(me.CharacterRemoving,function() epoch+=1;if ownVisit and Hub.interactionVisitLock==ownVisit then Hub.interactionVisitLock=nil end;ownVisit=nil end)
+     Hub.cleanup(function()
+         disposed=true;epoch+=1;finishVisit()
+         for _,record in pairs(records) do clearToy(record) end
