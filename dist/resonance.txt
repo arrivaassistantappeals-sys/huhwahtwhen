@@ -1871,7 +1871,48 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				if type(value) == "string" then
 					if not control.busy then control:commit(value) end
 				elseif Library.ToggleKeybind == control then
-					Rayfield:SetVisibility(not Rayfield:IsVisible())
+    local opening = not Rayfield:IsVisible()
+    Rayfield:SetVisibility(opening)
+
+    local sound = Hub.menuToggleSound
+    if not sound then
+        sound = Hub.new("Sound", game:GetService("SoundService"))
+        Hub.menuToggleSound = sound
+
+        Hub.cleanup(function()
+            Hub.menuToggleSound = nil
+            Hub.instances[sound] = nil
+            Hub.assetTargets[sound] = nil
+            sound:Destroy()
+        end)
+    end
+
+local key = Library.ToggleKeybind
+local keyName = key and tostring(key.Value) or "M"
+
+if opening then
+    Library:Notify({
+        Title = "Menu Open",
+        Description = "Welcome back!",
+        Time = 4,
+        Type = "info",
+    })
+else
+    Library:Notify({
+        Title = "Menu Closed",
+        Description = "Press "..keyName.." to open the menu again.",
+        Time = 4,
+        Type = "info",
+    })
+end
+
+    sound:Stop()
+    sound.SoundId = opening
+        and "rbxassetid://115593451988265" -- Open
+        or "rbxassetid://108295046133967" -- Close
+    sound.Volume = 0.4
+    sound.TimePosition = 0
+    pcall(function() sound:Play() end)
 				else invoke(info.Callback, value) end
 			end})
 		return control
@@ -1891,7 +1932,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	end
 	function Library:CreateWindow(info)
 		local native = Rayfield:CreateWindow({Name = info.Title, LoadingTitle = "Arriva Core Hub",
-			LoadingSubtitle = "Rayfield edition", Theme = "Default", ToggleUIKeybind = Enum.KeyCode.RightShift,
+			LoadingSubtitle = "Rayfield edition", Theme = "Default", ToggleUIKeybind = Enum.KeyCode.M,
 			ConfigurationSaving = {Enabled = false}, Discord = {Enabled = false}, KeySystem = false})
 		native:SetCloseCallback(function() Library:Unload() end)
 		Library.window = native
@@ -8372,6 +8413,22 @@ MiscGroup:AddToggle("WaterWalkToggle", {
 	end
 })
 
+MiscGroup:AddButton({Text="Shutdown",Func=function()
+	notify("Shutdown Pending","Instructions sent to the server",5)
+	local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
+    Event1:FireServer(("ARCO"):rep(1e6))
+
+    task.wait()
+
+    local Event = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("DataRemoteEvent")
+    Event:FireServer(("a"):rep(1))
+
+    for i = 1, 1e6 do
+        Event:FireServer()
+    end
+	
+end})
+
 -- Triggerbot System
 local Triggerbot = {
 	Enabled = false,
@@ -9580,14 +9637,14 @@ do
 					notify("Payload monitor","Captured one incoming event, details are in the F9 console.",5)
 				end
 				if bytes<threshold then return end
+                if Hub.reportIncomingSignalPayload then Hub.reportIncomingSignalPayload(bytes,remote.Name) end
 				if os.clock()<nextAlert then return end
 				nextAlert=os.clock()+cooldown
 				lastReport=diagnostic(remote,args,bytes,sender,truncated)
 				print(lastReport)
 				local name=remote.Name:sub(1,80)
 				local amount=string.format("%s%.2f MiB of string/buffer data",truncated and "at least " or "",bytes/1048576)
-				local message=sender and (sender.Name .. ", " .. amount .. ", remote: " .. name .. ".")
-					or (name .. " received " .. amount .. ".")
+				local message=name.." received "..amount..". Source unknown; included Player values do not prove a sender."
 				notify("Large incoming payload",message,6)
 				status:SetText(string.format("Watching %d remotes, last alert %.2f MiB of string/buffer data.",remoteCount,bytes/1048576))
 			end)
@@ -9989,39 +10046,225 @@ do
         end
     end
     group:AddDropdown("ToolPlot",{Text="Plot",Values={"Plot1","Plot2","Plot3","Plot4","Plot5"},Default=3,Callback=function(value) selectedPlot=value end})
-    local function claim(onlyEmpty)
-        local plots=Workspace:FindFirstChild("Plots")
-        local plot=plots and plots:FindFirstChild(selectedPlot)
-        local sign=plot and plot:FindFirstChild("PlotSign")
-        local owners=sign and sign:FindFirstChild("ThisPlotsOwners")
-        if onlyEmpty and owners and #owners:GetChildren()>0 then return false end
-        local plus=sign and sign:FindFirstChild("Plus")
-        return grabOnce(plus and plus:FindFirstChild("PlusGrabPart"))
+local claimTask
+
+local function finishClaim(ticket)
+    if claimTask ~= ticket then return end
+    claimTask = nil
+
+    if Player.Character == ticket.char
+        and ticket.root.Parent == ticket.char
+        and selfRoot() == ticket.root
+        and (ticket.root.Position - ticket.destination).Magnitude < 10 then
+        ticket.root.CFrame = ticket.original
+        ticket.root.AssemblyLinearVelocity = Vector3.zero
     end
-    group:AddButton({Text="Claim selected plot (nearby)",Func=function()
-        if not claim(false) then notify("Plot","Stand within 30 studs of the selected plot's claim sign. Character and grab remotes must be ready.",5) end
-    end})
+end
+
+local function claim(onlyEmpty)
+    if claimTask or visit then return false end
+
+    local root, char = selfRoot()
+    if not root then return false end
+
+    local plots = Workspace:FindFirstChild("Plots")
+    local plot = plots and plots:FindFirstChild(selectedPlot)
+    local sign = plot and plot:FindFirstChild("PlotSign")
+    local owners = sign and sign:FindFirstChild("ThisPlotsOwners")
+    local plus = sign and sign:FindFirstChild("Plus")
+    local part = plus and plus:FindFirstChild("PlusGrabPart")
+    local events = ReplicatedStorage:FindFirstChild("GrabEvents")
+    local remote = events and events:FindFirstChild("SetNetworkOwner")
+
+    if not owners or not part or not part:IsA("BasePart")
+        or not remote then return false end
+    if onlyEmpty and #owners:GetChildren() > 0 then return false end
+
+    local distant = (root.Position - part.Position).Magnitude > 30
+    local destination = distant
+        and part.Position + Vector3.new(0, 3, 6)
+        or root.Position
+
+    if destination.Y <= Workspace.FallenPartsDestroyHeight + 8 then
+        return false
+    end
+
+    local ticket = {
+        root = root,
+        char = char,
+        original = root.CFrame,
+        destination = destination,
+    }
+    claimTask = ticket
+
+    task.spawn(function()
+        local ok, err = pcall(function()
+            if claimTask ~= ticket or not Hub.alive then return end
+
+            if distant then
+                root.CFrame = CFrame.new(destination) * root.CFrame.Rotation
+                root.AssemblyLinearVelocity = Vector3.zero
+                task.wait(0.15)
+            end
+
+            for _ = 1, 10 do
+                if claimTask ~= ticket or not Hub.alive
+                    or (onlyEmpty and not claimOn)
+                    or Player.Character ~= char
+                    or selfRoot() ~= root
+                    or not part.Parent or not owners.Parent
+                    or (root.Position - destination).Magnitude > 10 then
+                    return
+                end
+
+                for _, owner in ipairs(owners:GetChildren()) do
+                    if owner.Value == Player.Name or owner.Value == Player then
+                        notify("Plot", "Plot ownership confirmed.", 4, "success")
+                        return
+                    end
+                end
+
+                if onlyEmpty and #owners:GetChildren() > 0 then return end
+                if (root.Position - part.Position).Magnitude > 30 then return end
+
+                local aim = Hub.safeLookAt(
+                    root.Position + Vector3.new(0, 1.593, 0),
+                    part.Position
+                )
+                if aim then Hub.fire(remote, part, aim) end
+                task.wait(0.2)
+            end
+
+            notify("Plot", "No ownership confirmation yet. Returned after retries.", 4, "warning")
+        end)
+
+        finishClaim(ticket)
+        if not ok then warn("[Plot claim] " .. tostring(err)) end
+    end)
+
+    return true
+end
+
+Hub.connect(Player.CharacterRemoving, function()
+    claimTask = nil
+end)
+
+Hub.cleanup(function()
+    if claimTask then finishClaim(claimTask) end
+end)
+group:AddButton({
+    Text = "Claim selected plot",
+    Func = function()
+        if not claim(false) then
+            notify(
+                "Plot",
+                "Claim couldn't start: character busy, another visit running, or plot/sign/remote unavailable.",
+                5,
+                "warning"
+            )
+        end
+    end,
+})
     group:AddToggle("PackAutoClaimPlot",{Text="Auto-claim selected empty plot",Default=false,Callback=function(on) claimOn=on;nextClaim=0 end})
-    group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (nearby)",Default=false,Callback=function(on) slotOn=on;nextSlot=0 end})
+    local slotStatus=group:AddLabel("Slots: auto spin off. Stand within 30 studs of a handle.")
+    local pendingSpin
+    local slotAttempts=setmetatable({},{__mode="k"})
+    local function slotState(slot)
+        local screen=slot:FindFirstChild("Screen")
+        local gui=screen and screen:FindFirstChild("SlotGui")
+        local frame=gui and gui:FindFirstChild("TimeLeftFrame")
+        local timer=frame and frame:FindFirstChild("TimeText")
+        if timer then
+            local text=tostring(timer.Text):gsub("%s","")
+            if not text:match("^%d+:%d%d$") and not text:match("^%d+$") then return nil,timer end
+            return text=="0:00" or text=="00:00" or text=="0",timer
+        end
+        local holder=slot:FindFirstChild("SlotHandle")
+        local light=holder and holder:FindFirstChild("LightBall")
+        if light then return light.Material==Enum.Material.Neon end
+        return nil
+    end
+    local function requestSlot(part)
+        local root=selfRoot()
+        if not root or not part or not part.Parent or (root.Position-part.Position).Magnitude>30 then return false end
+        local events=ReplicatedStorage:FindFirstChild("GrabEvents")
+        local remote=events and events:FindFirstChild("SetNetworkOwner")
+        if not remote then return false end
+        -- Resonance's slot path requests ownership using the player's grab origin,
+        -- looking toward the handle. The old code supplied the handle's own CFrame.
+        local origin=root.Position+Vector3.new(0,1.593,0)
+        local aim=Hub.safeLookAt(origin,part.Position)
+        if not aim then return false end
+        Hub.fire(remote,part,aim)
+        return true
+    end
+    local function spinSlots(manual)
+        local root=selfRoot()
+        if not root then slotStatus:SetText("Slots: character is busy, held, seated or not ready.");return end
+        local slots=Workspace:FindFirstChild("Slots")
+        if not slots then slotStatus:SetText("Slots: machines have not loaded yet.");return end
+        local now=os.clock()
+        if pendingSpin then
+            if pendingSpin.char~=Player.Character then pendingSpin=nil;slotStatus:SetText("Slots: character changed; previous request cancelled.");return end
+            if not pendingSpin.slot.Parent then
+                pendingSpin=nil;slotStatus:SetText("Slots: machine disappeared; looking for another.");return
+            end
+            local ready=slotState(pendingSpin.slot)
+            if ready==false then
+                slotStatus:SetText("Slots: "..pendingSpin.slot.Name.." accepted a spin; waiting for its cooldown.")
+                pendingSpin=nil
+                return
+            elseif now-pendingSpin.time<2 then
+                if now>=(pendingSpin.nextRequest or math.huge) and pendingSpin.attempts<8 then
+                    if requestSlot(pendingSpin.handle) then pendingSpin.attempts+=1 end
+                    pendingSpin.nextRequest=now+0.2
+                end
+                return
+            else slotStatus:SetText("Slots: no spin confirmation yet; retrying available nearby handles.");pendingSpin=nil end
+        end
+        if not manual and now<nextSlot then return end
+        nextSlot=now+3
+        local best,distance
+        for _,slot in ipairs(slots:GetChildren()) do
+            local ready=slotState(slot)
+            local holder=slot:FindFirstChild("SlotHandle")
+            local handle=holder and holder:FindFirstChild("Handle")
+            if ready and handle and handle:IsA("BasePart") and now-(slotAttempts[slot] or -math.huge)>=6 then
+                local range=(root.Position-handle.Position).Magnitude
+                if range<=30 and (not distance or range<distance) then best={slot=slot,handle=handle};distance=range end
+            end
+        end
+        if not best then slotStatus:SetText("Slots: no ready machine within 30 studs. Waiting, not stopping.");return end
+        if requestSlot(best.handle) then
+            slotAttempts[best.slot]=now
+            pendingSpin={slot=best.slot,handle=best.handle,char=Player.Character,time=now,nextRequest=now+0.2,attempts=1}
+            slotStatus:SetText("Slots: spin requested on "..best.slot.Name.."; requesting handle ownership, checking its timer.")
+        else slotStatus:SetText("Slots: grab remotes or character unavailable; will retry.") end
+    end
+    group:AddButton({Text="Spin an available nearby slot now",Func=function() spinSlots(true) end})
+    group:AddButton({Text="Slot diagnostics",Func=function()
+        local slots=Workspace:FindFirstChild("Slots")
+        local root=selfRoot()
+        local lines={"[Arriva slot diagnostics]"}
+        for _,slot in ipairs(slots and slots:GetChildren() or {}) do
+            local holder=slot:FindFirstChild("SlotHandle")
+            local handle=holder and holder:FindFirstChild("Handle")
+            local ready,timer=slotState(slot)
+            local owner=handle and handle:FindFirstChild("PartOwner")
+            table.insert(lines,string.format("%s: ready=%s, timer=%s, distance=%s, owner=%s",slot.Name,tostring(ready),timer and tostring(timer.Text) or "missing",root and handle and string.format("%.1f",(root.Position-handle.Position).Magnitude) or "unavailable",owner and tostring(owner.Value) or "not replicated"))
+        end
+        print(table.concat(lines,"\n"));notify("Slot diagnostics","Machine timers, distances and ownership are printed in the F9 console.",5,"info")
+    end})
+
+    group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (nearby)",Default=false,Callback=function(on) slotOn=on;nextSlot=0;pendingSpin=nil;slotStatus:SetText(on and "Slots: looking for a ready nearby machine." or "Slots: auto spin off.") end})
     group:AddToggle("ToolAutoSaveHouse",{Text="Auto save house time",Default=false,Callback=function(on)
         houseOn=on;nextHouse=0;if not on then finishVisit() end
     end})
     function Hub.sampleToolAutomation()
         local now=os.clock()
         if claimOn and now>=nextClaim then nextClaim=now+5;claim(true) end
-        if slotOn and now>=nextSlot then
-            nextSlot=now+3
-            local slots=Workspace:FindFirstChild("Slots")
-            local ready,count,handle=true,0,nil
-            for _,slot in ipairs(slots and slots:GetChildren() or {}) do
-                local holder=slot:FindFirstChild("SlotHandle")
-                local light=holder and holder:FindFirstChild("LightBall")
-                if light then count+=1;if light.Material~=Enum.Material.Neon then ready=false end end
-                handle=handle or (holder and holder:FindFirstChild("Handle"))
-            end
-            if ready and count>0 then grabOnce(handle) end
-        end
-        if not houseOn or visit or now<nextHouse then return end
+        if slotOn and not claimTask then spinSlots(false) end
+        if not houseOn or visit or claimTask or now<nextHouse then return end
         nextHouse=now+10
         local root,char=selfRoot();if not root then return end
         local plots=Workspace:FindFirstChild("Plots")
@@ -15677,7 +15920,7 @@ do
 		Callback=function(value) Hub.setNoticePreference("noticePosition",value) end})
 	notices:AddSlider("NotificationScale",{Text="Notification size (%)",Default=100,Min=80,Max=130,Rounding=0,
 		Callback=function(value) Hub.setNoticePreference("noticeScale",value/100) end})
-	notices:AddSlider("NotificationLimit",{Text="Maximum visible notifications",Default=3,Min=1,Max=5,Rounding=0,
+	notices:AddSlider("NotificationLimit",{Text="Maximum visible notifications",Default=3,Min=1,Max=25,Rounding=0,
 		Callback=function(value) Hub.setNoticePreference("noticeLimit",value) end})
 	notices:AddSlider("NotificationDuration",{Text="Notification duration multiplier",Default=1,Min=0.5,Max=2,Rounding=1,
 		Callback=function(value) Hub.setNoticePreference("noticeDuration",value) end})
@@ -15947,6 +16190,184 @@ end)()
 end
 
 
+-- BEGIN CHEATER SIGNAL MONITOR
+do
+(function()
+    local group=Tabs.Misc:AddLeftGroupbox("Cheaters")
+    local records,announced,labels={},{},{}
+    local monitor,alerts=true,true
+    local selected,rebuilding,dropdown
+    local renderedList
+    local status=group:AddLabel("Waiting for player observations.")
+    local detail=group:AddLabel("Select a player to see the observed setup.")
+    local beamOn,movementOn=true,true
+    local beamLimit,speedLimit=40,160
+    local bursts,movement={},{}
+    local incident=group:AddLabel("Network observations: no large payload recorded. Source unknown unless the server proves it.")
+    Hub.reportIncomingSignalPayload=function(bytes,remote)
+        if not monitor then return end
+        incident:SetText(string.format("Large incoming payload: %.2f MiB on %s. Source unknown.",bytes/1048576,tostring(remote)))
+
+    end
+    local function beamObserved(object)
+        if not monitor or not beamOn or not object:IsA("Beam") then return end
+        local ancestor=object.Parent
+        local owner
+        while ancestor and ancestor~=Workspace do
+            if ancestor:IsA("Model") then
+                local ok,person=pcall(function() return Players:GetPlayerFromCharacter(ancestor) end)
+                if ok and person then owner=person;break end
+            end
+            ancestor=ancestor.Parent
+        end
+        -- An attachment endpoint identifies a target, not the creator: never use it here.
+        if not owner or owner==Player then return end
+        local now=os.clock();local bucket=bursts[owner.UserId]
+        if not bucket or bucket.char~=owner.Character then bucket={start=now,count=0,char=owner.Character};bursts[owner.UserId]=bucket end
+        if now-bucket.start>2 then bucket.start=now;bucket.count=0 end
+        bucket.count=math.min(bucket.count+1,100000)
+        if bucket.count>=beamLimit then bucket.untilTime=now+6 end
+    end
+    Hub.connect(Workspace.DescendantAdded,beamObserved)
+    local function extraSignals(person,char,root,hum,reasons)
+        local now=os.clock();local id=person.UserId
+        local bucket=bursts[id]
+        if beamOn and bucket and bucket.char==char and (bucket.untilTime or 0)>now then
+            table.insert(reasons,"Beam burst in character hierarchy (sender unverified)")
+        end
+        if not movementOn then movement[id]=nil;return end
+        local history=movement[id]
+        if not history or history.char~=char then history={char=char,born=now,hits=0};movement[id]=history end
+        local ragdoll=hum:FindFirstChild("Ragdolled")
+        local held=person:FindFirstChild("IsHeld")
+        local owner=root:FindFirstChild("PartOwner")
+        local foreign=owner and owner.Value and owner.Value~="" and owner.Value~=person.Name and owner.Value~=person
+        local velocity=root.AssemblyLinearVelocity
+        local excluded=hum.SeatPart or hum.PlatformStand or root.Anchored or (ragdoll and ragdoll.Value) or (held and held.Value) or foreign or (velocity and velocity.Magnitude>250)
+        local position=root.Position
+        if not position then return end
+        if excluded or now-history.born<5 then history.hits=0;history.untilTime=nil
+        elseif history.position and history.time then
+            local dt=now-history.time
+            if dt>=0.1 and dt<=1.5 then
+                local speed=(position-history.position).Magnitude/dt
+                if speed==speed and speed>speedLimit then
+                    history.hits=now-(history.hitTime or -math.huge)<=6 and history.hits+1 or 1
+                    history.hitTime=now
+                    if history.hits>=3 then history.untilTime=now+6 end
+                elseif now-(history.hitTime or -math.huge)>6 then history.hits=0 end
+            end
+        end
+        history.position=position;history.time=now
+        if not excluded and (history.untilTime or 0)>now then table.insert(reasons,"Repeated movement anomaly (affected player; cause unverified)") end
+    end
+    group:AddToggle("CheaterBeamSignals",{Text="Observe character beam bursts",Default=true,Callback=function(on) beamOn=on;if not on then table.clear(bursts) end end})
+    group:AddSlider("CheaterBeamThreshold",{Text="Beam creations per 2 seconds",Default=40,Min=10,Max=200,Rounding=0,Callback=function(v) beamLimit=v end})
+    group:AddToggle("CheaterMovementSignals",{Text="Observe repeated movement anomalies",Default=true,Callback=function(on) movementOn=on;if not on then table.clear(movement) end end})
+    group:AddSlider("CheaterMovementThreshold",{Text="Movement observation threshold (studs/sec)",Default=160,Min=80,Max=500,Rounding=0,Callback=function(v) speedLimit=v end})
+    group:AddButton({Text="Enable incoming payload monitor",Func=function()
+        if Toggles.IncomingPayloadMonitor then Toggles.IncomingPayloadMonitor:SetValue(true) end
+    end})
+    group:AddLabel("Packet/payload incidents need Incoming Payload Monitor enabled under Performance. Ordinary lag does not identify a sender.")
+    Hub.connect(Players.PlayerRemoving,function(person) bursts[person.UserId]=nil;movement[person.UserId]=nil end)
+    Hub.cleanup(function() Hub.reportIncomingSignalPayload=nil;table.clear(bursts);table.clear(movement) end)
+    local function signals(person)
+        if person==Player or person.Parent~=Players then return end
+        local char=person.Character
+        local root=char and char:FindFirstChild("HumanoidRootPart")
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or hum.Health<=0 then return end
+        local reasons={}
+        local seat=hum.SeatPart
+        if seat and seat.Parent then
+            local weld=seat:FindFirstChild("SeatWeld")
+            if not weld or not weld.Enabled then table.insert(reasons,"Gucci-like seat/weld setup") end
+        end
+        for _,part in pairs({root,root:FindFirstChild("RagdollTouchedHitbox"),root:FindFirstChild("FirePlayerPart")}) do
+            if part and part.Parent then
+                local ok,connected=pcall(function() return part:GetConnectedParts() end)
+                if ok then
+                    for _,other in ipairs(connected) do
+                        if other.Name=="StickyPart" then table.insert(reasons,"StickyPart attached to character");break end
+                    end
+                    if reasons[#reasons]=="StickyPart attached to character" then break end
+                end
+            end
+        end
+        extraSignals(person,char,root,hum,reasons)
+        return char,table.concat(reasons,"; "),#reasons
+    end
+    local function describe()
+        local record=selected and records[selected]
+        detail:SetText(record and ("@"..record.player.Name..": "..record.reason.." | Evidence: "..(record.families>1 and "multiple signals" or "single signal, low confidence")..(record.confirmed and " (repeated observation)" or " (checking)")) or "Select a player to see the observed setup.")
+    end
+    local function render()
+        local values={};labels={};local selectedLabel
+        local detected,pending=0,0
+        for id,record in pairs(records) do
+            local label="@"..record.player.Name.." — "..(record.confirmed and (record.families>1 and "Multiple signals: " or "Low confidence: ") or "Checking: ")..record.reason
+            labels[label]=id;table.insert(values,label)
+            if id==selected then selectedLabel=label end
+            if record.confirmed then detected+=1 else pending+=1 end
+        end
+        table.sort(values)
+        local signature=table.concat(values,"\n")
+        if signature~=renderedList then
+            renderedList=signature
+            rebuilding=true;dropdown:SetValues(values)
+            if selectedLabel then dropdown:SetValue(selectedLabel) end
+            rebuilding=false
+        end
+        status:SetText(string.format("%d repeated observations, %d checking. Monitor %s.",detected,pending,monitor and "on" or "paused"))
+        describe()
+    end
+    local function observe(person)
+        local id=person.UserId
+        local ok,char,reason,families=pcall(signals,person)
+        if not ok then return end -- A streamed/removed character is not evidence.
+        if not char or reason=="" then records[id]=nil;return end
+        local now=os.clock();local record=records[id]
+        local wasConfirmed=record and record.confirmed
+        if not record or record.char~=char or record.reason~=reason then
+            wasConfirmed=false
+            record={player=person,char=char,reason=reason,seen=now,confirmed=false,families=families};records[id]=record
+        elseif now-record.seen>=0.5 then record.confirmed=true end
+        if record.confirmed and not wasConfirmed and alerts and now-(announced[id] or -math.huge)>=60 then
+            announced[id]=now
+            notify("Player signal detected","@"..person.Name..": "..reason..". This is an observed setup, not proof of cheating.",6,"warning")
+        end
+    end
+    dropdown=group:AddDropdown("CheaterSignalPlayers",{Text="Observed players",Values={},Callback=function(value)
+        if rebuilding then return end;selected=labels[value];describe()
+    end})
+    group:AddToggle("CheaterSignalMonitor",{Text="Monitor player signals",Default=true,Callback=function(on) monitor=on end})
+    group:AddToggle("CheaterSignalAlerts",{Text="Notify on repeated signals",Default=true,Callback=function(on) alerts=on end})
+    Hub.cheaterSignals=records
+    Hub.scanCheaterSignals=function()
+        for _,person in ipairs(Players:GetPlayers()) do observe(person) end
+        render()
+    end
+    group:AddButton({Text="Find cheaters / refresh signals",Func=Hub.scanCheaterSignals})
+    group:AddLabel("Gucci/sticky connections are heuristics. Someone else may have applied them. No automatic targeting or reporting.")
+    local elapsed,cursor=0,1
+    Hub.connect(RunService.Heartbeat,function(dt)
+        if not monitor then return end
+        elapsed+=dt;if elapsed<0.25 then return end;elapsed=0
+        local roster=Players:GetPlayers()
+        if cursor>#roster then cursor=1 end
+        for _=1,4 do
+            local person=roster[cursor];if not person then break end
+            observe(person);cursor+=1
+        end
+        render()
+    end)
+    Hub.connect(Players.PlayerRemoving,function(person) records[person.UserId]=nil;announced[person.UserId]=nil;render() end)
+    Hub.cleanup(function() monitor=false;Hub.cheaterSignals=nil;Hub.scanCheaterSignals=nil;table.clear(records);table.clear(announced) end)
+end)()
+end
+-- END CHEATER SIGNAL MONITOR
+
+
 -- Register every saved control before loading settings.
 MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
 -- Session customization does not require executor file-storage support.
@@ -15956,7 +16377,7 @@ if Hub.storage then
 	local ok, err = pcall(function()
 		ThemeManager:SetLibrary(Library)
 		SaveManager:SetLibrary(Library)
-		SaveManager:SetIgnoreIndexes({"MultiWhitelist"})
+		SaveManager:SetIgnoreIndexes({"MultiWhitelist","CheaterSignalPlayers"})
 		Hub.installConfigLoading(SaveManager)
 		ThemeManager:SetFolder("ArrivaCoreHub")
 		SaveManager:SetFolder("ArrivaCoreHub/Configs")
@@ -16113,7 +16534,7 @@ do
         Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
             rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
         Visual={sections={"Skybox Faces","Sun & Stars","Shaders","Water Appearance","Local environment","Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance"},controls={ToolTimeOverride="Sun & Stars",ToolTimeOfDay="Sun & Stars",ToolSyncTime="Sun & Stars"}},
-        Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools"},
+        Misc={sections={"Cheaters","Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools"},
             rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
         Whitelist={sections={"Protected Players"}},
         Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
@@ -16131,7 +16552,382 @@ do
     end
 end
 
+
+(function()
+    local Players = game:GetService("Players")
+    local player = Players.LocalPlayer
+
+    local function message(text, kind)
+        Library:Notify({
+            Title = "Chat commands",
+            Description = text,
+            Time = 5,
+            Type = kind or "info",
+        })
+    end
+
+    local function trim(text)
+        return tostring(text or ""):match("^%s*(.-)%s*$")
+    end
+
+    local function control(id)
+        return Toggles[id] or Options[id]
+    end
+
+    local function set(id, value)
+        local option = control(id)
+        if not option or type(option.SetValue) ~= "function" then
+            error("Control unavailable: "..id, 0)
+        end
+        option:SetValue(value)
+        return option
+    end
+
+    local function resolve(query)
+        query = trim(query)
+        if query == "" then
+            return nil, "Type a display name or username."
+        end
+
+        if query:sub(1, 1) == '"' and query:sub(-1) == '"' then
+            query = query:sub(2, -2)
+        end
+
+        local usernameOnly = query:sub(1, 1) == "@"
+        query = (usernameOnly and query:sub(2) or query):lower()
+
+        if query == "" then
+            return nil, "Type a name after @."
+        end
+
+        local rules = usernameOnly
+            and {{"Name", true}, {"Name", false}}
+            or {
+                {"DisplayName", true},
+                {"DisplayName", false},
+                {"Name", true},
+                {"Name", false},
+            }
+
+        for _, rule in ipairs(rules) do
+            local matches = {}
+
+            for _, person in ipairs(Players:GetPlayers()) do
+                if person ~= player then
+                    local name = tostring(person[rule[1]] or person.Name):lower()
+                    local matched = (rule[2] and name == query)
+                        or (not rule[2] and name:find(query, 1, true))
+
+                    if matched then
+                        table.insert(matches, person)
+                    end
+                end
+            end
+
+            if #matches == 1 then
+                return matches[1]
+            elseif #matches > 1 then
+                table.sort(matches, function(a, b)
+                    return a.Name:lower() < b.Name:lower()
+                end)
+
+                local names = {}
+                for i = 1, math.min(#matches, 5) do
+                    names[i] = "@"..matches[i].Name
+                end
+
+                return nil, "Multiple matches: "..table.concat(names, ", ")
+                    ..". Type more, or use @username."
+            end
+        end
+
+        return nil, "No other player matched that name."
+    end
+
+    local function target(query)
+        local person, reason = resolve(query)
+        if not person then error(reason, 0) end
+        return person
+    end
+
+    local function selection(person, mode)
+        local option = Options.KickPlayerDropdown
+        if not option then error("Player selector unavailable.", 0) end
+
+        if Hub.refreshTargetSelector then
+            Hub.refreshTargetSelector()
+        end
+
+        local label
+        for _, value in ipairs(option.Values or {}) do
+            if value:match("%(([^()]*)%)$") == person.Name then
+                label = value
+                break
+            end
+        end
+
+        if not label then
+            error("Player selector is still loading. Try again.", 0)
+        end
+
+        local values = {}
+        if mode ~= "select" then
+            for key, value in pairs(
+                type(option.Value) == "table" and option.Value or {}
+            ) do
+                if type(key) == "number" then
+                    values[value] = true
+                elseif value then
+                    values[key] = true
+                end
+            end
+        end
+
+        if mode == "remove" then
+            values[label] = nil
+        else
+            values[label] = true
+        end
+
+        option:SetValue(values)
+
+        message(
+            (mode == "remove" and "Removed @" or "Selected @")
+                ..person.Name..". Action toggles were not enabled.",
+            "success"
+        )
+    end
+
+    local function booleanArgument(argument, current)
+        argument = trim(argument):lower()
+        if argument == "" then return not current end
+        if argument == "on" then return true end
+        if argument == "off" then return false end
+        error("Use on/off, or leave it blank to toggle.", 0)
+    end
+
+    local function canMove()
+        local character = player.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local hum = character and character:FindFirstChildOfClass("Humanoid")
+        local held = player:FindFirstChild("IsHeld")
+
+        if not root or not hum or hum.Health <= 0 then
+            error("Your character is not ready.", 0)
+        end
+
+        if hum.SeatPart or root.Anchored
+            or (held and held.Value) or Hub.safeZoneLoopActive then
+            error("Leave your seat or hold, and stop safe-zone looping first.", 0)
+        end
+
+        for _, run in pairs(Hub.targetLoopRuns or {}) do
+            if run.enabled then
+                error("Stop your action loops before moving with a command.", 0)
+            end
+        end
+
+        return root, hum
+    end
+
+    local commands = {}
+
+    commands.cmds = function()
+        message(
+            ":to name | :select name | :add name | :remove name | :clear\n"
+            ..":fly [on/off] | :unfly | :flyspeed 5–1000\n"
+            ..":view name | :unview | :menu [on/off] | :save"
+        )
+    end
+
+    commands.help = commands.cmds
+
+    commands.select = function(argument)
+        selection(target(argument), "select")
+    end
+
+    commands.add = function(argument)
+        selection(target(argument), "add")
+    end
+
+    commands.remove = function(argument)
+        selection(target(argument), "remove")
+    end
+
+    commands.clear = function()
+        set("KickPlayerDropdown", {})
+        message("Player selection cleared. Action toggles are unchanged.", "success")
+    end
+
+    commands.fly = function(argument)
+        local option = control("PackCharacterFlight")
+        if not option then error("Player flight unavailable.", 0) end
+
+        local on = booleanArgument(argument, option.Value)
+        if on then canMove() end
+
+        set("PackCharacterFlight", on)
+        message(
+            on and "Player flight enabled." or "Player flight disabled.",
+            "success"
+        )
+    end
+
+    commands.unfly = function()
+        commands.fly("off")
+    end
+
+    commands.flyspeed = function(argument)
+        local speed = tonumber(trim(argument))
+        if not speed or speed ~= speed or speed < 5 or speed > 1000 then
+            error("Usage: :flyspeed 5–1000", 0)
+        end
+
+        set("PackCharacterFlightSpeed", speed)
+        message(
+            "Flight speed set to "..tostring(speed)
+                ..". This does not turn flight on.",
+            "success"
+        )
+    end
+
+    commands.to = function(argument)
+        local person = target(argument)
+        local root = canMove()
+
+        if Hub.characterFlightActive or Hub.blobFlightActive then
+            error("Stop player/vehicle flight before teleporting.", 0)
+        end
+
+        local character = person.Character
+        local other = character and character:FindFirstChild("HumanoidRootPart")
+        local hum = character and character:FindFirstChildOfClass("Humanoid")
+
+        if not other or not hum or hum.Health <= 0 then
+            error("That player's character is not ready.", 0)
+        end
+
+        local forward = Vector3.new(
+            other.CFrame.LookVector.X, 0, other.CFrame.LookVector.Z
+        )
+        forward = forward.Magnitude > 0.001
+            and forward.Unit or Vector3.new(0, 0, -1)
+
+        local position = other.Position + forward * 4
+
+        for _, value in ipairs({position.X, position.Y, position.Z}) do
+            if value ~= value or math.abs(value) == math.huge then
+                error("Invalid target position.", 0)
+            end
+        end
+
+        if position.Y <= workspace.FallenPartsDestroyHeight + 8 then
+            error("Destination is below the safe map height.", 0)
+        end
+
+        root.CFrame = CFrame.lookAt(
+            position,
+            Vector3.new(other.Position.X, position.Y, other.Position.Z)
+        )
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+
+        message("Teleported four studs in front of @"..person.Name..".", "success")
+    end
+
+    commands.view = function(argument)
+        local person = target(argument)
+        local option = Options.LocalSpectatorPlayer
+        if not option then error("Spectator control unavailable.", 0) end
+
+        local names = {}
+        for _, other in ipairs(Players:GetPlayers()) do
+            if other ~= player then table.insert(names, other.Name) end
+        end
+
+        table.sort(names)
+        option:SetValues(names)
+        option:SetValue(person.Name)
+        set("LocalSpectatorEnabled", true)
+
+        message("Viewing @"..person.Name.." (camera only).", "success")
+    end
+
+    commands.unview = function()
+        set("LocalSpectatorEnabled", false)
+        message("Spectator camera disabled.", "success")
+    end
+
+    commands.menu = function(argument)
+        local visible = Hub.menuVisible ~= false
+        local wanted = booleanArgument(argument, visible)
+        if wanted == visible then return end
+
+        -- Reuse your existing menu toggle, including its sound/notification.
+        local picker = Library.ToggleKeybind
+        local callback = picker and picker.handle
+            and picker.handle.info and picker.handle.info.Callback
+
+        if type(callback) ~= "function" then
+            error("Menu callback unavailable in this version.", 0)
+        end
+
+        callback(false)
+    end
+
+    commands.save = function()
+        if type(Hub.flushSettings) ~= "function" then
+            error("Settings saving unavailable.", 0)
+        end
+
+        local ok, reason = Hub.flushSettings()
+        if not ok then
+            error(tostring(reason or "Settings could not be saved."), 0)
+        end
+
+        message("Settings saved.", "success")
+    end
+
+    local lastText, lastTime
+
+    if Hub.chatCommandConnection then
+        Hub.chatCommandConnection:Disconnect()
+        Hub.connections[Hub.chatCommandConnection] = nil
+    end
+
+    local connection = Hub.connect(player.Chatted, function(text)
+        if not Hub.alive then return end
+
+        local command, argument = tostring(text):match(
+            "^%s*:(%S+)%s*(.-)%s*$"
+        )
+        if not command then return end
+
+        local callback = commands[command:lower()]
+        if not callback then return end
+
+        local now = os.clock()
+        if text == lastText and lastTime and now - lastTime < 0.25 then
+            return
+        end
+
+        lastText, lastTime = text, now
+
+        local ok, reason = pcall(callback, argument)
+        if not ok then message(tostring(reason), "warning") end
+    end)
+
+    Hub.chatCommandConnection = connection
+
+    Hub.cleanup(function()
+        connection:Disconnect()
+        Hub.connections[connection] = nil
+        if Hub.chatCommandConnection == connection then
+            Hub.chatCommandConnection = nil
+        end
+    end)
+end)()
+
 -- Send loaded message
 
 notify("Arriva Core Hub 2.0", "Hub loaded. Your saved settings and controls are ready.", 5)
-
