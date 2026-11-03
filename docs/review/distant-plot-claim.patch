@@ -1,0 +1,125 @@
+--- a/docs/review/resonance-corrected.lua
++++ b/docs/review/resonance-corrected.lua
+@@ -9966,18 +9966,25 @@
+         for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
+         return root,char
+     end
+-    local function grabOnce(part)
+-        local root=selfRoot()
+-        if not root or not part or not part:IsA("BasePart") or (root.Position-part.Position).Magnitude>30 then return false end
+-        local events=ReplicatedStorage:FindFirstChild("GrabEvents")
+-        local owner=events and events:FindFirstChild("SetNetworkOwner")
+-        local grab=events and events:FindFirstChild("CreateGrabLine")
+-        local drop=events and events:FindFirstChild("DestroyGrabLine")
+-        if not owner or not grab or not drop then return false end
+-        Hub.fire(owner,part,part.CFrame)
+-        Hub.fire(grab,part,Vector3.zero,part.Position,false)
+-        task.delay(0.2,function() if Hub.alive then pcall(function() Hub.fire(drop,part) end) end end)
+-        return true
++    local claimVisit
++    local claimStatus=group:AddLabel("Plot claims: idle.")
++    local function grabOnce(part)
++        local root=selfRoot()
++        if not root or not part or not part:IsA("BasePart") or (root.Position-part.Position).Magnitude>30 then return false end
++        local events=ReplicatedStorage:FindFirstChild("GrabEvents")
++        local owner=events and events:FindFirstChild("SetNetworkOwner")
++        if not owner then return false end
++        local aim=Hub.safeLookAt(root.Position+Vector3.new(0,1.593,0),part.Position)
++        if not aim then return false end
++        Hub.fire(owner,part,aim)
++        return true
++    end
++    local function finishClaim()
++        local old=claimVisit;claimVisit=nil
++        if old and Player.Character==old.char and old.root.Parent==old.char
++            and selfRoot()==old.root and (old.root.Position-old.destination).Magnitude<10 then
++            old.root.CFrame=old.original;old.root.AssemblyLinearVelocity=Vector3.zero
++        end
+     end
+     local function finishVisit()
+         if not visit then return end
+@@ -9990,18 +9997,53 @@
+     end
+     group:AddDropdown("ToolPlot",{Text="Plot",Values={"Plot1","Plot2","Plot3","Plot4","Plot5"},Default=3,Callback=function(value) selectedPlot=value end})
+     local function claim(onlyEmpty)
+-        local plots=Workspace:FindFirstChild("Plots")
+-        local plot=plots and plots:FindFirstChild(selectedPlot)
+-        local sign=plot and plot:FindFirstChild("PlotSign")
+-        local owners=sign and sign:FindFirstChild("ThisPlotsOwners")
+-        if onlyEmpty and owners and #owners:GetChildren()>0 then return false end
+-        local plus=sign and sign:FindFirstChild("Plus")
+-        return grabOnce(plus and plus:FindFirstChild("PlusGrabPart"))
+-    end
+-    group:AddButton({Text="Claim selected plot (nearby)",Func=function()
+-        if not claim(false) then notify("Plot","Stand within 30 studs of the selected plot's claim sign. Character and grab remotes must be ready.",5) end
+-    end})
+-    group:AddToggle("PackAutoClaimPlot",{Text="Auto-claim selected empty plot",Default=false,Callback=function(on) claimOn=on;nextClaim=0 end})
++        if claimVisit or visit then return false end
++        local root,char=selfRoot()
++        if not root then claimStatus:SetText("Plot claims: character is busy, held, seated or not ready.");return false end
++        local plots=Workspace:FindFirstChild("Plots")
++        local plot=plots and plots:FindFirstChild(selectedPlot)
++        local sign=plot and plot:FindFirstChild("PlotSign")
++        local owners=sign and sign:FindFirstChild("ThisPlotsOwners")
++        local plus=sign and sign:FindFirstChild("Plus")
++        local part=plus and plus:FindFirstChild("PlusGrabPart")
++        if not owners or not part or not part:IsA("BasePart") then claimStatus:SetText("Plot claims: selected plot/sign has not loaded.");return false end
++        if onlyEmpty and #owners:GetChildren()>0 then return false end
++        if (root.Position-part.Position).Magnitude<=30 then
++            local sent=grabOnce(part)
++            claimStatus:SetText(sent and "Plot claims: claim requested at the selected sign." or "Plot claims: ownership remote unavailable.")
++            return sent
++        end
++        local position=part.Position+Vector3.new(0,3,6)
++        if position.Y<=Workspace.FallenPartsDestroyHeight+8 then claimStatus:SetText("Plot claims: sign destination is below the safe map height.");return false end
++        local ticket={root=root,char=char,original=root.CFrame,destination=position,automatic=onlyEmpty}
++        claimVisit=ticket
++        claimStatus:SetText("Plot claims: visiting "..selectedPlot..", then returning.")
++        task.spawn(function()
++            local ok,message=pcall(function()
++                root.CFrame=CFrame.new(position)*root.CFrame.Rotation
++                root.AssemblyLinearVelocity=Vector3.zero
++                task.wait(0.15)
++                for attempt=1,10 do
++                    if claimVisit~=ticket or not Hub.alive or (onlyEmpty and not claimOn) or selfRoot()~=root
++                        or not part.Parent or not owners.Parent or (root.Position-position).Magnitude>10 then return end
++                    for _,owner in ipairs(owners:GetChildren()) do
++                        if owner.Value==Player.Name or owner.Value==Player then claimStatus:SetText("Plot claims: ownership confirmed; returning.");return end
++                    end
++                    if onlyEmpty and #owners:GetChildren()>0 then claimStatus:SetText("Plot claims: another player claimed the plot; returning.");return end
++                    grabOnce(part)
++                    task.wait(0.2)
++                end
++                claimStatus:SetText("Plot claims: no ownership confirmation yet; returning. Auto-claim will retry.")
++            end)
++            if claimVisit==ticket then finishClaim() end
++            if not ok then claimStatus:SetText("Plot claims: attempt failed; "..tostring(message):sub(1,120)) end
++        end)
++        return true
++    end
++    group:AddButton({Text="Claim selected plot",Func=function()
++        if not claim(false) then notify("Plot","Wait for your character and selected plot to be ready. Busy characters are left alone.",5) end
++    end})
++    group:AddToggle("PackAutoClaimPlot",{Text="Auto-claim selected empty plot",Default=false,Callback=function(on) claimOn=on;nextClaim=0;if not on and claimVisit and claimVisit.automatic then finishClaim() end end})
+     local slotStatus=group:AddLabel("Slots: auto spin off. Stand within 30 studs of a handle.")
+     local pendingSpin
+     local slotAttempts=setmetatable({},{__mode="k"})
+@@ -10100,7 +10142,7 @@
+         local now=os.clock()
+         if claimOn and now>=nextClaim then nextClaim=now+5;claim(true) end
+         if slotOn then spinSlots(false) end
+-        if not houseOn or visit or now<nextHouse then return end
++        if not houseOn or visit or claimVisit or now<nextHouse then return end
+         nextHouse=now+10
+         local root,char=selfRoot();if not root then return end
+         local plots=Workspace:FindFirstChild("Plots")
+@@ -10126,7 +10168,8 @@
+     end
+     local elapsed=0
+     Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.5 then elapsed=0;Hub.sampleToolAutomation() end end)
+-    Hub.cleanup(function() slotOn,houseOn,claimOn=false,false,false;finishVisit();Hub.sampleToolAutomation=nil end)
++    Hub.connect(Player.CharacterRemoving,function() claimVisit=nil end)
++    Hub.cleanup(function() slotOn,houseOn,claimOn=false,false,false;finishClaim();finishVisit();Hub.sampleToolAutomation=nil end)
+ end)();
+ (function()
+     TargetGroup:AddButton({Text="Stop all action loops",Func=function()
