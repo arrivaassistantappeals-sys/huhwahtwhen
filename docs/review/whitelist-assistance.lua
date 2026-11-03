@@ -188,7 +188,10 @@ do
         end)
     end
     local function spawnShuriken(record)
-        if spawnBusy or busy or os.clock()<nextSpawn or not readySelf() then return end
+        if spawnBusy or busy or os.clock()<nextSpawn or not readySelf() then
+            record.phase=record.phase or "Waiting for spawn cooldown or free character."
+            return
+        end
         local count=0;for model in pairs(created) do if model.Parent then count+=1 else created[model]=nil end end
         if count>=toyLimit then say("Whitelist anti-kick toy limit reached.");return end
         local menu=Storage:FindFirstChild("MenuToys")
@@ -199,6 +202,7 @@ do
         local before={};local folder=ownFolder()
         if folder then for _,model in ipairs(folder:GetChildren()) do before[model]=true end end
         spawnBusy=true;nextSpawn=os.clock()+4
+        record.phase="Spawn requested; waiting for returned toy or folder replication."
         local ticket=epoch
         task.spawn(function()
             local result
@@ -211,8 +215,9 @@ do
                     local candidates={}
                     for _,model in ipairs(folder and folder:GetChildren() or {}) do
                         if not before[model] and model:IsA("Model") and model.Name=="NinjaShuriken" then
-                            local part=model:FindFirstChild("StickyPart")
-                            if part and (part.Position-frame.Position).Magnitude<=8 then table.insert(candidates,model) end
+                            -- Identify the newly added model, not its current
+                            -- physics position or still-replicating descendants.
+                            table.insert(candidates,model)
                         end
                     end
                     if #candidates==1 then result=candidates[1];break end
@@ -227,9 +232,10 @@ do
                 else destroyToy(result) end
             elseif ok then
                 -- Never adopt pre-existing toys or ambiguous simultaneous spawns.
-                say("Anti-kick spawn returned no verifiable toy; existing toys were left alone.")
+                record.phase="Spawn completed, but no unique new NinjaShuriken was identified in your toy folder."
+                say(record.phase)
                 nextSpawn=os.clock()+8
-            else say("Anti-kick spawn failed: "..tostring(err):sub(1,120));nextSpawn=os.clock()+8 end
+            else record.phase="Spawn request failed: "..tostring(err):sub(1,120);say(record.phase);nextSpawn=os.clock()+8 end
             spawnBusy=false
         end)
     end
@@ -238,7 +244,7 @@ do
         local hitbox=record.root:FindFirstChild("RagdollTouchedHitbox")
         if not hitbox then clearToy(record);record.phase="Waiting for current character hitbox.";return end
         local toy=record.toy
-        if not toy or not toy.Parent then record.toy=nil;record.phase="Waiting to spawn managed shuriken.";spawnShuriken(record);return end
+        if not toy or not toy.Parent then record.toy=nil;spawnShuriken(record);return end
         if not created[toy] or toy.Parent~=ownFolder() then record.toy=nil;return end
         local sticky=toy:FindFirstChild("StickyPart")
         local weld=sticky and sticky:FindFirstChild("StickyWeld")
