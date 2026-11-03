@@ -1,0 +1,140 @@
+--- a/dist/resonance.lua
++++ b/dist/resonance.lua
+@@ -2725,14 +2725,32 @@
+ 	if Hub.trainJump then Hub.trainJump:Disconnect(); Hub.trainJump = nil end
+ end)
+ Hub.connect(Player.CharacterAdded, function(char)
+-	local root = char:WaitForChild("HumanoidRootPart", 5)
+-	local hum = char:WaitForChild("Humanoid", 5)
+-	if not root or not hum or Player.Character ~= char then return end
+-	Hub.gucciRespawnReadyAt=os.clock()+1.5
+-	task.wait(1.5)
+-	if not Hub.alive or Player.Character ~= char or not root.Parent or hum.Health <= 0 then return end
+-	if Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value then task.spawn(startAntiGucci) end
+-	if Toggles.AutoGucciTrainToggle and Toggles.AutoGucciTrainToggle.Value then task.spawn(startAntiGucciTrain) end
++    -- CharacterAdded may fire before either required part has replicated.
++    -- Keep retrying this character; a later reset cancels this waiter.
++    local readySince
++    while Hub.alive and Player.Character == char do
++        local root = char:FindFirstChild("HumanoidRootPart")
++        local hum = char:FindFirstChildOfClass("Humanoid")
++        if char.Parent and root and root.Parent == char
++            and hum and hum.Parent == char and hum.Health > 0 then
++            readySince = readySince or os.clock()
++            Hub.gucciRespawnReadyAt = readySince + 1.5
++            if os.clock() >= Hub.gucciRespawnReadyAt then
++                if Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value then
++                    if Hub.reportGucciStatus then Hub.reportGucciStatus("Starting") end
++                    task.spawn(startAntiGucci)
++                end
++                if Toggles.AutoGucciTrainToggle and Toggles.AutoGucciTrainToggle.Value then
++                    task.spawn(startAntiGucciTrain)
++                end
++                return
++            end
++        else
++            readySince = nil
++            Hub.gucciRespawnReadyAt = math.huge
++        end
++        task.wait(0.2)
++    end
+ end)
+ 
+ -- Local health alerts. These do not attribute remote abuse or kick players.
+@@ -13655,7 +13673,7 @@
+ local lowFps=false
+ local fpsThreshold=3
+ local lowFpsStarted=os.clock()
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     if lowFps and os.clock()-lowFpsStarted>=2.5 and dt>0 and math.floor(1/dt)<fpsThreshold then
+         local toggle=Toggles.AntiLagToggle
+         if toggle and not toggle.Value then toggle:SetValue(true);fn18("Anti Lag enabled, FPS below threshold.","Auto Anti Lag") end
+@@ -14101,7 +14119,7 @@
+         tbl7.PCLDParts[part]=nil;tbl7.PCLDTracker.PartStates[part]=nil
+     end
+ end)
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     if not tbl8.AntiKick then return end
+     trackerElapsed+=dt;if trackerElapsed<0.1 then return end;trackerElapsed=0
+     tbl7.PlayerList=Players:GetPlayers();tbl12.UpdatePCLDAssignments()
+@@ -14413,7 +14431,7 @@
+     updateAntiKickAppearance();Hub.requestSave()
+ end})
+ local appearanceElapsed=0
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     appearanceElapsed+=dt
+     if appearanceElapsed<0.05 then return end
+     appearanceElapsed=0
+--- a/dist/resonance.txt
++++ b/dist/resonance.txt
+@@ -2725,14 +2725,32 @@
+ 	if Hub.trainJump then Hub.trainJump:Disconnect(); Hub.trainJump = nil end
+ end)
+ Hub.connect(Player.CharacterAdded, function(char)
+-	local root = char:WaitForChild("HumanoidRootPart", 5)
+-	local hum = char:WaitForChild("Humanoid", 5)
+-	if not root or not hum or Player.Character ~= char then return end
+-	Hub.gucciRespawnReadyAt=os.clock()+1.5
+-	task.wait(1.5)
+-	if not Hub.alive or Player.Character ~= char or not root.Parent or hum.Health <= 0 then return end
+-	if Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value then task.spawn(startAntiGucci) end
+-	if Toggles.AutoGucciTrainToggle and Toggles.AutoGucciTrainToggle.Value then task.spawn(startAntiGucciTrain) end
++    -- CharacterAdded may fire before either required part has replicated.
++    -- Keep retrying this character; a later reset cancels this waiter.
++    local readySince
++    while Hub.alive and Player.Character == char do
++        local root = char:FindFirstChild("HumanoidRootPart")
++        local hum = char:FindFirstChildOfClass("Humanoid")
++        if char.Parent and root and root.Parent == char
++            and hum and hum.Parent == char and hum.Health > 0 then
++            readySince = readySince or os.clock()
++            Hub.gucciRespawnReadyAt = readySince + 1.5
++            if os.clock() >= Hub.gucciRespawnReadyAt then
++                if Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value then
++                    if Hub.reportGucciStatus then Hub.reportGucciStatus("Starting") end
++                    task.spawn(startAntiGucci)
++                end
++                if Toggles.AutoGucciTrainToggle and Toggles.AutoGucciTrainToggle.Value then
++                    task.spawn(startAntiGucciTrain)
++                end
++                return
++            end
++        else
++            readySince = nil
++            Hub.gucciRespawnReadyAt = math.huge
++        end
++        task.wait(0.2)
++    end
+ end)
+ 
+ -- Local health alerts. These do not attribute remote abuse or kick players.
+@@ -13655,7 +13673,7 @@
+ local lowFps=false
+ local fpsThreshold=3
+ local lowFpsStarted=os.clock()
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     if lowFps and os.clock()-lowFpsStarted>=2.5 and dt>0 and math.floor(1/dt)<fpsThreshold then
+         local toggle=Toggles.AntiLagToggle
+         if toggle and not toggle.Value then toggle:SetValue(true);fn18("Anti Lag enabled, FPS below threshold.","Auto Anti Lag") end
+@@ -14101,7 +14119,7 @@
+         tbl7.PCLDParts[part]=nil;tbl7.PCLDTracker.PartStates[part]=nil
+     end
+ end)
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     if not tbl8.AntiKick then return end
+     trackerElapsed+=dt;if trackerElapsed<0.1 then return end;trackerElapsed=0
+     tbl7.PlayerList=Players:GetPlayers();tbl12.UpdatePCLDAssignments()
+@@ -14413,7 +14431,7 @@
+     updateAntiKickAppearance();Hub.requestSave()
+ end})
+ local appearanceElapsed=0
+-Hub.connect(RunService.Heartbeat,function(dt)
++Hub.connect(originalRunService.Heartbeat,function(dt)
+     appearanceElapsed+=dt
+     if appearanceElapsed<0.05 then return end
+     appearanceElapsed=0
