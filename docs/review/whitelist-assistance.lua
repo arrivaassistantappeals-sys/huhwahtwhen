@@ -69,7 +69,7 @@ do
     end
     local function clearToy(record)
         if record.toy then destroyToy(record.toy);record.toy=nil end
-        record.active=false;record.attachFailures=0
+        record.active=false;record.attachFailures=0;record.partsSince=nil
     end
     local function valid(record,ticket,kind)
         if disposed or not Hub.alive or epoch~=ticket or not modes[kind] or not trusted(record.player)
@@ -222,7 +222,9 @@ do
             end
             if ok and folder and typeof(result)=="Instance" and result:IsA("Model") and result.Name=="NinjaShuriken" and result.Parent==folder and not before[result] then
                 created[result]=true
-                if valid(record,ticket,"kick") and not record.toy then record.toy=result else destroyToy(result) end
+                if valid(record,ticket,"kick") and not record.toy then
+                    record.toy=result;record.partsSince=os.clock();record.phase="Toy spawned; waiting for sticky parts."
+                else destroyToy(result) end
             elseif ok then
                 -- Never adopt pre-existing toys or ambiguous simultaneous spawns.
                 say("Anti-kick spawn returned no verifiable toy; existing toys were left alone.")
@@ -234,34 +236,51 @@ do
     local function maintainKick(record)
         if not modes.kick then clearToy(record);return end
         local hitbox=record.root:FindFirstChild("RagdollTouchedHitbox")
-        if not hitbox then clearToy(record);return end
+        if not hitbox then clearToy(record);record.phase="Waiting for current character hitbox.";return end
         local toy=record.toy
-        if not toy or not toy.Parent then record.toy=nil;spawnShuriken(record);return end
+        if not toy or not toy.Parent then record.toy=nil;record.phase="Waiting to spawn managed shuriken.";spawnShuriken(record);return end
         if not created[toy] or toy.Parent~=ownFolder() then record.toy=nil;return end
         local sticky=toy:FindFirstChild("StickyPart")
         local weld=sticky and sticky:FindFirstChild("StickyWeld")
-        if not sticky or not hitbox or not weld then return end
+        if not sticky or not weld then
+            record.active=false
+            record.partsSince=record.partsSince or os.clock()
+            record.phase=not sticky and "Waiting for StickyPart replication." or "Waiting for StickyWeld replication."
+            if os.clock()-record.partsSince>=3 then
+                clearToy(record);nextSpawn=math.max(nextSpawn,os.clock()+4)
+                record.phase="Sticky parts did not load; recycling managed toy."
+            end
+            return
+        end
+        record.partsSince=nil
         local attached=weld.Part1==hitbox and weld.Enabled~=false
         record.active=attached
-        if attached then return end
+        if attached then record.phase="Attached: current character weld confirmed.";return end
         if busy or os.clock()<(record.nextStick or 0) then return end
         record.nextStick=os.clock()+2;busy=true
         local ticket=epoch
         task.spawn(function()
             local requested=false
             local confirmed=false
+            record.phase="Acquiring shuriken ownership."
             local ok,err=pcall(function()
                 if not acquire(sticky,record,ticket,"kick",toy) then
-                    if valid(record,ticket,"kick") then say("Whitelist anti-kick: waiting for verified ownership of the shuriken.") end
+                    if valid(record,ticket,"kick") then record.phase="Ownership not confirmed; check assistance status label for visit restrictions.";say("Whitelist anti-kick: waiting for verified ownership of the shuriken.") end
                     return
                 end
                 if not valid(record,ticket,"kick") then return end
                 if not created[toy] or toy.Parent~=ownFolder() or not sticky:IsDescendantOf(toy) then return end
                 local events=Storage:FindFirstChild("PlayerEvents")
                 local remote=events and events:FindFirstChild("StickyPartEvent")
-                if not remote or not hitbox:IsDescendantOf(record.char) then return end
-                sticky.CanCollide=false;sticky.CanTouch=false
-                local touch=sticky:FindFirstChild("TouchInterest");if touch then touch:Destroy() end
+                if not remote then record.phase="PlayerEvents.StickyPartEvent missing.";return end
+                if not hitbox:IsDescendantOf(record.char) then record.phase="Target hitbox changed; waiting for reconciliation.";return end
+                -- Match the source: leave CanTouch/CanCollide alone before the
+                -- request, and remove a replicated TouchInterest asynchronously.
+                task.spawn(function()
+                    local touch=sticky:WaitForChild("TouchInterest",2.5)
+                    if touch and created[toy] and record.toy==toy and valid(record,ticket,"kick") then touch:Destroy() end
+                end)
+                record.phase="Ownership confirmed; waiting for server weld."
                 -- Only our managed shuriken -> this trusted player's current hitbox.
                 remote:FireServer(sticky,hitbox,CFrame.new(0,-0.3,0)*CFrame.Angles(math.pi/2,0,0))
                 requested=true
@@ -274,19 +293,21 @@ do
                 record.active=confirmed
                 if confirmed then
                     record.attachFailures=0
+                    record.phase="Attached: current character weld confirmed."
                     say("Whitelist anti-kick: actual shuriken weld confirmed on @"..record.player.Name..".")
                 end
             end)
             finishVisit();busy=false
             if requested and not confirmed and valid(record,ticket,"kick") then
                 record.attachFailures=(record.attachFailures or 0)+1
+                record.phase="Ownership confirmed; server weld not confirmed. Retrying."
                 say("Whitelist anti-kick: ownership confirmed but server attachment not confirmed; retrying.")
                 if record.attachFailures>=3 then
                     clearToy(record);nextSpawn=math.max(nextSpawn,os.clock()+4)
                     say("Whitelist anti-kick: repeated attachment failures; recycling only this helper's toy.")
                 end
             end
-            if not ok then say("Whitelist anti-kick error: "..tostring(err):sub(1,140)) end
+            if not ok then record.phase="Attachment error: "..tostring(err):sub(1,140);say(record.phase) end
         end)
     end
     local function reconcile()
@@ -345,8 +366,13 @@ do
     group:AddLabel("Uses the existing whitelist. Skips dead/in-plot characters. Ownership and actual sticky welds must confirm; these are best-effort physical protections, not server-kick immunity.")
     group:AddButton({Text="Whitelist assistance status",Func=function()
         local tracked,active=0,0
-        for _,record in pairs(records) do tracked+=1;if record.active then active+=1 end end
-        Library:Notify({Title="Whitelist assistance",Description=string.format("%d eligible players tracked; %d confirmed shuriken attachments. %s",tracked,active,allowVisits and "Distant visits enabled." or "Distant visits disabled."),Time=6,Type="info"})
+        local details={}
+        for _,record in pairs(records) do
+            tracked+=1;if record.active then active+=1 end
+            table.insert(details,"@"..record.player.Name..": "..(record.phase or "Waiting for assistance tick."))
+        end
+        table.sort(details)
+        Library:Notify({Title="Whitelist assistance",Description=string.format("%d eligible players tracked; %d confirmed shuriken attachments. %s",tracked,active,allowVisits and "Distant visits enabled." or "Distant visits disabled.").."\n"..table.concat(details,"\n"),Time=10,Type="info"})
     end})
     local elapsed=0
     Hub.connect(Run.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.2 then elapsed=0;Hub.sampleWhitelistAssistance() end end)
