@@ -1740,7 +1740,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	local function register(id, kind, info, tab)
         tab.pendingControlId=id
 		assert(not Library.controls[id], "Duplicate UI ID: " .. id)
-		local control = {Id = id, Type = kind, Value = info.Default, Multi = info.Multi or false, Callback = info.Callback,
+		local control = {Id = id, Text = info.Text or tostring(id), Type = kind, Value = info.Default, Multi = info.Multi or false, Callback = info.Callback,
 			Values = info.Values or {}, NoUI = info.NoUI, Mode = "Toggle"}
 		Library.controls[id] = control
 		if kind == "Toggle" then Library.Toggles[id] = control else Library.Options[id] = control end
@@ -4987,7 +4987,11 @@ function Hub.beginTargetLoop(key, enabled)
     if previous then previous.enabled = false end
     local run = enabled and {enabled = true} or previous or {enabled = false}
     Hub.targetLoopRuns[key] = run
-    if Hub.loopNotice then Hub.loopNotice("loops", enabled and "Loop enabled" or "Loop disabled", key, key .. tostring(enabled)) end
+    if Hub.loopNotice then
+        local control=Toggles[key] or Options[key]
+        local label=control and control.Text or "Selected loop"
+        Hub.loopNotice("loops", enabled and "Loop enabled" or "Loop disabled", label, key .. tostring(enabled))
+    end
     return function() return Hub.alive and run.enabled and Hub.targetLoopRuns[key] == run end,
         function() return Hub.targetLoopRuns[key] == run end
 end
@@ -15951,39 +15955,41 @@ do
             rename={["View & Movement"]="Movement"},
             controls={ThirdPersonToggle="Camera",ToolFirstPerson="Camera",FOVSlider="Camera"},
             order={Movement={"SpeedModifierToggle","SpeedValue","JumpModifierToggle","JumpValue","infJumpToggle","SelfNoclipToggle","ToolGravity","ToolGravityValue","SpinToggle","SpinSpeed"}}},
-        Defense={sections={"Grab & Seat Protection","Gucci Protection","Anti Kick","Anti Kick Appearance","Movement & Void Recovery","World Hazards","Input Protection","Collision Protection","Safe Zone","Movement Warnings","Advanced & Countermeasures"},
-            collapsible=true,openSection="Grab & Seat Protection",
-            rename={["Defense Main"]="Grab & Seat Protection",["Extra Defense"]="Advanced & Countermeasures",["Local hazard filters"]="World Hazards"},
+        Defense={sections={"Protection Toggles","Grab & Seat Settings","Gucci Settings","Anti Kick","Anti Kick Appearance","Recovery Settings","World Hazard Notes","Input Settings","Collision Settings","Safe Zone","Movement Warnings","Advanced & Countermeasures"},
+            
+            rename={["Defense Main"]="Grab & Seat Settings",["Extra Defense"]="Advanced & Countermeasures",["Local hazard filters"]="World Hazard Notes"},
             controls={
-                AntiGrabObsidian="Grab & Seat Protection",RecoverMovementAfterGrab="Grab & Seat Protection",AntiBlobmanToggle="Grab & Seat Protection",LocalUnwantedSeatProtection="Grab & Seat Protection",AntiStickyToggle="Grab & Seat Protection",
-                AutoGucciBlobToggle="Gucci Protection",AutoGucciTrainToggle="Gucci Protection",GucciAutoDeleteBlob="Gucci Protection",SourceGucciVehicle="Gucci Protection",SourceRagdollOnRemoveGucci="Gucci Protection",
-                ShurikenAntiKick="Anti Kick",SourceBreakPCLD="Anti Kick",
-                AntiVoidToggle="Movement & Void Recovery",SourceDisableVoid="Movement & Void Recovery",LocalMotionProtection="Movement & Void Recovery",LocalMotionLinearLimit="Movement & Void Recovery",LocalMotionAngularLimit="Movement & Void Recovery",LoopTP="Movement & Void Recovery",
-                AntiExplosionToggle="World Hazards",AntiBurnToggle="World Hazards",PaintDeleteToggle="World Hazards",SourceAntiBanana="World Hazards",SourceAntiSnowball="World Hazards",
-                AntiInputLag="Input Protection",SourceInputToy="Input Protection",SourceInputDelay="Input Protection",SourceInputTransparency="Input Protection",
-                SourceAntiObjectFling="Collision Protection",SourceNoclipBarrier="Collision Protection",SourceAntiInvis="Collision Protection",
-                MovementWarningMonitor="Movement Warnings",AutoResetToggle="Movement Warnings",SourceCorrectionLeave="Movement Warnings",
+                PrivatePoisonTouch="Protection Toggles",
+                AntiGrabObsidian="Protection Toggles",RecoverMovementAfterGrab="Protection Toggles",AntiBlobmanToggle="Protection Toggles",LocalUnwantedSeatProtection="Protection Toggles",AntiStickyToggle="Protection Toggles",
+                AutoGucciBlobToggle="Protection Toggles",AutoGucciTrainToggle="Protection Toggles",GucciAutoDeleteBlob="Gucci Settings",SourceGucciVehicle="Gucci Settings",SourceRagdollOnRemoveGucci="Gucci Settings",
+                ShurikenAntiKick="Protection Toggles",SourceBreakPCLD="Protection Toggles",
+                AntiVoidToggle="Protection Toggles",SourceDisableVoid="Protection Toggles",LocalMotionProtection="Protection Toggles",LocalMotionLinearLimit="Recovery Settings",LocalMotionAngularLimit="Recovery Settings",LoopTP="Protection Toggles",
+                AntiExplosionToggle="Protection Toggles",AntiBurnToggle="Protection Toggles",PaintDeleteToggle="Protection Toggles",SourceAntiBanana="Protection Toggles",SourceAntiSnowball="Protection Toggles",
+                AntiInputLag="Protection Toggles",SourceInputToy="Input Settings",SourceInputDelay="Input Settings",SourceInputTransparency="Input Settings",
+                SourceAntiObjectFling="Protection Toggles",SourceNoclipBarrier="Protection Toggles",SourceAntiInvis="Protection Toggles",
+                MovementWarningMonitor="Movement Warnings",AutoResetToggle="Protection Toggles",SourceCorrectionLeave="Movement Warnings",
             },
             prefixes={{"SourceAntiKick","Anti Kick Appearance"}},
             names={
-                ["Release local grab freeze"]="Grab & Seat Protection",
-                ["Anti Sticky uses the supplied connected-part method."]="Grab & Seat Protection",
-                ["Last person who grabbed you: nobody"]="Grab & Seat Protection",
-                ["Gucci uses the supplied seat/weld controller."]="Gucci Protection",
-                ["Gucci: supplied seat/weld controller, off"]="Gucci Protection",
-                ["Stop supplied Gucci and clean its toy"]="Gucci Protection",
-                ["Anti Void uses the supplied height-threshold recovery method."]="Movement & Void Recovery",
-                ["Record safe ground here"]="Movement & Void Recovery",["Return to last safe ground"]="Movement & Void Recovery",["Motion recovery status"]="Movement & Void Recovery",
-                ["Anti Banana uses the source's leg-breaking method, respawn restores missing limbs."]="World Hazards",
+                ["Release local grab freeze"]="Grab & Seat Settings",
+                ["Anti Sticky uses the supplied connected-part method."]="Grab & Seat Settings",
+                ["Last person who grabbed you: nobody"]="Grab & Seat Settings",
+                ["Gucci uses the supplied seat/weld controller."]="Gucci Settings",
+                ["Gucci: supplied seat/weld controller, off"]="Gucci Settings",
+                ["Stop supplied Gucci and clean its toy"]="Gucci Settings",
+                ["Anti Void uses the supplied height-threshold recovery method."]="Recovery Settings",
+                ["Record safe ground here"]="Recovery Settings",["Return to last safe ground"]="Recovery Settings",["Motion recovery status"]="Recovery Settings",
+                ["Anti Banana uses the source's leg-breaking method, respawn restores missing limbs."]="World Hazard Notes",
                 ["Movement warning count"]="Movement Warnings",["Clear observed warning count"]="Movement Warnings",
             },
             order={
-                ["Grab & Seat Protection"]={"AntiGrabObsidian","RecoverMovementAfterGrab","AntiBlobmanToggle","LocalUnwantedSeatProtection","AntiStickyToggle"},
-                ["Gucci Protection"]={"AutoGucciBlobToggle","SourceGucciVehicle","GucciAutoDeleteBlob","AutoGucciTrainToggle","SourceRagdollOnRemoveGucci"},
-                ["Movement & Void Recovery"]={"AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","LocalMotionLinearLimit","LocalMotionAngularLimit","LoopTP"},
+                ["Protection Toggles"]={"AntiGrabObsidian","RecoverMovementAfterGrab","AutoGucciBlobToggle","AutoGucciTrainToggle","AntiBlobmanToggle","ShurikenAntiKick","SourceBreakPCLD","AntiStickyToggle","LocalUnwantedSeatProtection","AntiExplosionToggle","AntiBurnToggle","PaintDeleteToggle","PrivatePoisonTouch","AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","SourceAntiObjectFling","AntiInputLag","SourceAntiBanana","SourceAntiSnowball","SourceNoclipBarrier","SourceAntiInvis","LoopTP","AutoResetToggle"},
+                ["Grab & Seat Settings"]={"AntiGrabObsidian","RecoverMovementAfterGrab","AntiBlobmanToggle","LocalUnwantedSeatProtection","AntiStickyToggle"},
+                ["Gucci Settings"]={"AutoGucciBlobToggle","SourceGucciVehicle","GucciAutoDeleteBlob","AutoGucciTrainToggle","SourceRagdollOnRemoveGucci"},
+                ["Recovery Settings"]={"AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","LocalMotionLinearLimit","LocalMotionAngularLimit","LoopTP"},
             }},
         Target={sections={"Target Interaction","Aim Assist"}},
-        AntiLag={collapsible=true,openSection="Manual Line Protection",sections={"Manual Line Protection","Automatic Line Protection","Low FPS Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
+        AntiLag={sections={"Manual Line Protection","Automatic Line Protection","Low FPS Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
         Blob={sections={"Controls","Seating","Flight"},
             controls={AutoReseatBlobLoops="Seating",BlobReseatInterval="Seating",AutoSitZ="Seating",BlobFlySpeed="Flight"}},
         Aura={sections={"Player Auras","Attraction & Tornado","Range & Alerts"}},
@@ -15997,7 +16003,7 @@ do
         Whitelist={sections={"Protected Players"}},
         Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
         KeyBinds={sections={"Menu & emergency","Action shortcuts","Missile throw"}},
-        Sound={collapsible=true,openSection="Game Sound Filters",sections={"Game Sound Filters","Toy Audio","Notification Sounds","Info Notifications","Warning Notifications","Success Notifications","Danger Notifications","Loop Alert Sounds","Blackhole Audio"},
+        Sound={sections={"Game Sound Filters","Toy Audio","Notification Sounds","Info Notifications","Warning Notifications","Success Notifications","Danger Notifications","Loop Alert Sounds","Blackhole Audio"},
             prefixes={{"NoticeInfo","Info Notifications"},{"NoticeWarning","Warning Notifications"},{"NoticeSuccess","Success Notifications"},{"NoticeDanger","Danger Notifications"}},
             names={["Preview info sound"]="Info Notifications",["Preview warning sound"]="Warning Notifications",["Preview success sound"]="Success Notifications",["Preview danger sound"]="Danger Notifications"}},
         Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Notification theme","Position & Appearance"}},
