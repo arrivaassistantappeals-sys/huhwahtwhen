@@ -85,6 +85,26 @@ local function runWorker()
 end
 '''
 CASES={
+'moving_spawn_without_returned_model_is_identified':r'''
+    spawnRemote.InvokeServer=function()
+        spawned+=1;local toy=makeToy()
+        toy:FindFirstChild("StickyPart").Position=Vector3.new(100,4,0)
+        return true
+    end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    buttons["Whitelist assistance status"]()
+    assert(notices[#notices].Description:find("Toy spawned",1,true))
+''',
+'unreplicated_sticky_part_does_not_prevent_model_identification':r'''
+    spawnRemote.InvokeServer=function()
+        spawned+=1;local toy=node("NinjaShuriken",{},"Model");toy.Parent=folder
+        table.insert(folder.children,toy);return true
+    end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    Hub.sampleWhitelistAssistance();buttons["Whitelist assistance status"]()
+    assert(notices[#notices].Description:find("Waiting for StickyPart replication",1,true))
+''',
+
 'missing_sticky_parts_recycle_without_touching_existing_toys':r'''
     spawnRemote.InvokeServer=function()
         spawned+=1;local toy=node("NinjaShuriken",{},"Model");toy.Parent=folder
