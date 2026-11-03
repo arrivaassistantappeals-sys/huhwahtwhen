@@ -7,6 +7,10 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 SETUP=r'''
 Players.LocalPlayer=Player
+Enum.RenderPriority={Camera={Value=200}}
+local renderBindings={}
+RunService.BindToRenderStep=function(_,name,priority,callback) renderBindings[name]=callback end
+RunService.UnbindFromRenderStep=function(_,name) renderBindings[name]=nil end
 Tabs.Whitelist=Tabs.Misc
 Hub.manualWhitelist={[tostring(a.UserId)]="A"}
 Hub.friendCache={};Hub.whitelistFriends=false
@@ -81,6 +85,44 @@ local function runWorker()
 end
 '''
 CASES={
+'direct_toy_owner_takes_precedence_over_empty_model_marker':r'''
+    spawnRemote.InvokeServer=function()
+        spawned+=1;local toy=makeToy()
+        local marker=node("PartOwner",{},"StringValue");marker.Value=""
+        local sound=node("SoundPart",{marker},"BasePart");sound.Parent=toy
+        table.insert(toy.children,1,sound)
+        return toy
+    end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    Hub.sampleWhitelistAssistance();runWorker()
+    assert(requests[#requests].kind=="sticky")
+    for _,request in ipairs(requests) do assert(request.kind~="owner") end
+''',
+'failed_attachment_recycles_only_its_managed_toy_after_bounded_retries':r'''
+    confirmWeld=false
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    for attempt=1,3 do now=attempt*3;Hub.sampleWhitelistAssistance();runWorker() end
+    assert(#deleted==1 and deleted[1]~=originals and originals.Parent==folder)
+''',
+'masked_visit_restores_display_before_render_and_cleans_on_cancel':r'''
+    local state={position=root.Position,frame=root.CFrame}
+    rawset(root,"Position",nil);rawset(root,"CFrame",nil)
+    setmetatable(root,{__index=function(_,key) if key=="Position" then return state.position elseif key=="CFrame" then return state.frame end end,
+        __newindex=function(_,key,value) if key=="CFrame" then state.frame=value;state.position=value.Position else rawset(root,key,value) end end})
+    local myHead=char:FindFirstChild("Head");myHead.CFrame=CFrame.new(0,1.5,0)
+    local originalHead=myHead.CFrame
+    controls.WhitelistAssistGrab:SetValue(true);controls.WhitelistAssistVisits:SetValue(true)
+    Hub.sampleWhitelistAssistance();ar.Position=Vector3.new(200,0,0);ao.Value="Attacker"
+    Hub.sampleWhitelistAssistance()
+    local worker=workers[#workers];local ok,err=coroutine.resume(worker);assert(ok,err)
+    assert(root.Position.X==200 and next(renderBindings))
+    for _,callback in pairs(renderBindings) do callback() end
+    assert(root.Position.Magnitude==0 and myHead.CFrame==originalHead)
+    emit(RunService.Heartbeat,0.05);assert(root.Position.X==200)
+    controls.WhitelistAssistGrab:SetValue(false)
+    assert(root.Position.Magnitude==0 and not next(renderBindings) and not Hub.interactionVisitLock)
+    runWorker();emit(RunService.Heartbeat,0.05);assert(root.Position.Magnitude==0)
+''',
 'missing_toy_marker_cannot_borrow_friends_head_owner':r'''
     ao.Value=Player.Name
     spawnRemote.InvokeServer=function()
