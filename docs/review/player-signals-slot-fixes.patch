@@ -1,0 +1,448 @@
+--- a/dist/resonance.lua
++++ b/dist/resonance.lua
+@@ -10002,25 +10002,71 @@
+         if not claim(false) then notify("Plot","Stand within 30 studs of the selected plot's claim sign. Character and grab remotes must be ready.",5) end
+     end})
+     group:AddToggle("PackAutoClaimPlot",{Text="Auto-claim selected empty plot",Default=false,Callback=function(on) claimOn=on;nextClaim=0 end})
+-    group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (nearby)",Default=false,Callback=function(on) slotOn=on;nextSlot=0 end})
+-    group:AddToggle("ToolAutoSaveHouse",{Text="Auto save house time",Default=false,Callback=function(on)
+-        houseOn=on;nextHouse=0;if not on then finishVisit() end
+-    end})
+-    function Hub.sampleToolAutomation()
+-        local now=os.clock()
+-        if claimOn and now>=nextClaim then nextClaim=now+5;claim(true) end
+-        if slotOn and now>=nextSlot then
+-            nextSlot=now+3
+-            local slots=Workspace:FindFirstChild("Slots")
+-            local ready,count,handle=true,0,nil
+-            for _,slot in ipairs(slots and slots:GetChildren() or {}) do
+-                local holder=slot:FindFirstChild("SlotHandle")
+-                local light=holder and holder:FindFirstChild("LightBall")
+-                if light then count+=1;if light.Material~=Enum.Material.Neon then ready=false end end
+-                handle=handle or (holder and holder:FindFirstChild("Handle"))
+-            end
+-            if ready and count>0 then grabOnce(handle) end
+-        end
++    local slotStatus=group:AddLabel("Slots: auto spin off. Stand within 30 studs of a handle.")
++    local pendingSpin
++    local slotAttempts=setmetatable({},{__mode="k"})
++    local function slotState(slot)
++        local screen=slot:FindFirstChild("Screen")
++        local gui=screen and screen:FindFirstChild("SlotGui")
++        local frame=gui and gui:FindFirstChild("TimeLeftFrame")
++        local timer=frame and frame:FindFirstChild("TimeText")
++        if timer then
++            local text=tostring(timer.Text):gsub("%s","")
++            if not text:match("^%d+:%d%d$") and not text:match("^%d+$") then return nil,timer end
++            return text=="0:00" or text=="00:00" or text=="0",timer
++        end
++        local holder=slot:FindFirstChild("SlotHandle")
++        local light=holder and holder:FindFirstChild("LightBall")
++        if light then return light.Material==Enum.Material.Neon end
++        return nil
++    end
++    local function spinSlots(manual)
++        local root=selfRoot()
++        if not root then slotStatus:SetText("Slots: character is busy, held, seated or not ready.");return end
++        local slots=Workspace:FindFirstChild("Slots")
++        if not slots then slotStatus:SetText("Slots: machines have not loaded yet.");return end
++        local now=os.clock()
++        if pendingSpin then
++            if not pendingSpin.slot.Parent then
++                pendingSpin=nil;slotStatus:SetText("Slots: machine disappeared; looking for another.");return
++            end
++            local ready=slotState(pendingSpin.slot)
++            if ready==false then
++                slotStatus:SetText("Slots: "..pendingSpin.slot.Name.." accepted a spin; waiting for its cooldown.")
++                pendingSpin=nil
++                return
++            elseif now-pendingSpin.time<2 then return
++            else slotStatus:SetText("Slots: no spin confirmation yet; retrying available nearby handles.");pendingSpin=nil end
++        end
++        if not manual and now<nextSlot then return end
++        nextSlot=now+3
++        local best,distance
++        for _,slot in ipairs(slots:GetChildren()) do
++            local ready=slotState(slot)
++            local holder=slot:FindFirstChild("SlotHandle")
++            local handle=holder and holder:FindFirstChild("Handle")
++            if ready and handle and handle:IsA("BasePart") and now-(slotAttempts[slot] or -math.huge)>=6 then
++                local range=(root.Position-handle.Position).Magnitude
++                if range<=30 and (not distance or range<distance) then best={slot=slot,handle=handle};distance=range end
++            end
++        end
++        if not best then slotStatus:SetText("Slots: no ready machine within 30 studs. Waiting, not stopping.");return end
++        if grabOnce(best.handle) then
++            slotAttempts[best.slot]=now
++            pendingSpin={slot=best.slot,time=now}
++            slotStatus:SetText("Slots: spin requested on "..best.slot.Name.."; checking its timer.")
++        else slotStatus:SetText("Slots: grab remotes or character unavailable; will retry.") end
++    end
++    group:AddButton({Text="Spin an available nearby slot now",Func=function() spinSlots(true) end})
++
++    group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (nearby)",Default=false,Callback=function(on) slotOn=on;nextSlot=0;pendingSpin=nil;slotStatus:SetText(on and "Slots: looking for a ready nearby machine." or "Slots: auto spin off.") end})
++    group:AddToggle("ToolAutoSaveHouse",{Text="Auto save house time",Default=false,Callback=function(on)
++        houseOn=on;nextHouse=0;if not on then finishVisit() end
++    end})
++    function Hub.sampleToolAutomation()
++        local now=os.clock()
++        if claimOn and now>=nextClaim then nextClaim=now+5;claim(true) end
++        if slotOn then spinSlots(false) end
+         if not houseOn or visit or now<nextHouse then return end
+         nextHouse=now+10
+         local root,char=selfRoot();if not root then return end
+@@ -15947,6 +15993,112 @@
+ end
+ 
+ 
++-- BEGIN CHEATER SIGNAL MONITOR
++do
++(function()
++    local group=Tabs.Misc:AddLeftGroupbox("Cheaters")
++    local records,announced,labels={},{},{}
++    local monitor,alerts=true,true
++    local selected,rebuilding,dropdown
++    local renderedList
++    local status=group:AddLabel("Waiting for player observations.")
++    local detail=group:AddLabel("Select a player to see the observed setup.")
++    local function signals(person)
++        if person==Player or person.Parent~=Players then return end
++        local char=person.Character
++        local root=char and char:FindFirstChild("HumanoidRootPart")
++        local hum=char and char:FindFirstChildOfClass("Humanoid")
++        if not root or not hum or hum.Health<=0 then return end
++        local reasons={}
++        local seat=hum.SeatPart
++        if seat and seat.Parent then
++            local weld=seat:FindFirstChild("SeatWeld")
++            if not weld or not weld.Enabled then table.insert(reasons,"Gucci-like seat/weld setup") end
++        end
++        for _,part in pairs({root,root:FindFirstChild("RagdollTouchedHitbox"),root:FindFirstChild("FirePlayerPart")}) do
++            if part and part.Parent then
++                local ok,connected=pcall(function() return part:GetConnectedParts() end)
++                if ok then
++                    for _,other in ipairs(connected) do
++                        if other.Name=="StickyPart" then table.insert(reasons,"StickyPart attached to character");break end
++                    end
++                    if reasons[#reasons]=="StickyPart attached to character" then break end
++                end
++            end
++        end
++        return char,table.concat(reasons,"; ")
++    end
++    local function describe()
++        local record=selected and records[selected]
++        detail:SetText(record and ("@"..record.player.Name..": "..record.reason..(record.confirmed and " (repeated observation)" or " (checking)")) or "Select a player to see the observed setup.")
++    end
++    local function render()
++        local values={};labels={};local selectedLabel
++        local detected,pending=0,0
++        for id,record in pairs(records) do
++            local label="@"..record.player.Name.." — "..(record.confirmed and "Detected: " or "Checking: ")..record.reason
++            labels[label]=id;table.insert(values,label)
++            if id==selected then selectedLabel=label end
++            if record.confirmed then detected+=1 else pending+=1 end
++        end
++        table.sort(values)
++        local signature=table.concat(values,"\n")
++        if signature~=renderedList then
++            renderedList=signature
++            rebuilding=true;dropdown:SetValues(values)
++            if selectedLabel then dropdown:SetValue(selectedLabel) end
++            rebuilding=false
++        end
++        status:SetText(string.format("%d repeated signals, %d checking. Monitor %s.",detected,pending,monitor and "on" or "paused"))
++        describe()
++    end
++    local function observe(person)
++        local id=person.UserId
++        local ok,char,reason=pcall(signals,person)
++        if not ok then return end -- A streamed/removed character is not evidence.
++        if not char or reason=="" then records[id]=nil;return end
++        local now=os.clock();local record=records[id]
++        local wasConfirmed=record and record.confirmed
++        if not record or record.char~=char or record.reason~=reason then
++            wasConfirmed=false
++            record={player=person,char=char,reason=reason,seen=now,confirmed=false};records[id]=record
++        elseif now-record.seen>=0.5 then record.confirmed=true end
++        if record.confirmed and not wasConfirmed and alerts and now-(announced[id] or -math.huge)>=60 then
++            announced[id]=now
++            notify("Player signal detected","@"..person.Name..": "..reason..". This is an observed setup, not proof of cheating.",6,"warning")
++        end
++    end
++    dropdown=group:AddDropdown("CheaterSignalPlayers",{Text="Observed players",Values={},Callback=function(value)
++        if rebuilding then return end;selected=labels[value];describe()
++    end})
++    group:AddToggle("CheaterSignalMonitor",{Text="Monitor player signals",Default=true,Callback=function(on) monitor=on end})
++    group:AddToggle("CheaterSignalAlerts",{Text="Notify on repeated signals",Default=true,Callback=function(on) alerts=on end})
++    Hub.cheaterSignals=records
++    Hub.scanCheaterSignals=function()
++        for _,person in ipairs(Players:GetPlayers()) do observe(person) end
++        render()
++    end
++    group:AddButton({Text="Find cheaters / refresh signals",Func=Hub.scanCheaterSignals})
++    group:AddLabel("Gucci/sticky connections are heuristics. Someone else may have applied them. No automatic targeting or reporting.")
++    local elapsed,cursor=0,1
++    Hub.connect(RunService.Heartbeat,function(dt)
++        if not monitor then return end
++        elapsed+=dt;if elapsed<0.25 then return end;elapsed=0
++        local roster=Players:GetPlayers()
++        if cursor>#roster then cursor=1 end
++        for _=1,4 do
++            local person=roster[cursor];if not person then break end
++            observe(person);cursor+=1
++        end
++        render()
++    end)
++    Hub.connect(Players.PlayerRemoving,function(person) records[person.UserId]=nil;announced[person.UserId]=nil;render() end)
++    Hub.cleanup(function() monitor=false;Hub.cheaterSignals=nil;Hub.scanCheaterSignals=nil;table.clear(records);table.clear(announced) end)
++end)()
++end
++-- END CHEATER SIGNAL MONITOR
++
++
+ -- Register every saved control before loading settings.
+ MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
+ -- Session customization does not require executor file-storage support.
+@@ -15956,7 +16108,7 @@
+ 	local ok, err = pcall(function()
+ 		ThemeManager:SetLibrary(Library)
+ 		SaveManager:SetLibrary(Library)
+-		SaveManager:SetIgnoreIndexes({"MultiWhitelist"})
++		SaveManager:SetIgnoreIndexes({"MultiWhitelist","CheaterSignalPlayers"})
+ 		Hub.installConfigLoading(SaveManager)
+ 		ThemeManager:SetFolder("ArrivaCoreHub")
+ 		SaveManager:SetFolder("ArrivaCoreHub/Configs")
+@@ -16113,7 +16265,7 @@
+         Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
+             rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
+         Visual={sections={"Skybox Faces","Sun & Stars","Shaders","Water Appearance","Local environment","Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance"},controls={ToolTimeOverride="Sun & Stars",ToolTimeOfDay="Sun & Stars",ToolSyncTime="Sun & Stars"}},
+-        Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools"},
++        Misc={sections={"Cheaters","Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools"},
+             rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
+         Whitelist={sections={"Protected Players"}},
+         Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
+--- a/dist/resonance.txt
++++ b/dist/resonance.txt
+@@ -10002,25 +10002,71 @@
+         if not claim(false) then notify("Plot","Stand within 30 studs of the selected plot's claim sign. Character and grab remotes must be ready.",5) end
+     end})
+     group:AddToggle("PackAutoClaimPlot",{Text="Auto-claim selected empty plot",Default=false,Callback=function(on) claimOn=on;nextClaim=0 end})
+-    group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (nearby)",Default=false,Callback=function(on) slotOn=on;nextSlot=0 end})
+-    group:AddToggle("ToolAutoSaveHouse",{Text="Auto save house time",Default=false,Callback=function(on)
+-        houseOn=on;nextHouse=0;if not on then finishVisit() end
+-    end})
+-    function Hub.sampleToolAutomation()
+-        local now=os.clock()
+-        if claimOn and now>=nextClaim then nextClaim=now+5;claim(true) end
+-        if slotOn and now>=nextSlot then
+-            nextSlot=now+3
+-            local slots=Workspace:FindFirstChild("Slots")
+-            local ready,count,handle=true,0,nil
+-            for _,slot in ipairs(slots and slots:GetChildren() or {}) do
+-                local holder=slot:FindFirstChild("SlotHandle")
+-                local light=holder and holder:FindFirstChild("LightBall")
+-                if light then count+=1;if light.Material~=Enum.Material.Neon then ready=false end end
+-                handle=handle or (holder and holder:FindFirstChild("Handle"))
+-            end
+-            if ready and count>0 then grabOnce(handle) end
+-        end
++    local slotStatus=group:AddLabel("Slots: auto spin off. Stand within 30 studs of a handle.")
++    local pendingSpin
++    local slotAttempts=setmetatable({},{__mode="k"})
++    local function slotState(slot)
++        local screen=slot:FindFirstChild("Screen")
++        local gui=screen and screen:FindFirstChild("SlotGui")
++        local frame=gui and gui:FindFirstChild("TimeLeftFrame")
++        local timer=frame and frame:FindFirstChild("TimeText")
++        if timer then
++            local text=tostring(timer.Text):gsub("%s","")
++            if not text:match("^%d+:%d%d$") and not text:match("^%d+$") then return nil,timer end
++            return text=="0:00" or text=="00:00" or text=="0",timer
++        end
++        local holder=slot:FindFirstChild("SlotHandle")
++        local light=holder and holder:FindFirstChild("LightBall")
++        if light then return light.Material==Enum.Material.Neon end
++        return nil
++    end
++    local function spinSlots(manual)
++        local root=selfRoot()
++        if not root then slotStatus:SetText("Slots: character is busy, held, seated or not ready.");return end
++        local slots=Workspace:FindFirstChild("Slots")
++        if not slots then slotStatus:SetText("Slots: machines have not loaded yet.");return end
++        local now=os.clock()
++        if pendingSpin then
++            if not pendingSpin.slot.Parent then
++                pendingSpin=nil;slotStatus:SetText("Slots: machine disappeared; looking for another.");return
++            end
++            local ready=slotState(pendingSpin.slot)
++            if ready==false then
++                slotStatus:SetText("Slots: "..pendingSpin.slot.Name.." accepted a spin; waiting for its cooldown.")
++                pendingSpin=nil
++                return
++            elseif now-pendingSpin.time<2 then return
++            else slotStatus:SetText("Slots: no spin confirmation yet; retrying available nearby handles.");pendingSpin=nil end
++        end
++        if not manual and now<nextSlot then return end
++        nextSlot=now+3
++        local best,distance
++        for _,slot in ipairs(slots:GetChildren()) do
++            local ready=slotState(slot)
++            local holder=slot:FindFirstChild("SlotHandle")
++            local handle=holder and holder:FindFirstChild("Handle")
++            if ready and handle and handle:IsA("BasePart") and now-(slotAttempts[slot] or -math.huge)>=6 then
++                local range=(root.Position-handle.Position).Magnitude
++                if range<=30 and (not distance or range<distance) then best={slot=slot,handle=handle};distance=range end
++            end
++        end
++        if not best then slotStatus:SetText("Slots: no ready machine within 30 studs. Waiting, not stopping.");return end
++        if grabOnce(best.handle) then
++            slotAttempts[best.slot]=now
++            pendingSpin={slot=best.slot,time=now}
++            slotStatus:SetText("Slots: spin requested on "..best.slot.Name.."; checking its timer.")
++        else slotStatus:SetText("Slots: grab remotes or character unavailable; will retry.") end
++    end
++    group:AddButton({Text="Spin an available nearby slot now",Func=function() spinSlots(true) end})
++
++    group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (nearby)",Default=false,Callback=function(on) slotOn=on;nextSlot=0;pendingSpin=nil;slotStatus:SetText(on and "Slots: looking for a ready nearby machine." or "Slots: auto spin off.") end})
++    group:AddToggle("ToolAutoSaveHouse",{Text="Auto save house time",Default=false,Callback=function(on)
++        houseOn=on;nextHouse=0;if not on then finishVisit() end
++    end})
++    function Hub.sampleToolAutomation()
++        local now=os.clock()
++        if claimOn and now>=nextClaim then nextClaim=now+5;claim(true) end
++        if slotOn then spinSlots(false) end
+         if not houseOn or visit or now<nextHouse then return end
+         nextHouse=now+10
+         local root,char=selfRoot();if not root then return end
+@@ -15947,6 +15993,112 @@
+ end
+ 
+ 
++-- BEGIN CHEATER SIGNAL MONITOR
++do
++(function()
++    local group=Tabs.Misc:AddLeftGroupbox("Cheaters")
++    local records,announced,labels={},{},{}
++    local monitor,alerts=true,true
++    local selected,rebuilding,dropdown
++    local renderedList
++    local status=group:AddLabel("Waiting for player observations.")
++    local detail=group:AddLabel("Select a player to see the observed setup.")
++    local function signals(person)
++        if person==Player or person.Parent~=Players then return end
++        local char=person.Character
++        local root=char and char:FindFirstChild("HumanoidRootPart")
++        local hum=char and char:FindFirstChildOfClass("Humanoid")
++        if not root or not hum or hum.Health<=0 then return end
++        local reasons={}
++        local seat=hum.SeatPart
++        if seat and seat.Parent then
++            local weld=seat:FindFirstChild("SeatWeld")
++            if not weld or not weld.Enabled then table.insert(reasons,"Gucci-like seat/weld setup") end
++        end
++        for _,part in pairs({root,root:FindFirstChild("RagdollTouchedHitbox"),root:FindFirstChild("FirePlayerPart")}) do
++            if part and part.Parent then
++                local ok,connected=pcall(function() return part:GetConnectedParts() end)
++                if ok then
++                    for _,other in ipairs(connected) do
++                        if other.Name=="StickyPart" then table.insert(reasons,"StickyPart attached to character");break end
++                    end
++                    if reasons[#reasons]=="StickyPart attached to character" then break end
++                end
++            end
++        end
++        return char,table.concat(reasons,"; ")
++    end
++    local function describe()
++        local record=selected and records[selected]
++        detail:SetText(record and ("@"..record.player.Name..": "..record.reason..(record.confirmed and " (repeated observation)" or " (checking)")) or "Select a player to see the observed setup.")
++    end
++    local function render()
++        local values={};labels={};local selectedLabel
++        local detected,pending=0,0
++        for id,record in pairs(records) do
++            local label="@"..record.player.Name.." — "..(record.confirmed and "Detected: " or "Checking: ")..record.reason
++            labels[label]=id;table.insert(values,label)
++            if id==selected then selectedLabel=label end
++            if record.confirmed then detected+=1 else pending+=1 end
++        end
++        table.sort(values)
++        local signature=table.concat(values,"\n")
++        if signature~=renderedList then
++            renderedList=signature
++            rebuilding=true;dropdown:SetValues(values)
++            if selectedLabel then dropdown:SetValue(selectedLabel) end
++            rebuilding=false
++        end
++        status:SetText(string.format("%d repeated signals, %d checking. Monitor %s.",detected,pending,monitor and "on" or "paused"))
++        describe()
++    end
++    local function observe(person)
++        local id=person.UserId
++        local ok,char,reason=pcall(signals,person)
++        if not ok then return end -- A streamed/removed character is not evidence.
++        if not char or reason=="" then records[id]=nil;return end
++        local now=os.clock();local record=records[id]
++        local wasConfirmed=record and record.confirmed
++        if not record or record.char~=char or record.reason~=reason then
++            wasConfirmed=false
++            record={player=person,char=char,reason=reason,seen=now,confirmed=false};records[id]=record
++        elseif now-record.seen>=0.5 then record.confirmed=true end
++        if record.confirmed and not wasConfirmed and alerts and now-(announced[id] or -math.huge)>=60 then
++            announced[id]=now
++            notify("Player signal detected","@"..person.Name..": "..reason..". This is an observed setup, not proof of cheating.",6,"warning")
++        end
++    end
++    dropdown=group:AddDropdown("CheaterSignalPlayers",{Text="Observed players",Values={},Callback=function(value)
++        if rebuilding then return end;selected=labels[value];describe()
++    end})
++    group:AddToggle("CheaterSignalMonitor",{Text="Monitor player signals",Default=true,Callback=function(on) monitor=on end})
++    group:AddToggle("CheaterSignalAlerts",{Text="Notify on repeated signals",Default=true,Callback=function(on) alerts=on end})
++    Hub.cheaterSignals=records
++    Hub.scanCheaterSignals=function()
++        for _,person in ipairs(Players:GetPlayers()) do observe(person) end
++        render()
++    end
++    group:AddButton({Text="Find cheaters / refresh signals",Func=Hub.scanCheaterSignals})
++    group:AddLabel("Gucci/sticky connections are heuristics. Someone else may have applied them. No automatic targeting or reporting.")
++    local elapsed,cursor=0,1
++    Hub.connect(RunService.Heartbeat,function(dt)
++        if not monitor then return end
++        elapsed+=dt;if elapsed<0.25 then return end;elapsed=0
++        local roster=Players:GetPlayers()
++        if cursor>#roster then cursor=1 end
++        for _=1,4 do
++            local person=roster[cursor];if not person then break end
++            observe(person);cursor+=1
++        end
++        render()
++    end)
++    Hub.connect(Players.PlayerRemoving,function(person) records[person.UserId]=nil;announced[person.UserId]=nil;render() end)
++    Hub.cleanup(function() monitor=false;Hub.cheaterSignals=nil;Hub.scanCheaterSignals=nil;table.clear(records);table.clear(announced) end)
++end)()
++end
++-- END CHEATER SIGNAL MONITOR
++
++
+ -- Register every saved control before loading settings.
+ MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
+ -- Session customization does not require executor file-storage support.
+@@ -15956,7 +16108,7 @@
+ 	local ok, err = pcall(function()
+ 		ThemeManager:SetLibrary(Library)
+ 		SaveManager:SetLibrary(Library)
+-		SaveManager:SetIgnoreIndexes({"MultiWhitelist"})
++		SaveManager:SetIgnoreIndexes({"MultiWhitelist","CheaterSignalPlayers"})
+ 		Hub.installConfigLoading(SaveManager)
+ 		ThemeManager:SetFolder("ArrivaCoreHub")
+ 		SaveManager:SetFolder("ArrivaCoreHub/Configs")
+@@ -16113,7 +16265,7 @@
+         Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
+             rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
+         Visual={sections={"Skybox Faces","Sun & Stars","Shaders","Water Appearance","Local environment","Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance"},controls={ToolTimeOverride="Sun & Stars",ToolTimeOfDay="Sun & Stars",ToolSyncTime="Sun & Stars"}},
+-        Misc={sections={"Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools"},
++        Misc={sections={"Cheaters","Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools"},
+             rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
+         Whitelist={sections={"Protected Players"}},
+         Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
