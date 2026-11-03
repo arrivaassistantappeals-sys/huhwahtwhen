@@ -38,9 +38,10 @@ do
             ticket.root.CFrame=ticket.original
             ticket.root.AssemblyLinearVelocity=Vector3.zero;ticket.root.AssemblyAngularVelocity=Vector3.zero
         end
+        if Hub.interactionVisitLock==ticket then Hub.interactionVisitLock=nil end
     end
     local function visit(kind,part,allowed,action)
-        if active then return false,"Another plot/slot interaction is running." end
+        if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
         local root,char=selfRoot()
         if not root then return false,"Character busy: leave seats/holds and stop flight, safe-zone or action loops." end
         if not part or not part.Parent or not part:IsA("BasePart") then return false,"Interaction part has not loaded." end
@@ -51,7 +52,7 @@ do
         end
         if destination.Y<=Workspace.FallenPartsDestroyHeight+8 then return false,"Destination is below the safe map height." end
         local ticket={kind=kind,root=root,char=char,original=root.CFrame,destination=destination}
-        active=ticket;status:SetText(kind..": visiting; will return when finished.")
+        active=ticket;Hub.interactionVisitLock=ticket;status:SetText(kind..": visiting; will return when finished.")
         task.spawn(function()
             local function valid()
                 return Hub.alive and active==ticket and allowed() and Player.Character==char
@@ -117,7 +118,7 @@ do
         if light then return light.Material==Enum.Material.Neon end
     end
     local function spin(automatic)
-        if active then return false,"Another plot/slot interaction is running." end
+        if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
         local root=selfRoot();if not root then return false,"Character busy: stop flight/loops and leave seats first." end
         local slots=Workspace:FindFirstChild("Slots");if not slots then return false,"Slot machines have not loaded." end
         local best,distance
@@ -189,7 +190,7 @@ do
     end
     local elapsed=0
     Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.5 then elapsed=0;Hub.sampleToolAutomation() end end)
-    Hub.connect(Player.CharacterRemoving,function() active=nil end)
+    Hub.connect(Player.CharacterRemoving,function() if active and Hub.interactionVisitLock==active then Hub.interactionVisitLock=nil end;active=nil end)
     Hub.cleanup(function() slotOn=false;houseOn=false;claimOn=false;if active then finish(active) end;Hub.sampleToolAutomation=nil end)
 end)();
 
