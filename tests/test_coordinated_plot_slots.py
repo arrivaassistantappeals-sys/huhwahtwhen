@@ -31,6 +31,17 @@ local function step()
 end
 '''
 CASES={
+'plot_and_slot_visits_wait_for_assistance_lock':r'''
+    local another={};Hub.interactionVisitLock=another
+    buttons["Claim selected plot"]()
+    local ready=slot("Ready",1000,"0:00");named.Slots=node("Slots",{ready})
+    buttons["Spin an available slot now"]()
+    assert(#workers==0 and #requests==0 and Hub.interactionVisitLock==another)
+    Hub.interactionVisitLock=nil
+    buttons["Claim selected plot"]();step();assert(root.Position.X==200 and Hub.interactionVisitLock)
+    controls.PackAutoClaimPlot:SetValue(false)
+    assert(root.Position.Magnitude==0 and not Hub.interactionVisitLock)
+''',
 'claim_finds_nested_sign_and_uses_anchored_marker_confirmation':r'''
     buttons["Claim selected plot"]();step();assert(root.Position.X==200)
     step();assert(#requests==1 and requests[1][2]==signPart)
