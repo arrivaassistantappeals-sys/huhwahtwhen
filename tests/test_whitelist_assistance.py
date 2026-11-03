@@ -81,6 +81,29 @@ local function runWorker()
 end
 '''
 CASES={
+'missing_toy_marker_cannot_borrow_friends_head_owner':r'''
+    ao.Value=Player.Name
+    spawnRemote.InvokeServer=function()
+        spawned+=1;local toy=makeToy();local sticky=toy:FindFirstChild("StickyPart")
+        sticky.children={sticky:FindFirstChild("StickyWeld")}
+        return toy
+    end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    Hub.sampleWhitelistAssistance();runWorker()
+    local requested=false
+    for _,request in ipairs(requests) do assert(request.kind~="sticky");if request.kind=="owner" then requested=true end end
+    assert(requested)
+''',
+'assistance_waits_for_another_visit_lock':r'''
+    controls.WhitelistAssistGrab:SetValue(true);Hub.sampleWhitelistAssistance()
+    local saved=ar.CFrame
+    ao.Value="Attacker";ar.CFrame=CFrame.new(100,0,0)
+    local other={};Hub.interactionVisitLock=other
+    Hub.sampleWhitelistAssistance();runWorker()
+    assert(#requests==0 and ar.CFrame~=saved and Hub.interactionVisitLock==other)
+    Hub.interactionVisitLock=nil;now=3
+    Hub.sampleWhitelistAssistance();runWorker();assert(ar.CFrame==saved)
+''',
 'distant_assistance_requires_opt_in_and_returns_local_character':r'''
     controls.WhitelistAssistGrab:SetValue(true);Hub.sampleWhitelistAssistance()
     local saved=ar.CFrame
