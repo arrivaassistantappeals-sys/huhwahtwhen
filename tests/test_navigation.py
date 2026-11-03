@@ -54,21 +54,23 @@ CASES={
     local sound=entry(Tabs.Notifications.native,"LoopNotifySounds","Play sounds for loop alerts","Loop & Blobman Alerts")
     local hole=entry(Tabs.Visual.native,"PackBlackholeSound","Blackhole sound ID","Blackhole Appearance")
     local gucci=entry(Tabs.Defense.native,"SourceGucciVehicle","Gucci vehicle","Extra Defense")
+    local grab=entry(Tabs.Defense.native,"AntiGrabObsidian","Anti Grab","Defense Main")
     local rainbow=entry(Tabs.Defense.native,"SourceAntiKickRainbowFill","Rainbow","Extra Defense")
     local warning=entry(Tabs.Defense.native,nil,"Movement warning count","Defense Main")
     local preview=entry(Tabs.Sound.native,nil,"Preview success sound","Notification Sounds")
     local asset=entry(Tabs.Sound.native,"NoticeSuccessAsset","Custom ID","Notification Sounds")
-    local original={force,low,sound,hole,gucci,rainbow,warning,preview,asset}
+    local original={force,low,sound,hole,gucci,grab,rainbow,warning,preview,asset}
     __LAYOUT__
     assert(force.group=="Manual Line Protection" and force.frame.Parent==Tabs.AntiLag.native.page)
     assert(low.group=="Low FPS Protection")
     assert(sound.frame.Parent==Tabs.Sound.native.page and hole.frame.Parent==Tabs.Sound.native.page)
-    assert(gucci.group=="Gucci Protection" and rainbow.group=="Anti Kick Appearance" and warning.group=="Movement Warnings")
+    assert(gucci.group=="Gucci Settings" and rainbow.group=="Anti Kick Appearance" and warning.group=="Movement Warnings")
+    assert(grab.group=="Protection Toggles" and grab.frame.LayoutOrder<gucci.frame.LayoutOrder)
     assert(preview.group=="Success Notifications" and asset.group==preview.group)
     for _,e in ipairs(original) do
         local count=0
         for _,tab in pairs(Tabs) do for _,current in ipairs(tab.native.entries) do if current==e then count+=1 end end end
-        assert(count==1 and not e.frame.destroyed)
+        assert(count==1 and not e.frame.destroyed and e.frame.Visible)
     end
 ''',
 }
