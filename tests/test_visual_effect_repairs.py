@@ -7,6 +7,7 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 SETUP=r'''
 local children={}
+local Options=controls
 local deferred={}
 task.defer=function(fn) table.insert(deferred,fn) end
 local function flush()
@@ -67,6 +68,7 @@ local function mock(name,class,parent,properties)
 end
 Workspace.ChildAdded={};Workspace.ChildRemoved={};Workspace.DescendantAdded={};Workspace.DescendantRemoving={}
 Workspace.GetDescendants=descendants
+Workspace.FindFirstChild=function(_,name) for _,child in ipairs(children[Workspace] or {}) do if child.Name==name then return child end end end
 local terrain=mock("Terrain","Terrain",Workspace,{WaterWaveSize=0.2,WaterWaveSpeed=5,WaterTransparency=0.4,WaterReflectance=0.6})
 Workspace.FindFirstChildOfClass=function(_,kind) if kind=="Terrain" then return terrain end end
 local lighting=mock("Lighting","Lighting")
@@ -176,6 +178,73 @@ CASES={
     assert(terrain.WaterWaveSpeed==25)
     cleanups[#cleanups]()
     assert(correction.destroyed and bloom.destroyed and terrain.WaterWaveSpeed==5 and terrain.WaterTransparency==0.4)
+'''),
+'water_ocean_parts_and_overlays_apply_restore_and_ignore_other_models':('environment',r'''
+    local map=mock("Map","Model",Workspace)
+    local objects=mock("AlwaysHereTweenedObjects","Folder",map)
+    local ocean=mock("Ocean","Model",objects)
+    local object=mock("Object","Model",ocean)
+    local model=mock("ObjectModel","Model",object)
+    local surface=mock("Surface","MeshPart",model,{Transparency=0.2,TextureID="water-texture"})
+    local decal=mock("WaterDecal","Decal",surface,{Transparency=0.1})
+    local appearance=mock("Appearance","SurfaceAppearance",surface)
+    local invisible=mock("Collider","Part",model,{Transparency=1})
+    local unrelated=mock("Building","Part",map,{Transparency=0.4})
+    controls.PrivateWaterEnabled:SetValue(true)
+    controls.PrivateWaterTransparency:SetValue(1)
+    assert(surface.Transparency==1 and decal.Transparency==1 and surface.TextureID=="" and appearance.Parent==nil)
+    assert(unrelated.Transparency==0.4 and invisible.Transparency==1)
+    controls.PrivateWaterTransparency:SetValue(0.6)
+    assert(surface.Transparency==0.6 and decal.Transparency==1)
+    controls.PrettyHideWaterOverlay:SetValue(false)
+    assert(decal.Transparency==0.6 and surface.TextureID=="water-texture" and appearance.Parent==surface)
+    controls.PrivateWaterEnabled:SetValue(false);flush()
+    assert(surface.Transparency==0.2 and decal.Transparency==0.1 and appearance.Parent==surface and unrelated.Transparency==0.4)
+'''),
+'water_new_surface_receives_current_transparency':('environment',r'''
+    local map=mock("Map","Model",Workspace)
+    local objects=mock("AlwaysHereTweenedObjects","Folder",map)
+    local ocean=mock("Ocean","Model",objects)
+    local object=mock("Object","Model",ocean)
+    local model=mock("ObjectModel","Model",object)
+    controls.PrivateWaterEnabled:SetValue(true);controls.PrivateWaterTransparency:SetValue(0.8)
+    local surface=mock("Surface","Part",model,{Transparency=0.2})
+    local overlay=mock("Overlay","ImageLabel",surface)
+    flush();assert(surface.Transparency==0.8 and overlay.ImageTransparency==1)
+    cleanups[#cleanups]();flush();assert(surface.Transparency==0.2 and overlay.ImageTransparency==0)
+'''),
+'sky_faces_stars_sun_moon_and_rotation_apply_independently':('environment',r'''
+    controls.PrivateSkyEnabled:SetValue(true)
+    local sky=lighting:FindFirstChildOfClass("Sky")
+    controls.PrettySkyboxUp:SetValue("123");controls.PrettySkyboxDn:SetValue("456")
+    controls.PrettyStarCount:SetValue(5000);controls.PrettySunSize:SetValue(30);controls.PrettyMoonSize:SetValue(20)
+    controls.PrettySunImage:SetValue("789");controls.PrettyMoonImage:SetValue("987")
+    controls.PrettySkyRotation2:SetValue(90)
+    assert(sky.SkyboxUp=="rbxassetid://123" and sky.SkyboxDn=="rbxassetid://456" and sky.SkyboxLf=="rbxassetid://159454299")
+    assert(sky.StarCount==5000 and sky.SunAngularSize==30 and sky.MoonAngularSize==20 and sky.SkyboxOrientation.Y==90)
+    assert(sky.SunTextureId=="rbxassetid://789" and sky.MoonTextureId=="rbxassetid://987")
+    controls.PrettySkyboxUp:SetValue("");assert(sky.SkyboxUp=="rbxassetid://159454299")
+    controls.PrettyCelestialBodies:SetValue(false);assert(not sky.CelestialBodiesShown)
+'''),
+'shader_presets_keep_saved_values_customizable_and_optional_blur':('environment',r'''
+    controls.PrivateShader:SetValue(true)
+    controls.PrettyShaderPreset:SetValue("Warm Sunset")
+    local correction=lighting:FindFirstChildOfClass("ColorCorrectionEffect")
+    local dof=lighting:FindFirstChildOfClass("DepthOfFieldEffect")
+    local rays=lighting:FindFirstChildOfClass("SunRaysEffect")
+    assert(correction.Contrast==0.1 and correction.Saturation==0.2 and controls.PrettyShaderPreset.Value=="Custom")
+    assert(not dof.Enabled and not rays.Enabled)
+    controls.PrettyDepthOfField:SetValue(true);controls.PrettyFarBlur:SetValue(0.3)
+    controls.PrettySunRays:SetValue(true)
+    assert(dof.Enabled and dof.FarIntensity==0.3 and rays.Enabled)
+    controls.PrivateShader:SetValue(false);assert(dof.destroyed and rays.destroyed and correction.destroyed)
+'''),
+'sun_latitude_override_restores_map_setting':('environment',r'''
+    lighting.GeographicLatitude=35
+    controls.PrettySunLatitude:SetValue(75)
+    assert(lighting.GeographicLatitude==35)
+    controls.PrettyLatitudeOverride:SetValue(true);assert(lighting.GeographicLatitude==75)
+    controls.PrettyLatitudeOverride:SetValue(false);assert(lighting.GeographicLatitude==35)
 '''),
 }
 class VisualRepairs(unittest.TestCase):pass
