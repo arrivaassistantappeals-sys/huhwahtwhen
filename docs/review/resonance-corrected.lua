@@ -9580,14 +9580,14 @@ do
 					notify("Payload monitor","Captured one incoming event, details are in the F9 console.",5)
 				end
 				if bytes<threshold then return end
+                if Hub.reportIncomingSignalPayload then Hub.reportIncomingSignalPayload(bytes,remote.Name) end
 				if os.clock()<nextAlert then return end
 				nextAlert=os.clock()+cooldown
 				lastReport=diagnostic(remote,args,bytes,sender,truncated)
 				print(lastReport)
 				local name=remote.Name:sub(1,80)
 				local amount=string.format("%s%.2f MiB of string/buffer data",truncated and "at least " or "",bytes/1048576)
-				local message=sender and (sender.Name .. ", " .. amount .. ", remote: " .. name .. ".")
-					or (name .. " received " .. amount .. ".")
+				local message=name.." received "..amount..". Source unknown; included Player values do not prove a sender."
 				notify("Large incoming payload",message,6)
 				status:SetText(string.format("Watching %d remotes, last alert %.2f MiB of string/buffer data.",remoteCount,bytes/1048576))
 			end)
@@ -10020,6 +10020,20 @@ do
         if light then return light.Material==Enum.Material.Neon end
         return nil
     end
+    local function requestSlot(part)
+        local root=selfRoot()
+        if not root or not part or not part.Parent or (root.Position-part.Position).Magnitude>30 then return false end
+        local events=ReplicatedStorage:FindFirstChild("GrabEvents")
+        local remote=events and events:FindFirstChild("SetNetworkOwner")
+        if not remote then return false end
+        -- Resonance's slot path requests ownership using the player's grab origin,
+        -- looking toward the handle. The old code supplied the handle's own CFrame.
+        local origin=root.Position+Vector3.new(0,1.593,0)
+        local aim=Hub.safeLookAt(origin,part.Position)
+        if not aim then return false end
+        Hub.fire(remote,part,aim)
+        return true
+    end
     local function spinSlots(manual)
         local root=selfRoot()
         if not root then slotStatus:SetText("Slots: character is busy, held, seated or not ready.");return end
@@ -10027,6 +10041,7 @@ do
         if not slots then slotStatus:SetText("Slots: machines have not loaded yet.");return end
         local now=os.clock()
         if pendingSpin then
+            if pendingSpin.char~=Player.Character then pendingSpin=nil;slotStatus:SetText("Slots: character changed; previous request cancelled.");return end
             if not pendingSpin.slot.Parent then
                 pendingSpin=nil;slotStatus:SetText("Slots: machine disappeared; looking for another.");return
             end
@@ -10035,7 +10050,12 @@ do
                 slotStatus:SetText("Slots: "..pendingSpin.slot.Name.." accepted a spin; waiting for its cooldown.")
                 pendingSpin=nil
                 return
-            elseif now-pendingSpin.time<2 then return
+            elseif now-pendingSpin.time<2 then
+                if now>=(pendingSpin.nextRequest or math.huge) and pendingSpin.attempts<8 then
+                    if requestSlot(pendingSpin.handle) then pendingSpin.attempts+=1 end
+                    pendingSpin.nextRequest=now+0.2
+                end
+                return
             else slotStatus:SetText("Slots: no spin confirmation yet; retrying available nearby handles.");pendingSpin=nil end
         end
         if not manual and now<nextSlot then return end
@@ -10051,13 +10071,26 @@ do
             end
         end
         if not best then slotStatus:SetText("Slots: no ready machine within 30 studs. Waiting, not stopping.");return end
-        if grabOnce(best.handle) then
+        if requestSlot(best.handle) then
             slotAttempts[best.slot]=now
-            pendingSpin={slot=best.slot,time=now}
-            slotStatus:SetText("Slots: spin requested on "..best.slot.Name.."; checking its timer.")
+            pendingSpin={slot=best.slot,handle=best.handle,char=Player.Character,time=now,nextRequest=now+0.2,attempts=1}
+            slotStatus:SetText("Slots: spin requested on "..best.slot.Name.."; requesting handle ownership, checking its timer.")
         else slotStatus:SetText("Slots: grab remotes or character unavailable; will retry.") end
     end
     group:AddButton({Text="Spin an available nearby slot now",Func=function() spinSlots(true) end})
+    group:AddButton({Text="Slot diagnostics",Func=function()
+        local slots=Workspace:FindFirstChild("Slots")
+        local root=selfRoot()
+        local lines={"[Arriva slot diagnostics]"}
+        for _,slot in ipairs(slots and slots:GetChildren() or {}) do
+            local holder=slot:FindFirstChild("SlotHandle")
+            local handle=holder and holder:FindFirstChild("Handle")
+            local ready,timer=slotState(slot)
+            local owner=handle and handle:FindFirstChild("PartOwner")
+            table.insert(lines,string.format("%s: ready=%s, timer=%s, distance=%s, owner=%s",slot.Name,tostring(ready),timer and tostring(timer.Text) or "missing",root and handle and string.format("%.1f",(root.Position-handle.Position).Magnitude) or "unavailable",owner and tostring(owner.Value) or "not replicated"))
+        end
+        print(table.concat(lines,"\n"));notify("Slot diagnostics","Machine timers, distances and ownership are printed in the F9 console.",5,"info")
+    end})
 
     group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (nearby)",Default=false,Callback=function(on) slotOn=on;nextSlot=0;pendingSpin=nil;slotStatus:SetText(on and "Slots: looking for a ready nearby machine." or "Slots: auto spin off.") end})
     group:AddToggle("ToolAutoSaveHouse",{Text="Auto save house time",Default=false,Callback=function(on)
@@ -16003,6 +16036,77 @@ do
     local renderedList
     local status=group:AddLabel("Waiting for player observations.")
     local detail=group:AddLabel("Select a player to see the observed setup.")
+    local beamOn,movementOn=true,true
+    local beamLimit,speedLimit=40,160
+    local bursts,movement={},{}
+    local incident=group:AddLabel("Network observations: no large payload recorded. Source unknown unless the server proves it.")
+    Hub.reportIncomingSignalPayload=function(bytes,remote)
+        if not monitor then return end
+        incident:SetText(string.format("Large incoming payload: %.2f MiB on %s. Source unknown.",bytes/1048576,tostring(remote)))
+
+    end
+    local function beamObserved(object)
+        if not monitor or not beamOn or not object:IsA("Beam") then return end
+        local ancestor=object.Parent
+        local owner
+        while ancestor and ancestor~=Workspace do
+            if ancestor:IsA("Model") then
+                local ok,person=pcall(function() return Players:GetPlayerFromCharacter(ancestor) end)
+                if ok and person then owner=person;break end
+            end
+            ancestor=ancestor.Parent
+        end
+        -- An attachment endpoint identifies a target, not the creator: never use it here.
+        if not owner or owner==Player then return end
+        local now=os.clock();local bucket=bursts[owner.UserId]
+        if not bucket or bucket.char~=owner.Character then bucket={start=now,count=0,char=owner.Character};bursts[owner.UserId]=bucket end
+        if now-bucket.start>2 then bucket.start=now;bucket.count=0 end
+        bucket.count=math.min(bucket.count+1,100000)
+        if bucket.count>=beamLimit then bucket.untilTime=now+6 end
+    end
+    Hub.connect(Workspace.DescendantAdded,beamObserved)
+    local function extraSignals(person,char,root,hum,reasons)
+        local now=os.clock();local id=person.UserId
+        local bucket=bursts[id]
+        if beamOn and bucket and bucket.char==char and (bucket.untilTime or 0)>now then
+            table.insert(reasons,"Beam burst in character hierarchy (sender unverified)")
+        end
+        if not movementOn then movement[id]=nil;return end
+        local history=movement[id]
+        if not history or history.char~=char then history={char=char,born=now,hits=0};movement[id]=history end
+        local ragdoll=hum:FindFirstChild("Ragdolled")
+        local held=person:FindFirstChild("IsHeld")
+        local owner=root:FindFirstChild("PartOwner")
+        local foreign=owner and owner.Value and owner.Value~="" and owner.Value~=person.Name and owner.Value~=person
+        local velocity=root.AssemblyLinearVelocity
+        local excluded=hum.SeatPart or hum.PlatformStand or root.Anchored or (ragdoll and ragdoll.Value) or (held and held.Value) or foreign or (velocity and velocity.Magnitude>250)
+        local position=root.Position
+        if not position then return end
+        if excluded or now-history.born<5 then history.hits=0;history.untilTime=nil
+        elseif history.position and history.time then
+            local dt=now-history.time
+            if dt>=0.1 and dt<=1.5 then
+                local speed=(position-history.position).Magnitude/dt
+                if speed==speed and speed>speedLimit then
+                    history.hits=now-(history.hitTime or -math.huge)<=6 and history.hits+1 or 1
+                    history.hitTime=now
+                    if history.hits>=3 then history.untilTime=now+6 end
+                elseif now-(history.hitTime or -math.huge)>6 then history.hits=0 end
+            end
+        end
+        history.position=position;history.time=now
+        if not excluded and (history.untilTime or 0)>now then table.insert(reasons,"Repeated movement anomaly (affected player; cause unverified)") end
+    end
+    group:AddToggle("CheaterBeamSignals",{Text="Observe character beam bursts",Default=true,Callback=function(on) beamOn=on;if not on then table.clear(bursts) end end})
+    group:AddSlider("CheaterBeamThreshold",{Text="Beam creations per 2 seconds",Default=40,Min=10,Max=200,Rounding=0,Callback=function(v) beamLimit=v end})
+    group:AddToggle("CheaterMovementSignals",{Text="Observe repeated movement anomalies",Default=true,Callback=function(on) movementOn=on;if not on then table.clear(movement) end end})
+    group:AddSlider("CheaterMovementThreshold",{Text="Movement observation threshold (studs/sec)",Default=160,Min=80,Max=500,Rounding=0,Callback=function(v) speedLimit=v end})
+    group:AddButton({Text="Enable incoming payload monitor",Func=function()
+        if Toggles.IncomingPayloadMonitor then Toggles.IncomingPayloadMonitor:SetValue(true) end
+    end})
+    group:AddLabel("Packet/payload incidents need Incoming Payload Monitor enabled under Performance. Ordinary lag does not identify a sender.")
+    Hub.connect(Players.PlayerRemoving,function(person) bursts[person.UserId]=nil;movement[person.UserId]=nil end)
+    Hub.cleanup(function() Hub.reportIncomingSignalPayload=nil;table.clear(bursts);table.clear(movement) end)
     local function signals(person)
         if person==Player or person.Parent~=Players then return end
         local char=person.Character
@@ -16026,17 +16130,18 @@ do
                 end
             end
         end
-        return char,table.concat(reasons,"; ")
+        extraSignals(person,char,root,hum,reasons)
+        return char,table.concat(reasons,"; "),#reasons
     end
     local function describe()
         local record=selected and records[selected]
-        detail:SetText(record and ("@"..record.player.Name..": "..record.reason..(record.confirmed and " (repeated observation)" or " (checking)")) or "Select a player to see the observed setup.")
+        detail:SetText(record and ("@"..record.player.Name..": "..record.reason.." | Evidence: "..(record.families>1 and "multiple signals" or "single signal, low confidence")..(record.confirmed and " (repeated observation)" or " (checking)")) or "Select a player to see the observed setup.")
     end
     local function render()
         local values={};labels={};local selectedLabel
         local detected,pending=0,0
         for id,record in pairs(records) do
-            local label="@"..record.player.Name.." — "..(record.confirmed and "Detected: " or "Checking: ")..record.reason
+            local label="@"..record.player.Name.." — "..(record.confirmed and (record.families>1 and "Multiple signals: " or "Low confidence: ") or "Checking: ")..record.reason
             labels[label]=id;table.insert(values,label)
             if id==selected then selectedLabel=label end
             if record.confirmed then detected+=1 else pending+=1 end
@@ -16049,19 +16154,19 @@ do
             if selectedLabel then dropdown:SetValue(selectedLabel) end
             rebuilding=false
         end
-        status:SetText(string.format("%d repeated signals, %d checking. Monitor %s.",detected,pending,monitor and "on" or "paused"))
+        status:SetText(string.format("%d repeated observations, %d checking. Monitor %s.",detected,pending,monitor and "on" or "paused"))
         describe()
     end
     local function observe(person)
         local id=person.UserId
-        local ok,char,reason=pcall(signals,person)
+        local ok,char,reason,families=pcall(signals,person)
         if not ok then return end -- A streamed/removed character is not evidence.
         if not char or reason=="" then records[id]=nil;return end
         local now=os.clock();local record=records[id]
         local wasConfirmed=record and record.confirmed
         if not record or record.char~=char or record.reason~=reason then
             wasConfirmed=false
-            record={player=person,char=char,reason=reason,seen=now,confirmed=false};records[id]=record
+            record={player=person,char=char,reason=reason,seen=now,confirmed=false,families=families};records[id]=record
         elseif now-record.seen>=0.5 then record.confirmed=true end
         if record.confirmed and not wasConfirmed and alerts and now-(announced[id] or -math.huge)>=60 then
             announced[id]=now
