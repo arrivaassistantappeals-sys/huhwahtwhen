@@ -30,7 +30,7 @@ All local chat commands now use `!`; the old `:` prefix is ignored. Matching sup
 | `!status` | Show Gucci phase, setup-job count, settings restore and action-loop count. |
 | `!protections` | List enabled protection toggles and their control IDs. |
 | `!protection Anti Banana on` | Change a uniquely matched protection label or control ID. Use `off` to disable. |
-| `!stop` | Stop player action loops, character/vehicle flight and follow. Keep protection choices. |
+| `!stop` | Stop player action loops, character/vehicle flight, follow, NPC control and ownership recovery. Keep protection choices. |
 | `!select name`, `!add name`, `!remove name`, `!clear` | Manage selected players. |
 | `!to name` | Teleport near a player while your character is free. |
 | `!fly on`, `!fly off`, `!unfly` | Control character flight. |
@@ -39,6 +39,9 @@ All local chat commands now use `!`; the old `:` prefix is ignored. Matching sup
 | `!menu on`, `!menu off` | Show or hide the menu. |
 | `!save` | Explicit manual save. |
 | `!load` | Load AutoSave with Gucci ordered last. |
+| `!camhere` | Move to stable ground below the camera. |
+| `!npcreturn` | Exit NPC viewing and steering. |
+| `!recoverbuild` | Recover nearby ownership for the selected own-toy group. |
 
 Automated checks compile the full script and exercise callback ordering, yielding setup, source-worker first passes and failures, old-worker exit, cancellation, respawn, stale restore records, command parsing, the command UI, player matching, save flags and preserved protection choices. Preservation checks compare the spawner and all seven callback pairs with the uploaded rollback base. Previous save/Anti Banana/plot-visit, notification, whitelist and session-tool regressions are also checked.
 

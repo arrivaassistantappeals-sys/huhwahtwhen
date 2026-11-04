@@ -9049,8 +9049,31 @@ do
 	Hub.cleanup(function() stopped = true; disconnectTarget(); restore() end)
 end
 
+-- Shared readiness for manual self-movement and nearby ownership actions.
+function Hub.freeCharacterForTools()
+	if not Hub.alive then return nil,"The hub is unloaded." end
+	local char=Player.Character
+	local root,hum
+	if Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value then
+		local proof=Hub.gucciVerifiedRun
+		local controller=Hub.sourceGucci
+		if not controller or not controller.state.GucciAntiGrab or not proof or not proof.Confirmed or proof.Char~=char then return nil,"Wait for Gucci confirmation." end
+		root,hum=proof.HRP,proof.Hum
+	else
+		root=char and char:FindFirstChild("HumanoidRootPart")
+		hum=char and char:FindFirstChildOfClass("Humanoid")
+	end
+	local held=Player:FindFirstChild("IsHeld")
+	if not root or root.Parent~=char or not hum or hum.Parent~=char or hum.Health<=0 or hum.SeatPart or root.Anchored
+		or (held and held.Value) or Hub.interactionVisitLock or Hub.safeZoneLoopActive or Hub.characterFlightActive or Hub.blobFlightActive then
+		return nil,"Your character is busy, held, seated or not ready."
+	end
+	for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return nil,"Stop player action loops first." end end
+	return root,char,hum
+end
+
 -- Creative shapes: local decorations or the local player's existing toys only.
--- No ownership requests, grab remotes, player targets or map-object collection.
+-- No ownership requests, grab remotes or collection of other players’/map objects.
 do
 	(function()
 		local shapes=Tabs.Fun:AddLeftGroupbox("Creative Object Aura")
@@ -9063,6 +9086,23 @@ do
 		local epoch,phase,elapsed,nextScan=0,0,0,0
 		local status=shapes:AddLabel("Aura is off.")
 		local centerMode,placedCenter="Follow me",nil
+		local formationPlayer
+		local lastFormationMessage
+		local formationPicker
+		local function formationTargetRoot(ownRoot)
+			local person=formationPlayer
+			local char=person and person.Parent==Players and person.Character
+			local leader=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+			local hum=char and char:FindFirstChildOfClass("Humanoid")
+			if not leader or leader.Parent~=char or not hum or hum.Health<=0 then return nil,"Waiting for the selected player's character." end
+			if not Hub.finiteVector(leader.Position) or (leader.Position-ownRoot.Position).Magnitude>100 then return nil,"Selected player is too far away; formation paused." end
+			return leader
+		end
+		local function refreshFormationPlayers()
+			local names={}
+			for _,person in ipairs(Players:GetPlayers()) do if person~=Player then table.insert(names,person.Name) end end
+			table.sort(names);formationPicker:SetValues(names)
+		end
 		local function aimedCenter()
 			local char=Player.Character
 			local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude
@@ -9074,8 +9114,18 @@ do
 			if not root or (hit.Position-root.Position).Magnitude>100 then return nil end
 			return CFrame.new(hit.Position+Vector3.new(0,height,0))*root.CFrame.Rotation
 		end
-		settings:AddDropdown("CreativeAuraCenter",{Text="Formation center",Values={"Follow me","Follow mouse","Click to place"},Default=1,
-			Callback=function(value) centerMode=value;placedCenter=nil end})
+		settings:AddDropdown("CreativeAuraCenter",{Text="Formation center",Values={"Follow me","Follow mouse","Click to place","Follow selected player"},Default=1,
+			Callback=function(value) centerMode=value;placedCenter=nil;lastFormationMessage=nil;if enabled then status:SetText("Formation center: "..value) end end})
+		formationPicker=settings:AddDropdown("CreativeAuraFollowPlayer",{Text="Formation player",Values={},Callback=function(value)
+			formationPlayer=type(value)=="string" and Players:FindFirstChild(value) or nil
+		end})
+		settings:AddButton({Text="Refresh formation players",Func=refreshFormationPlayers})
+		refreshFormationPlayers()
+		Hub.connect(Players.PlayerAdded,function() Hub.queueRefresh("formationPlayers",refreshFormationPlayers) end)
+		Hub.connect(Players.PlayerRemoving,function(person)
+			if person==formationPlayer then formationPlayer=nil end
+			Hub.queueRefresh("formationPlayers",refreshFormationPlayers)
+		end)
 		Hub.connect(UserInputService.InputBegan,function(input,processed)
 			if enabled and centerMode=="Click to place" and not processed and not UserInputService:GetFocusedTextBox()
 				and (input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch) then
@@ -9248,13 +9298,23 @@ do
 				local root=characterRoot()
 				if not root then return end
 				phase=(phase+math.rad(speed)*math.min(delta,0.1))%(math.pi*2)
-				if mode=="My spawned toys" and os.clock()>=nextScan then
-					nextScan=os.clock()+2
-					refreshToys(root)
-				end
 				local center=root.CFrame*CFrame.new(0,height,-distance)
-				if centerMode=="Follow mouse" then center=aimedCenter() or center
+				if centerMode=="Follow selected player" then
+					local leader,reason=formationTargetRoot(root)
+					if not leader then
+						for _,entry in ipairs(entries) do
+							if entry.decoration then entry.part.Transparency=1
+							else entry.position.Enabled=false;entry.orientation.Enabled=false end
+						end
+						if lastFormationMessage~=reason then status:SetText(reason);lastFormationMessage=reason end;return
+					end
+					if lastFormationMessage then status:SetText("Following @"..formationPlayer.Name);lastFormationMessage=nil end
+					center=leader.CFrame*CFrame.new(0,height,-distance)
+				elseif centerMode=="Follow mouse" then center=aimedCenter() or center
 				elseif centerMode=="Click to place" then center=placedCenter or center end
+				if mode=="My spawned toys" and os.clock()>=nextScan then
+					nextScan=os.clock()+2;refreshToys(root)
+				end
 				for index=#entries,1,-1 do
 					local entry=entries[index]
 					if not entry.part.Parent then release(entry);table.remove(entries,index)
@@ -9264,6 +9324,7 @@ do
 							entry.part.CFrame=CFrame.new(goal)
 							entry.part.Transparency=0
 						else
+							entry.position.Enabled=true;entry.orientation.Enabled=true
 							entry.position.Position=goal
 							entry.part.AssemblyAngularVelocity=Vector3.zero
 						end
@@ -15623,6 +15684,7 @@ do
 		local group = Tabs.Fun:AddLeftGroupbox("Own Toy Builder & Recovery")
 		local status = group:AddLabel("Select a header and toy group.")
 		local session, connection
+		local recoveryBusy=false
 		local releaseHeader, autoRecover = false, true
 		local elapsed = 0
 		Hub.toyBuildClaims = {}
@@ -15634,7 +15696,7 @@ do
 			end
 			return false
 		end
-		function Hub.inspectOwnBuildToy(model)
+		function Hub.inspectOwnBuildToy(model,allowOwnershipRecovery)
 			local folder = Workspace:FindFirstChild(Player.Name .. "SpawnedInToys")
 			if not folder or not model or model.Parent ~= folder or not model:IsA("Model")
 				or model:FindFirstChildOfClass("Humanoid") or Players:GetPlayerFromCharacter(model) then return nil, "unsupported toy" end
@@ -15652,8 +15714,9 @@ do
 					if part:FindFirstChild("ArrivaCreativeAttachment") then return nil, "creative aura is using this toy" end
 					local root = part.AssemblyRootPart or part
 					if not root:IsDescendantOf(model) then return nil, "external assembly" end
+					if (Hub.isMissileReserved and Hub.isMissileReserved(root)) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[root]) then return nil,"missile controller is using this toy" end
 					if Hub.objectAttractionParts and Hub.objectAttractionParts[root] then return nil, "attraction aura is using this toy" end
-					if foreignOwner(part) then return nil, "ownership" end
+					if not allowOwnershipRecovery and (foreignOwner(part) or root.ReceiveAge~=0) then return nil, "ownership" end
 					if not seen[root] then seen[root] = true; table.insert(roots, root) end
 				end
 			end
@@ -15687,6 +15750,7 @@ do
 			for _, entry in ipairs(session.entries) do entry.position.Enabled = on; entry.orientation.Enabled = on end
 		end
 		local function compile()
+			if recoveryBusy then status:SetText("Wait for ownership recovery to finish.");return end
 			local selected, models, name = Hub.getOwnToySelection()
 			if not selected or not models[selected] then status:SetText("Add the selected header toy to the current named group first."); return end
 			local headerRoots, reason = Hub.inspectOwnBuildToy(selected)
@@ -15756,7 +15820,7 @@ do
 			end)
 		end
 		function Hub.sampleOwnToyBuild()
-			if not session then return end
+			if not session or recoveryBusy then return end
 			local ownershipLost = false
 			local physicalParts = 0
 			for _, candidate in ipairs(session.models) do
@@ -15797,6 +15861,97 @@ do
 				entry.position.Enabled, entry.orientation.Enabled = active, active
 			end
 		end
+		local ownershipStatus=group:AddLabel("Ownership status: select a toy or named group.")
+		local recoveryGeneration,recoveryFinish,nextRecovery=0,nil,0
+		local function recoveryModels()
+			local selected,models=Hub.getOwnToySelection()
+			if not models or next(models)==nil then models=selected and {[selected]=true} or {} end
+			return models
+		end
+		local function locallyOwned(root)
+			return root.Parent and not root.Anchored and (root.AssemblyRootPart or root).ReceiveAge==0 and not foreignOwner(root)
+		end
+		local function inspectOwnership()
+			local owned,missing,skipped=0,0,0
+			for model in pairs(recoveryModels()) do
+				local roots=Hub.inspectOwnBuildToy(model,true)
+				if not roots then skipped+=1
+				else for _,root in ipairs(roots) do if locallyOwned(root) then owned+=1 else missing+=1 end end end
+			end
+			ownershipStatus:SetText(string.format("Ownership: %d local assemblies, %d unconfirmed, %d ineligible toys.",owned,missing,skipped))
+		end
+		local function cancelRecovery()
+			recoveryGeneration+=1;recoveryBusy=false
+			if recoveryFinish then local finish=recoveryFinish;recoveryFinish=nil;finish() end
+		end
+		local function recoverOwnership()
+			if recoveryBusy or os.clock()<nextRecovery then ownershipStatus:SetText("Recovery is running or cooling down.");return end
+			local ownRoot,char,hum=Hub.freeCharacterForTools()
+			if not ownRoot then ownershipStatus:SetText(tostring(char));return end
+			local grab=ReplicatedStorage:FindFirstChild("GrabEvents")
+			local remote=grab and grab:FindFirstChild("SetNetworkOwner")
+			if not remote then ownershipStatus:SetText("Ownership remote unavailable.");return end
+			local targets,seen={},{}
+			for model in pairs(recoveryModels()) do
+				local roots=Hub.inspectOwnBuildToy(model,true)
+				for _,root in ipairs(roots or {}) do
+					if not seen[root] and not locallyOwned(root) and (root.Position-ownRoot.Position).Magnitude<=30 and #targets<12 then
+						seen[root]=true;table.insert(targets,{root=root,model=model})
+					end
+				end
+			end
+			if #targets==0 then inspectOwnership();status:SetText("No missing nearby ownership to recover. Move within 30 studs of your toys.");return end
+			recoveryGeneration+=1;local ticket=recoveryGeneration
+			recoveryBusy=true;nextRecovery=os.clock()+3
+			local finish=Hub.beginProtectionChange and Hub.beginProtectionChange({Id="OwnBuildRecovery",Text="Own toy ownership recovery",Type="Toggle",Tab=Tabs.Defense.native})
+			recoveryFinish=finish
+			local build=session
+			if build then build.paused=true;enabledControllers(false) end
+			local function valid()
+				local held=Player:FindFirstChild("IsHeld")
+				for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return false end end
+				return Hub.alive and ticket==recoveryGeneration and Player.Character==char and ownRoot.Parent==char
+					and hum.Parent==char and hum.Health>0 and not hum.SeatPart and not ownRoot.Anchored
+					and not (held and held.Value) and not Hub.interactionVisitLock and not Hub.safeZoneLoopActive
+					and not Hub.characterFlightActive and not Hub.blobFlightActive
+			end
+			task.spawn(function()
+				local confirmed=0
+				local ok,err=xpcall(function()
+					task.wait(0.2)
+					for _,entry in ipairs(targets) do
+						if not valid() then return end
+						local roots=Hub.inspectOwnBuildToy(entry.model,true)
+						local root=entry.root
+						if roots and table.find(roots,root) and (root.Position-ownRoot.Position).Magnitude<=30 then
+							for _=1,2 do
+								if not valid() or not root.Parent or (root.Position-ownRoot.Position).Magnitude>30 then break end
+								if locallyOwned(root) then break end
+								local aim=Hub.safeLookAt(ownRoot.Position+Vector3.new(0,1.593,0),root.Position)
+								if not aim then break end
+								Hub.fire(remote,root,aim);task.wait(0.25)
+							end
+							if locallyOwned(root) then confirmed+=1 end
+						end
+					end
+				end,debug.traceback)
+				if finish then finish() end
+				if recoveryFinish==finish then recoveryFinish=nil end
+				if ticket~=recoveryGeneration then return end
+				recoveryBusy=false
+				if build and session==build then session.resume=true;Hub.sampleOwnToyBuild() end
+				inspectOwnership()
+				status:SetText(ok and string.format("Ownership recovery: %d / %d assemblies confirmed.",confirmed,#targets) or ("Recovery stopped: "..tostring(err):sub(1,180)))
+			end)
+		end
+		group:AddButton({Text="Check selected group ownership",Func=inspectOwnership})
+		group:AddButton({Text="Recover nearby own-toy ownership",Func=recoverOwnership})
+		group:AddButton({Text="Cancel ownership recovery",Func=function() cancelRecovery();ownershipStatus:SetText("Ownership recovery cancelled.") end})
+		group:AddLabel("Recovery checks your selected group (or selected toy), up to 12 nearby assemblies. No teleporting; rigs, seats and external connections are skipped.")
+		Hub.recoverOwnToyOwnership=recoverOwnership
+		Hub.cancelOwnToyRecovery=cancelRecovery
+		Hub.connect(Player.CharacterRemoving,cancelRecovery)
+		Hub.cleanup(function() cancelRecovery();Hub.recoverOwnToyOwnership=nil;Hub.cancelOwnToyRecovery=nil end)
 		group:AddButton({Text = "Compile current named group", Func = compile})
 		group:AddToggle("OwnToyBuildReleaseHeader", {Text = "Release header for dragging", Default = false,
 			Callback = function(on) releaseHeader = on end})
@@ -17285,6 +17440,186 @@ do
 end
 -- END SESSION AND PERSONALIZATION TOOLS
 
+-- NPC camera and own-NPC steering; no teleport-follow loop or ownership requests.
+do
+	(function()
+		local group=Tabs.Player:AddRightGroupbox("NPC Camera & Control")
+		local travel=Tabs.Misc:AddRightGroupbox("Camera Travel")
+		local status=group:AddLabel("Select an NPC. Camera viewing works independently of Gucci.")
+		local selection,view,drive,picker
+		local choices={};local scanEpoch=0
+		local speed,exitTeleport=16,false
+		local keys={};local bindings={};local stick=Vector2.zero
+		local actions=game:GetService("ContextActionService")
+		local stopView,stopDrive
+		local function eligible(model,ownOnly)
+			if not model or not model.Parent or not model:IsA("Model") or not model:IsDescendantOf(Workspace) then return end
+			local ancestor=model
+			while ancestor and ancestor~=Workspace do
+				if ancestor:IsA("Model") and Players:GetPlayerFromCharacter(ancestor) then return end
+				ancestor=ancestor.Parent
+			end
+			local hum=model:FindFirstChildOfClass("Humanoid")
+			local root=model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+			if not hum or hum.Health<=0 or not root or not root:IsA("BasePart") or not root:IsDescendantOf(model) then return end
+			if ownOnly then
+				local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+				local assembly=root.AssemblyRootPart or root
+				if model.Parent~=folder or not assembly:IsDescendantOf(model) or root.Anchored or assembly.Anchored or assembly.ReceiveAge~=0 or hum.SeatPart then return end
+				local owner=root:FindFirstChild("PartOwner")
+				if owner and owner.Value and owner.Value~="" and owner.Value~=Player.Name and owner.Value~=Player then return end
+				for _,part in ipairs(root:GetConnectedParts(true)) do if not part:IsDescendantOf(model) or part:IsA("Seat") or part:IsA("VehicleSeat") then return end end
+			end
+			return hum,root
+		end
+		function Hub.teleportBelowCamera(frame)
+			local root,char,hum=Hub.freeCharacterForTools()
+			if not root then return false,char end
+			local camera=Workspace.CurrentCamera;frame=frame or (camera and camera.CFrame)
+			if not frame or not Hub.finiteVector(frame.Position) then return false,"Camera position is unavailable." end
+			if (frame.Position-root.Position).Magnitude>512 then return false,"Camera is more than 512 studs away." end
+			local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude
+			params.FilterDescendantsInstances=selection and {char,selection} or {char};params.IgnoreWater=true;params.RespectCanCollide=true
+			local hit=Workspace:Raycast(frame.Position+Vector3.new(0,4,0),Vector3.new(0,-204,0),params)
+			if not hit or not ((hit.Instance:IsA("BasePart") and hit.Instance.Anchored) or hit.Instance:IsA("Terrain")) or hit.Normal.Y<0.6 then return false,"No stable ground below the camera." end
+			local destination=hit.Position+Vector3.new(0,math.max(3,hum.HipHeight+root.Size.Y/2+0.5),0)
+			if not Hub.finiteVector(destination) or destination.Y<=Workspace.FallenPartsDestroyHeight+8 then return false,"Destination is outside the safe map height." end
+			if (destination-root.Position).Magnitude>512 then return false,"Ground destination is more than 512 studs away." end
+			local facing=Vector3.new(frame.LookVector.X,0,frame.LookVector.Z)
+			local goal=Hub.safeLookAt(destination,destination+facing,root.CFrame.LookVector)
+			if not goal then return false,"Camera direction is unavailable." end
+			root.CFrame=goal;root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
+			return true
+		end
+		stopDrive=function()
+			local old=drive;drive=nil;keys={};stick=Vector2.zero
+			for _,name in ipairs(bindings) do actions:UnbindAction(name) end;table.clear(bindings)
+			if old and old.hum.Parent then
+				pcall(function() old.hum:Move(Vector3.zero,false);if old.hum.WalkSpeed==old.appliedSpeed then old.hum.WalkSpeed=old.walkSpeed end end)
+			end
+		end
+		stopView=function(allowTravel)
+			stopDrive();local old=view;view=nil
+			local camera=Workspace.CurrentCamera
+			local departure=camera and camera.CFrame
+			if old and old.camera.Parent and old.camera.CameraSubject==old.hum then
+				local fallback=Player.Character and Player.Character:FindFirstChildOfClass("Humanoid")
+				pcall(function()
+					old.camera.CameraSubject=old.subject and old.subject.Parent and old.subject or fallback
+					old.camera.CameraType=old.kind
+				end)
+			end
+			if old and allowTravel and exitTeleport and departure then
+				local ok,reason=Hub.teleportBelowCamera(departure)
+				status:SetText(ok and "Returned near the camera." or ("Camera return skipped: "..tostring(reason)))
+			end
+		end
+		local function startView()
+			stopView(false)
+			local hum=eligible(selection,false);local camera=Workspace.CurrentCamera
+			if not hum or not camera then status:SetText("Select a live NPC first.");return false end
+			if Toggles.LocalSpectatorEnabled and Toggles.LocalSpectatorEnabled.Value then Toggles.LocalSpectatorEnabled:SetValue(false) end
+			view={model=selection,hum=hum,camera=camera,subject=camera.CameraSubject,kind=camera.CameraType}
+			camera.CameraType=Enum.CameraType.Custom;camera.CameraSubject=hum
+			status:SetText("Viewing "..selection.Name..". Your character has not moved.");return true
+		end
+		local function stopAll(allowTravel)
+			stopView(allowTravel==true)
+			if Toggles.NPCDrive and Toggles.NPCDrive.Value then Toggles.NPCDrive:SetValue(false) end
+			if Toggles.NPCView and Toggles.NPCView.Value then Toggles.NPCView:SetValue(false) end
+		end
+		local function refreshChoices()
+			local names={};for name,model in pairs(choices) do if eligible(model,false) then table.insert(names,name) else choices[name]=nil end end
+			table.sort(names);picker:SetValues(names)
+		end
+		local function scan()
+			scanEpoch+=1;local ticket=scanEpoch
+			choices={}
+			if selection and eligible(selection,false) then choices[selection:GetFullName()]=selection end
+			refreshChoices();local count=0
+			Hub.scanDescendants(Workspace,function(object)
+				if object:IsA("Humanoid") and eligible(object.Parent,false) and count<80 then
+					local model=object.Parent;choices[model:GetFullName()]=model;count+=1
+					Hub.queueRefresh("npcChoices",refreshChoices)
+				end
+			end,function() return Hub.alive and scanEpoch==ticket and count<80 end)
+		end
+		picker=group:AddDropdown("NPCSelection",{Text="NPC",Values={},Callback=function(value)
+			stopAll();selection=choices[value]
+		end})
+		SaveManager.ignored.NPCSelection=true
+		group:AddButton({Text="Refresh NPC list",Func=scan})
+		group:AddToggle("NPCView",{Text="View selected NPC",Default=false,Callback=function(on)
+			if on then if not startView() and Toggles.NPCView then Toggles.NPCView:SetValue(false) end
+			else
+				stopView(true)
+				if Toggles.NPCDrive and Toggles.NPCDrive.Value then Toggles.NPCDrive:SetValue(false) end
+			end
+		end})
+		group:AddToggle("NPCDrive",{Text="Steer my selected NPC",Default=false,Callback=function(on)
+			stopDrive();if not on then return end
+			local hum,root=eligible(selection,true)
+			if hum and root and (not view or view.model~=selection) and Toggles.NPCView then Toggles.NPCView:SetValue(true) end
+			if not hum or not root or not view then
+				status:SetText("Steering requires a live NPC in your own toy folder with confirmed local ownership.")
+				if Toggles.NPCDrive then Toggles.NPCDrive:SetValue(false) end;return
+			end
+			drive={model=selection,hum=hum,root=root,walkSpeed=hum.WalkSpeed,appliedSpeed=speed};hum.WalkSpeed=speed
+			local definitions={{"Forward","W",Enum.KeyCode.W,Enum.KeyCode.Up},{"Back","S",Enum.KeyCode.S,Enum.KeyCode.Down},
+				{"Left","A",Enum.KeyCode.A,Enum.KeyCode.Left},{"Right","D",Enum.KeyCode.D,Enum.KeyCode.Right},{"Jump","Jump",Enum.KeyCode.Space,Enum.KeyCode.ButtonA}}
+			for i,entry in ipairs(definitions) do
+				local direction=entry[1];local name="ArrivaNPC"..direction;table.insert(bindings,name)
+				actions:BindActionAtPriority(name,function(_,state)
+					if UserInputService:GetFocusedTextBox() then keys={};return Enum.ContextActionResult.Pass end
+					keys[direction]=state==Enum.UserInputState.Begin or state==Enum.UserInputState.Change
+					if direction=="Jump" and keys[direction] and drive then drive.hum.Jump=true end
+					return Enum.ContextActionResult.Sink
+				end,true,Enum.ContextActionPriority.High.Value+1,entry[3],entry[4])
+				actions:SetTitle(name,entry[2]);actions:SetPosition(name,UDim2.new(1,-70-((i-1)%3)*60,1,-150-math.floor((i-1)/3)*60))
+			end
+			local name="ArrivaNPCStick";table.insert(bindings,name)
+			actions:BindActionAtPriority(name,function(_,state,input)
+				if UserInputService:GetFocusedTextBox() then stick=Vector2.zero;return Enum.ContextActionResult.Pass end
+				stick=state==Enum.UserInputState.End and Vector2.zero or Vector2.new(input.Position.X,input.Position.Y)
+				if stick.X*stick.X+stick.Y*stick.Y<0.0225 then stick=Vector2.zero end
+				return Enum.ContextActionResult.Sink
+			end,false,Enum.ContextActionPriority.High.Value+1,Enum.KeyCode.Thumbstick1)
+			status:SetText("Steering "..selection.Name..": WASD / arrows / gamepad; Space to jump. Touch buttons are available.")
+		end})
+		group:AddSlider("NPCDriveSpeed",{Text="NPC walking speed",Default=16,Min=4,Max=40,Rounding=0,Callback=function(value)
+			speed=value;if drive then drive.appliedSpeed=value;drive.hum.WalkSpeed=value end
+		end})
+		group:AddButton({Text="Return to my character",Func=function() stopAll(true);if not exitTeleport then status:SetText("Returned to your character.") end end})
+		travel:AddToggle("NPCExitTeleport",{Text="Move below NPC camera when exiting",Default=false,Callback=function(on) exitTeleport=on end})
+		travel:AddButton({Text="Move to ground below camera",Func=function()
+			local camera=Workspace.CurrentCamera;local frame=camera and camera.CFrame
+			local ok,reason=Hub.teleportBelowCamera(frame)
+			if ok then stopAll();notify("Camera travel","Moved to the ground below your camera.",5,"success")
+			else notify("Camera travel",tostring(reason),5,"warning") end
+		end})
+		travel:AddLabel("Requires stable ground within 512 studs, a free character and confirmed Gucci when enabled.")
+		Hub.connect(RunService.RenderStepped,function()
+			if not view then return end
+			if not eligible(view.model,false) or Workspace.CurrentCamera~=view.camera or view.camera.CameraSubject~=view.hum then stopAll();return end
+			if drive then
+				local hum,root=eligible(drive.model,true)
+				if hum~=drive.hum or root~=drive.root then stopAll();status:SetText("NPC steering stopped: character or ownership changed.");return end
+				if UserInputService:GetFocusedTextBox() then keys={};stick=Vector2.zero;hum:Move(Vector3.zero,false);return end
+				local x=(keys.Right and 1 or 0)-(keys.Left and 1 or 0)+stick.X
+				local z=(keys.Back and 1 or 0)-(keys.Forward and 1 or 0)-stick.Y
+				local frame=view.camera.CFrame
+				local direction=frame.RightVector*x-frame.LookVector*z;direction=Vector3.new(direction.X,0,direction.Z)
+				if direction.Magnitude>1 then direction=direction.Unit end
+				hum:Move(direction,false)
+			end
+		end)
+		Hub.stopNPCCamera=stopAll
+		Hub.connect(Player.CharacterRemoving,stopAll)
+		Hub.connect(UserInputService.WindowFocusReleased,function() keys={};stick=Vector2.zero end)
+		Hub.cleanup(function() scanEpoch+=1;stopView(false);Hub.stopNPCCamera=nil;Hub.teleportBelowCamera=nil end)
+	end)()
+end
+
 -- Register every saved control before loading settings.
 MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
 -- Session customization does not require executor file-storage support.
@@ -17404,7 +17739,7 @@ do
 		end)
 	end
 	local layouts = {
-		Player={sections={"Movement","Spawn bookmark","Flight","Camera","Spectator Camera","Follow Player Position","Character animations","Plot Barriers","Performance"},
+		Player={sections={"Movement","Spawn bookmark","NPC Camera & Control","Flight","Camera","Spectator Camera","Follow Player Position","Character animations","Plot Barriers","Performance"},
 			rename={["View & Movement"]="Movement"},
 			controls={ThirdPersonToggle="Camera",ToolFirstPerson="Camera",FOVSlider="Camera"},
 			order={Movement={"SpeedModifierToggle","SpeedValue","JumpModifierToggle","JumpValue","infJumpToggle","SelfNoclipToggle","ToolGravity","ToolGravityValue","SpinToggle","SpinSpeed"}}},
@@ -17451,7 +17786,7 @@ do
 		Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
 			rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
 		Visual={sections={"Skybox Faces","Sun & Stars","Shaders","Water Appearance","Local environment","Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance"},controls={ToolTimeOverride="Sun & Stars",ToolTimeOfDay="Sun & Stars",ToolSyncTime="Sun & Stars"}},
-		Misc={sections={"Cheaters","Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Session tools"},
+		Misc={sections={"Cheaters","Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Session tools","Camera Travel"},
 			rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
 		Whitelist={sections={"Protected Players","Whitelist Assistance","Whitelist Shuriken Appearance"}},
 		Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
@@ -17821,7 +18156,7 @@ end
 		{"status","!status","Show Gucci, protection setup, config restore and active-loop status."},
 		{"protection","!protection name on / off","Change a protection by its control ID or matching label. Gucci pauses while it applies."},
 		{"protections","!protections","List enabled protection toggles and their IDs."},
-		{"stop","!stop","Stop player action loops and flight; keep protection choices."},
+		{"stop","!stop","Stop action loops, NPC control, recovery and flight; keep protection choices."},
 		{"select","!select name","Replace the player selection."},
 		{"add","!add name","Add a selected player."},
 		{"remove","!remove name","Remove a selected player."},
@@ -17835,6 +18170,9 @@ end
 		{"menu","!menu on / off","Show or hide the hub menu."},
 		{"save","!save","Explicitly save settings."},
 		{"load","!load","Load AutoSave and apply Gucci after the other protections."},
+		{"camhere","!camhere","Move to stable ground below the camera."},
+		{"npcreturn","!npcreturn","Exit NPC viewing and steering."},
+		{"recoverbuild","!recoverbuild","Recover missing nearby ownership for your selected own-toy group."},
 	}
 	local function openCommands()
 		if Tabs.Commands.native and Tabs.Commands.native.Show then Tabs.Commands.native:Show() end
@@ -17894,12 +18232,28 @@ end
 		end
 		for _,id in ipairs({"PackCharacterFlight","SelfFollowEnabled"}) do if Toggles[id] and Toggles[id].Value then Toggles[id]:SetValue(false) end end
 		if Hub.stopBlobFlight then Hub.stopBlobFlight() end
-		message("Action loops, follow and flight stopped. Protection choices kept.","success")
+		if Hub.stopNPCCamera then Hub.stopNPCCamera() end
+		if Hub.cancelOwnToyRecovery then Hub.cancelOwnToyRecovery() end
+		message("Action loops, NPC control, recovery, follow and flight stopped. Protection choices kept.","success")
 	end
 	commands.load=function()
 		if not Hub.ready or not Hub.storage then error("Settings storage is unavailable or startup is incomplete.",0) end
 		local ok,reason=SaveManager:Load("AutoSave");if not ok then error(tostring(reason),0) end
 		message("Settings loaded. Protections apply first; Gucci starts last.","success")
+	end
+	commands.camhere=function()
+		local ok,reason=Hub.teleportBelowCamera()
+		if not ok then error(tostring(reason),0) end
+		if Hub.stopNPCCamera then Hub.stopNPCCamera() end
+		message("Moved to stable ground below the camera.","success")
+	end
+	commands.npcreturn=function()
+		if Hub.stopNPCCamera then Hub.stopNPCCamera(true) end
+		message("Returned to your character.","success")
+	end
+	commands.recoverbuild=function()
+		if Hub.recoverOwnToyOwnership then Hub.recoverOwnToyOwnership() end
+		message("See Own Toy Builder & Recovery for ownership status.")
 	end
 	local commandGroup=Tabs.Commands:AddLeftGroupbox("Command browser")
 	local runGroup=Tabs.Commands:AddRightGroupbox("Run a command")
