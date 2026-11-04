@@ -537,7 +537,7 @@ end
 function Hub.remoteAllowed(remote, ...)
 	if not remote or not Hub.canAffect(remote) then return false end
 	for index = 1, select("#", ...) do
-		if not Hub.canAffect(select(index, ...)) then return false end
+		if not Hub.canAffect((select(index, ...))) then return false end
 	end
 	return true
 end
