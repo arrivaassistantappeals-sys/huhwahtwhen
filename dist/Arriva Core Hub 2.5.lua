@@ -1509,9 +1509,8 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			local kind=frame:GetAttribute("NoticeKind") or "info"
 			local defaults={info=Color3.fromRGB(106,177,255),warning=Color3.fromRGB(255,202,105),success=Color3.fromRGB(111,224,160),danger=Color3.fromRGB(255,115,125),join=Color3.fromRGB(190,140,255),leave=Color3.fromRGB(190,140,255),respawn=Color3.fromRGB(190,140,255),blackhole=Color3.fromRGB(234,112,255),kick=Color3.fromRGB(255,115,125)}
 			local accent=self["noticeColor_"..kind] or defaults[kind] or defaults.info
-			frame.BackgroundColor3=kind=="blackhole" and Color3.fromRGB(34,16,43)
-				or frame:GetAttribute("PurpleRosterNotice") and Color3.fromRGB(34,25,48)
-				or self.noticeBackground or colors.card
+			local background=self.noticeBackground or colors.card
+			frame.BackgroundColor3=background:Lerp(accent,0.14)
 			frame.BackgroundTransparency=self.noticeBackgroundTransparency or 0
 			local newHex=string.format("#%02X%02X%02X",math.floor(accent.R*255+0.5),math.floor(accent.G*255+0.5),math.floor(accent.B*255+0.5))
 			local oldHex=frame:GetAttribute("NoticeAccentHex")
@@ -1664,7 +1663,8 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				RichText=true,TextWrapped=true,TextSize=15,LineHeight=1.15,TextColor3=Color3.fromRGB(245,245,245),
 				TextYAlignment=Enum.TextYAlignment.Top,TextTruncate=Enum.TextTruncate.None})
 			body.Visible=content~=""
-			if eventKind then
+			do
+				-- Every notification shares the same entrance and lifetime indicator.
 				local lifetime=(info.Duration or 5)*(self.noticeDuration or 1)
 				local progress=make("Frame",frame,{Name="NotificationProgress",BorderSizePixel=0,
 					AnchorPoint=Vector2.new(0,1),Position=UDim2.new(0,10,1,-5),Size=UDim2.new(1,-20,0,3),BackgroundColor3=accent})
@@ -16254,7 +16254,7 @@ do
 		color("NoticeRespawnColor","Respawn HEX","noticeColor_respawn","#BE8CFF")
 		color("NoticeBlackholeColor","Blackhole HEX","noticeColor_blackhole","#EA70FF")
 		color("NoticeKickColor","Player kicked HEX","noticeColor_kick","#FF737D")
-		color("NoticeBackgroundColor","Background HEX","noticeBackground","#212121")
+		color("NoticeBackgroundColor","Background base HEX","noticeBackground","#212121")
 		color("NoticeBodyColor","Message text HEX","noticeBodyColor","#DCE0E8")
 		group:AddSlider("NoticeBackgroundTransparency",{Text="Background transparency",Default=0,Min=0,Max=0.8,Rounding=2,Callback=function(value) Hub.setNoticePreference("noticeBackgroundTransparency",value) end})
 		group:AddSlider("NoticeBorderThickness",{Text="Border thickness",Default=1.2,Min=0,Max=4,Rounding=1,Callback=function(value) Hub.setNoticePreference("noticeBorderThickness",value) end})
