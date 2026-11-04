@@ -11313,6 +11313,22 @@ do
 			local tbl16 = nil
 			local flag12 = nil
 
+			-- ChildAdded fires while the engine may still be parenting the instance.
+			-- Keep the callback bodies intact, but run removal after parenting unwinds.
+			local function connectGucciChildAdded(parent,callback)
+				local connected=true
+				local native=Hub.connect(parent.ChildAdded,function(child)
+					task.defer(function()
+						if connected and Hub.alive and child.Parent==parent then callback(child) end
+					end)
+				end)
+				local connection={}
+				function connection:Disconnect()
+					connected=false;native:Disconnect();Hub.connections[native]=nil
+				end
+				return setmetatable(connection,{__index=function(_,key) return native[key] end})
+			end
+
 			-- GUCCI CONFIRMATION BEGIN
 			local function clearGucciConfirmation(record,announce)
 				if not record then return end
@@ -11563,7 +11579,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -11571,7 +11587,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -11744,7 +11760,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -11752,7 +11768,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -11948,7 +11964,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -11956,7 +11972,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -12129,7 +12145,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -12137,7 +12153,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -12326,7 +12342,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -12334,7 +12350,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -12507,7 +12523,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -12515,7 +12531,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -12688,7 +12704,7 @@ do
 								v26.Sit = false
 								flag14 = false
 
-								table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+								table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
 									if tbl16 == v27 and child.Name == "SeatWeld" then
 										child.Enabled = false
 										child:Destroy()
@@ -12696,7 +12712,7 @@ do
 									end
 								end))
 
-								table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+								table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
 									if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 										child.Enabled = false
 										child:Destroy()
@@ -15863,7 +15879,7 @@ do
 			local names={};for _,p in ipairs(Players:GetPlayers()) do if p~=Player then table.insert(names,p.Name) end end
 			table.sort(names);picker:SetValues(names)
 		end
-		picker=group:AddDropdown("SelfFollowPlayer",{Text="Follow player",Values={},Callback=function(value) target=Players:FindFirstChild(value) end})
+		picker=group:AddDropdown("SelfFollowPlayer",{Text="Follow player",Values={},Callback=function(value) target=type(value)=="string" and Players:FindFirstChild(value) or nil end})
 		group:AddButton("Refresh follow players",refresh)
 		refresh()
 		group:AddDropdown("SelfFollowSide",{Text="Position",Values={"Behind","Left","Right","Front"},Default=1,Callback=function(value) side=value end})
