@@ -161,6 +161,24 @@ function Hub.queueSavedCallbacks(records,invoke)
 end
 
 
+-- Shared event classification keeps event visuals and sounds consistent.
+function Hub.notificationEvent(info)
+	local explicit=tostring(info.Type or info.Kind or ""):lower()
+	local events={join=true,leave=true,respawn=true,blackhole=true,kick=true}
+	if events[explicit] then return explicit end
+	if explicit~="" then return nil end
+	local title=tostring(info.Title or ""):lower()
+	local content=tostring(info.Description or info.Content or ""):lower()
+	if (title=="player kicked" or title=="player kicked preview")
+		and (content:find("blackhole",1,true) or content:find("black hole",1,true)) then return "blackhole" end
+	if title=="player kicked" or title=="player kicked preview" then return "kick" end
+	if title=="player joined" or title=="player rejoined" or title=="selected player returned"
+		or title:match("^target returned!") then return "join" end
+	if title=="player left" or title=="selected player left" then return "leave" end
+	if title=="character respawned" or title=="player respawned" or title=="target respawned"
+		or title=="selected player respawned" then return "respawn" end
+end
+
 function Hub.fetch(url)
 	local ok, value = pcall(function()
 		local fn, err = loadstring(game:HttpGet(url))
@@ -1472,10 +1490,10 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 		function UI:RefreshNoticeStyle(frame)
 			if not frame.Parent then return end
 			local kind=frame:GetAttribute("NoticeKind") or "info"
-			local defaults={info=Color3.fromRGB(106,177,255),warning=Color3.fromRGB(255,202,105),success=Color3.fromRGB(111,224,160),danger=Color3.fromRGB(255,115,125)}
+			local defaults={info=Color3.fromRGB(106,177,255),warning=Color3.fromRGB(255,202,105),success=Color3.fromRGB(111,224,160),danger=Color3.fromRGB(255,115,125),join=Color3.fromRGB(190,140,255),leave=Color3.fromRGB(190,140,255),respawn=Color3.fromRGB(190,140,255),blackhole=Color3.fromRGB(234,112,255),kick=Color3.fromRGB(255,115,125)}
 			local accent=self["noticeColor_"..kind] or defaults[kind] or defaults.info
-			if frame:GetAttribute("PurpleRosterNotice") then accent=Color3.fromRGB(190,140,255) end
-			frame.BackgroundColor3=frame:GetAttribute("PurpleRosterNotice") and Color3.fromRGB(34,25,48)
+			frame.BackgroundColor3=kind=="blackhole" and Color3.fromRGB(34,16,43)
+				or frame:GetAttribute("PurpleRosterNotice") and Color3.fromRGB(34,25,48)
 				or self.noticeBackground or colors.card
 			frame.BackgroundTransparency=self.noticeBackgroundTransparency or 0
 			local newHex=string.format("#%02X%02X%02X",math.floor(accent.R*255+0.5),math.floor(accent.G*255+0.5),math.floor(accent.B*255+0.5))
@@ -1485,6 +1503,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				elseif object:IsA("UICorner") then object.CornerRadius=UDim.new(0,self.noticeCornerRadius or 10)
 				elseif object.Name=="NotificationHeading" then object.TextColor3=accent
 				elseif object.Name=="NotificationIcon" then object.ImageColor3=accent
+				elseif object.Name=="NotificationProgress" then object.BackgroundColor3=accent
 				elseif object.Name=="NotificationBody" then
 					object.TextColor3=self.noticeBodyColor or colors.noticeText
 					if oldHex and oldHex~=newHex then object.Text=object.Text:gsub(oldHex,newHex) end
@@ -1570,12 +1589,12 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			elseif category:find("error",1,true) or category:find("fail",1,true) then iconName="circle-alert"
 			elseif iconName=="settings" then iconName="info" end
 			if category:find("[protected]",1,true) then accent=Color3.fromRGB(111,224,160) end
-			local noticeKind=Hub.notificationKind and Hub.notificationKind(info) or (bad and "danger" or "info")
+			local eventKind=Hub.notificationEvent(info)
+			local noticeKind=eventKind or (Hub.notificationKind and Hub.notificationKind(info)) or (bad and "danger" or "info")
+			local eventIcons={join="door-open",leave="log-out",respawn="rotate-ccw",blackhole="orbit",kick="triangle-alert"}
+			if eventKind then iconName=eventIcons[eventKind] end
 			frame:SetAttribute("NoticeKind",noticeKind)
-			local eventTitle=title:lower()
-			local rosterNotice=eventTitle:find("respawn",1,true) or eventTitle:find("joined",1,true)
-				or eventTitle:find("returned",1,true) or eventTitle:find("%f[%a]left%f[%A]")
-			frame:SetAttribute("PurpleRosterNotice",rosterNotice~=nil)
+			frame:SetAttribute("PurpleRosterNotice",eventKind=="join" or eventKind=="leave" or eventKind=="respawn")
 			local headerRow=make("Frame",frame,{BackgroundTransparency=1,
 				Position=UDim2.fromOffset(16,12),Size=UDim2.new(1,-32,0,24)})
 			icon(headerRow,iconName,{Name="NotificationIcon",AnchorPoint=Vector2.new(0,0.5),Position=UDim2.new(0,0,0.5,0),
@@ -1628,6 +1647,21 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				RichText=true,TextWrapped=true,TextSize=15,LineHeight=1.15,TextColor3=Color3.fromRGB(245,245,245),
 				TextYAlignment=Enum.TextYAlignment.Top,TextTruncate=Enum.TextTruncate.None})
 			body.Visible=content~=""
+			if eventKind then
+				local lifetime=(info.Duration or 5)*(self.noticeDuration or 1)
+				local progress=make("Frame",frame,{Name="NotificationProgress",BorderSizePixel=0,
+					AnchorPoint=Vector2.new(0,1),Position=UDim2.new(0,10,1,-5),Size=UDim2.new(1,-20,0,3),BackgroundColor3=accent})
+				round(progress,2)
+				local scale=frame:FindFirstChild("NotificationScale")
+				local targetScale=self.noticeScale or 1
+				local tweenService=game:GetService("TweenService")
+				scale.Scale=targetScale*0.9
+				local entrance=tweenService:Create(scale,TweenInfo.new(0.28,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Scale=targetScale})
+				local countdown=tweenService:Create(progress,TweenInfo.new(lifetime,Enum.EasingStyle.Linear),{Size=UDim2.new(0,0,0,3)})
+				local cleanup
+				cleanup=frame.Destroying:Connect(function() entrance:Cancel();countdown:Cancel();cleanup:Disconnect() end)
+				entrance:Play();countdown:Play()
+			end
 			self:RefreshNoticeStyle(frame)
 			local function fitNotice()
 				if not frame.Parent then return end
@@ -8712,7 +8746,9 @@ do
 			if os.clock()-hole.time<=6 then
 				local holePosition=hole.object.Parent and getBHPosition(hole.object) or hole.position
 				if holePosition and (position-holePosition).Magnitude<=100 then
-					notify("Player kicked",person.Name .. " has been taken by a blackhole",5)
+					if Hub.blackholeNoticeEnabled~=false then
+						notify("Blackhole detected",person.Name .. " left near a blackhole.",6,"blackhole")
+					end
 					return
 				end
 			end
@@ -15940,6 +15976,7 @@ do
 	toggle("NotifyPlayerLeaves","Player left","leaves")
 	toggle("NotifyPlayerRespawns","Player respawned","respawns")
 	toggle("NotifyMyCharacter","My death and respawn","self")
+	events:AddToggle("NotifyBlackholeAlerts",{Text="Blackhole alerts",Default=true,Callback=function(on) Hub.blackholeNoticeEnabled=on end})
 	local function disconnect(connection)
 		if connection then connection:Disconnect();Hub.connections[connection]=nil end
 	end
@@ -16095,8 +16132,11 @@ do
 			Loaded="rbxassetid://71450094482101",
 			Classic="rbxassetid://97643101798871",
 		}
-		local kinds={"info","warning","success","danger"}
-		local defaults={info="Pop",warning="Steam",success="Loaded",danger="Classic"}
+		local kinds={"info","warning","success","danger","join","leave","respawn","blackhole","kick"}
+		local defaults={info="Pop",warning="Steam",success="Loaded",danger="Classic",
+			join="Bubble Pop",leave="Pop",respawn="Loaded",blackhole="Classic",kick="Steam"}
+		local labels={info="Info",warning="Warning",success="Success",danger="Danger",
+			join="Join / rejoin",leave="Leave",respawn="Respawn",blackhole="Blackhole",kick="Player kicked"}
 		local settings={}
 		local voices={}
 		local last={}
@@ -16111,6 +16151,8 @@ do
 			local explicit=tostring(info.Type or info.Kind or ""):lower()
 			if explicit=="error" then explicit="danger" end
 			if settings[explicit] then return explicit end
+			local event=Hub.notificationEvent(info)
+			if event then return event end
 			local text=(tostring(info.Title or "").." "..tostring(info.Description or info.Content or "")):lower()
 			for _,word in ipairs({"error","failed","failure","died","danger","respawn","blackhole","black hole","kicked","disconnected","lost"}) do if text:find(word,1,true) then return "danger" end end
 			for _,word in ipairs({"warning","retry","retrying","unavailable","could not","couldn't","not confirmed","not active","waiting"}) do if text:find(word,1,true) then return "warning" end end
@@ -16138,17 +16180,23 @@ do
 		end})
 		for _,kind in ipairs(kinds) do
 			local key=kind:sub(1,1):upper()..kind:sub(2)
+			local label=labels[kind]
 			local config={preset=defaults[kind],volume=0.4}
 			settings[kind]=config
-			group:AddDropdown("Notice"..key.."Sound",{Text=key.." sound",Values={"Off","Pop","Bubble Pop","Steam","Loaded","Classic","Custom"},Default=defaults[kind],Callback=function(value) config.preset=value end})
-			group:AddInput("Notice"..key.."Asset",{Text=key.." custom sound ID",Default="",Finished=true,Callback=function(value)
+			group:AddDropdown("Notice"..key.."Sound",{Text=label.." sound",Values={"Off","Pop","Bubble Pop","Steam","Loaded","Classic","Custom"},Default=defaults[kind],Callback=function(value) config.preset=value end})
+			group:AddInput("Notice"..key.."Asset",{Text=label.." custom sound ID",Default="",Finished=true,Callback=function(value)
 				local id=asset(value)
 				if tostring(value or ""):match("^%s*$") then config.custom=nil
 				elseif id then config.custom=id
 				else notify("Sound warning","Use a numeric sound ID, rbxassetid:// ID, or Roblox asset link.",4,"warning") end
 			end})
-			group:AddSlider("Notice"..key.."Volume",{Text=key.." volume",Default=0.4,Min=0,Max=2,Rounding=2,Callback=function(value) config.volume=value end})
+			group:AddSlider("Notice"..key.."Volume",{Text=label.." volume",Default=0.4,Min=0,Max=2,Rounding=2,Callback=function(value) config.volume=value end})
 			group:AddButton({Text="Preview "..kind.." sound",Func=function() Hub.playNotificationSound({Type=kind},true) end})
+			if kind=="join" or kind=="leave" or kind=="respawn" or kind=="blackhole" or kind=="kick" then
+				group:AddButton({Text="Preview "..kind.." alert",Func=function()
+					notify(label.." preview","This is your "..label:lower().." notification style and sound.",5,kind)
+				end})
+			end
 		end
 		group:AddLabel("Custom sounds need Roblox permission in this experience. Off mutes a category.")
 		Hub.cleanup(function()
@@ -16177,6 +16225,11 @@ do
 		color("NoticeWarningColor","Warning HEX","noticeColor_warning","#FFCA69")
 		color("NoticeSuccessColor","Success HEX","noticeColor_success","#6FE0A0")
 		color("NoticeDangerColor","Danger HEX","noticeColor_danger","#FF737D")
+		color("NoticeJoinColor","Join / rejoin HEX","noticeColor_join","#BE8CFF")
+		color("NoticeLeaveColor","Leave HEX","noticeColor_leave","#BE8CFF")
+		color("NoticeRespawnColor","Respawn HEX","noticeColor_respawn","#BE8CFF")
+		color("NoticeBlackholeColor","Blackhole HEX","noticeColor_blackhole","#EA70FF")
+		color("NoticeKickColor","Player kicked HEX","noticeColor_kick","#FF737D")
 		color("NoticeBackgroundColor","Background HEX","noticeBackground","#212121")
 		color("NoticeBodyColor","Message text HEX","noticeBodyColor","#DCE0E8")
 		group:AddSlider("NoticeBackgroundTransparency",{Text="Background transparency",Default=0,Min=0,Max=0.8,Rounding=2,Callback=function(value) Hub.setNoticePreference("noticeBackgroundTransparency",value) end})
@@ -16942,9 +16995,14 @@ do
 		Whitelist={sections={"Protected Players"}},
 		Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
 		KeyBinds={sections={"Menu & emergency","Action shortcuts","Missile throw"}},
-		Sound={sections={"Game Sound Filters","Toy Audio","Notification Sounds","Info Notifications","Warning Notifications","Success Notifications","Danger Notifications","Loop Alert Sounds","Blackhole Audio"},
-			prefixes={{"NoticeInfo","Info Notifications"},{"NoticeWarning","Warning Notifications"},{"NoticeSuccess","Success Notifications"},{"NoticeDanger","Danger Notifications"}},
-			names={["Preview info sound"]="Info Notifications",["Preview warning sound"]="Warning Notifications",["Preview success sound"]="Success Notifications",["Preview danger sound"]="Danger Notifications"}},
+		Sound={sections={"Game Sound Filters","Toy Audio","Notification Sounds","Info Notifications","Warning Notifications","Success Notifications","Danger Notifications","Join Notifications","Leave Notifications","Respawn Notifications","Blackhole Notifications","Kick Notifications","Loop Alert Sounds","Blackhole Audio"},
+			prefixes={{"NoticeInfo","Info Notifications"},{"NoticeWarning","Warning Notifications"},{"NoticeSuccess","Success Notifications"},{"NoticeDanger","Danger Notifications"},{"NoticeJoin","Join Notifications"},{"NoticeLeave","Leave Notifications"},{"NoticeRespawn","Respawn Notifications"},{"NoticeBlackhole","Blackhole Notifications"},{"NoticeKick","Kick Notifications"}},
+			names={["Preview info sound"]="Info Notifications",["Preview warning sound"]="Warning Notifications",["Preview success sound"]="Success Notifications",["Preview danger sound"]="Danger Notifications",
+				["Preview join sound"]="Join Notifications",["Preview join alert"]="Join Notifications",
+				["Preview leave sound"]="Leave Notifications",["Preview leave alert"]="Leave Notifications",
+				["Preview respawn sound"]="Respawn Notifications",["Preview respawn alert"]="Respawn Notifications",
+				["Preview blackhole sound"]="Blackhole Notifications",["Preview blackhole alert"]="Blackhole Notifications",
+				["Preview kick sound"]="Kick Notifications",["Preview kick alert"]="Kick Notifications"}},
 		Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Notification theme","Position & Appearance"}},
 		Customization={sections={"Hub Theme","Appearance","Custom Theme Colors","On-screen FPS & Ping","Anchor Appearance","Touch Action Buttons"}},
 		["UI Settings"]={sections={"Menu","Saved settings"}},
