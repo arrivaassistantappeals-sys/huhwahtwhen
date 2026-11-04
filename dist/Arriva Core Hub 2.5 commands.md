@@ -42,3 +42,8 @@ All local chat commands now use `!`; the old `:` prefix is ignored. Matching sup
 Automated checks compile the full script and exercise callback ordering, yielding setup, source-worker first passes and failures, old-worker exit, cancellation, respawn, stale restore records, command parsing, the command UI, player matching, save flags and preserved protection choices. Preservation checks compare the spawner and all seven callback pairs with the uploaded rollback base. Previous save/Anti Banana/plot-visit, notification, whitelist and session-tool regressions are also checked.
 
 In-game verification is still required for actual Gucci setup, ownership and replication, interaction with the game's other character scripts, GUI layout and respawn behavior. The original parenting-warning behavior may remain because the uploaded event timing was restored. A passing mocked test does not establish that a Roblox server accepted the setup.
+
+
+### Owner commands
+
+These are separate from the local command browser. Each receiving client must enable **Commands → Owner commands → Allow owner commands**. The configured hub owner can then use `!bring <target>`, `!reveal <target>`, `!kill <target>`, `!kick <target>` or `!announce <text>`. Legacy `:` prefixes are accepted. Targets accept partial names, display names, @usernames, `all` or `me` (the receiving client). The opt-in remains off by default.

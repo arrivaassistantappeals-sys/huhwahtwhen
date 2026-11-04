@@ -74,3 +74,13 @@ Player attraction/tornado and object attraction wait for observed simulation own
 Creative shapes (including Tornado) use actual toys in your spawned-toy folder. The former local-decoration source is retired; saved source choices migrate to My spawned toys. Creative controllers also wait for ownership and release on ownership loss.
 
 Validation: full-script Luau compilation and mocked ownership/cooldown/protection/loss checks passed, along with Gucci ordering, confirmation and cancelled-spawn-lock regressions. Roblox replication and appearance require in-game verification. Ownership uses isnetworkowner when available, otherwise the original ReceiveAge signal; server acceptance is not guaranteed.
+
+
+### Original train, water and owner commands
+
+- **World & Travel → Train → Destroy Train** ports the original train-seat/hamburger interaction. Gucci must be off. Occupied or unavailable train seats are rejected. Waits are bounded; cleanup restores the destruction threshold, removes the temporary hamburger and returns the current living character to its saved position (unless Gucci was enabled during the interaction). Completion means the interaction ran, not proof that the server removed the train.
+- **World & Travel → Non-Swimmable Water** disables swimming for your character, following the original. Turning it off restores the previous swimming setting; respawn reapplies it if enabled. No actual Destroy Water or Remove Water feature was found in this reference. This does not delete water for other players.
+- **Commands → Owner commands → Allow owner commands** exposes the previously hidden opt-in flag. Off by default. Enabling it permits the configured hub owner to bring, reveal, kill or kick this client and send announcements. Owner identity is still checked. Both ! and legacy : prefixes work, with repeated whitespace and @username matching supported.
+- Active **Destroy Gucci (sit)** now checks nested Seat/VehicleSeat instances throughout the target's toy and plot inventories, covering Blobman, tractors, sleighs and toy trains. It also checks the target's existing SeatPart, including the shared train when attributable that way. Protected targets are excluded; it does not scan unrelated shared train seats. Your own Gucci still must be disabled for the original removal interaction to run.
+
+Validation: full Luau compilation, mocked owner-command opt-in/identity/prefix/parser and recursive/plot-only/protected-seat checks passed. Train cleanup and tab wiring were checked statically; server-side train removal, swimming and vehicle interactions still need in-game verification. Existing Gucci confirmation and leg-only startup regression checks pass.

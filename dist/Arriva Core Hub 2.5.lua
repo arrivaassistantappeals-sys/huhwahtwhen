@@ -623,7 +623,7 @@ end
 local function findTarget(targetStr)
 	if not targetStr then return nil end
 
-	targetStr = targetStr:lower()
+	targetStr = targetStr:lower():gsub("^@", "")
 
 	-- "me" = LocalPlayer
 	if targetStr == "me" then
@@ -688,12 +688,15 @@ local function processCommand(speaker, text)
 	if speaker.UserId ~= HUB_OWNER_ID then return end
 
 	-- Only process messages that start with "!" to prevent loops
-	if not text:match("^!") then
+	if type(text)~="string" then return end
+	text=text:match("^%s*(.-)%s*$")
+	if not text:match("^[!:]") then
 		return
 	end
 
-	local args = text:split(" ")
-	local cmd = args[1] and args[1]:lower()
+	local args = {}
+	for word in text:gmatch("%S+") do table.insert(args,word) end
+	local cmd = args[1] and args[1]:lower():gsub("^:","!")
 
 	if cmd == "!bring" then
 		local targetStr = args[2]
@@ -8551,6 +8554,34 @@ MiscGroup:AddToggle("WaterWalkToggle", {
 	end
 })
 
+-- Non-swimmable water: original character-state feature, reversible on off/respawn.
+do
+	local enabled=false;local humanoid,saved,connection
+	local function restore()
+		if connection then connection:Disconnect();Hub.connections[connection]=nil;connection=nil end
+		if humanoid and humanoid.Parent and saved~=nil then humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming,saved) end
+		humanoid,saved=nil,nil
+	end
+	local function apply(char)
+		restore();if not enabled or char~=Player.Character then return end
+		local hum=char:FindFirstChildOfClass("Humanoid");if not hum then return end
+		humanoid=hum;saved=hum:GetStateEnabled(Enum.HumanoidStateType.Swimming)
+		local function freefall()
+			if enabled and humanoid==hum and hum:GetState()==Enum.HumanoidStateType.Swimming then hum:ChangeState(Enum.HumanoidStateType.Freefall) end
+		end
+		connection=Hub.connect(hum.StateChanged,freefall)
+		hum:SetStateEnabled(Enum.HumanoidStateType.Swimming,false);freefall()
+	end
+	MiscGroup:AddToggle("NonSwimmableWater",{Text="Non-Swimmable Water",Default=false,Callback=function(on)
+		enabled=on;if on and Player.Character then apply(Player.Character) else restore() end;Hub.requestSave()
+	end})
+	Hub.connect(Player.CharacterRemoving,restore)
+	Hub.connect(Player.CharacterAdded,function(char) task.spawn(function()
+		local hum=char:WaitForChild("Humanoid",5);if hum and Hub.alive and enabled and Player.Character==char then apply(char) end
+	end) end)
+	Hub.cleanup(function() enabled=false;restore() end)
+end
+
 -- Triggerbot System
 local Triggerbot = {
 	Enabled = false,
@@ -11288,10 +11319,11 @@ do
 			local v22, v23, v24 = tbl12.Char()
 			local v25, v26, v27 = tbl12.Char(arg)
 			local v28, v29 = tbl12.GetInventory(arg)
+			if not arg or not Hub.canHarm(arg) then return false end
 			local gucciAntiGrab = tbl8.GucciAntiGrab
 
 			if not gucciAntiGrab then
-				gucciAntiGrab = not (v24 and v24.Health > 0 and v23 and v28)
+				gucciAntiGrab = not (v24 and v24.Health > 0 and v23 and (v28 or v29 or (v27 and v27.SeatPart)))
 			end
 
 			if gucciAntiGrab then
@@ -11299,7 +11331,7 @@ do
 			end
 
 			local function fn21(arg2)
-				if not (arg2 and arg2.Parent) or obj2[arg2] then
+				if not Hub.alive or Player.Character~=v22 or not Hub.canHarm(arg) or not (arg2 and arg2.Parent) or not Hub.canAffect(arg2) or obj2[arg2] then
 					return
 				end
 
@@ -11389,28 +11421,18 @@ do
 				return fn21(seatPart)
 			end
 
-			for _, v30 in v28:GetChildren() do
-				if v30:IsA("Model") then
-					local vehicleSeat = v30:FindFirstChildWhichIsA("VehicleSeat") or v30:FindFirstChildWhichIsA("Seat")
-
-					if vehicleSeat then
-						fn21(vehicleSeat)
-					end
-				end
-			end
-
-			if v29 then
-				for _, v30 in v29:GetChildren() do
-					if v30:IsA("Model") then
-						local vehicleSeat = v30:FindFirstChildWhichIsA("VehicleSeat") or v30:FindFirstChildWhichIsA("Seat")
-
-						if vehicleSeat then
-							fn21(vehicleSeat)
-						end
+			-- Recursive seats cover Blobman, TractorGreen, SantaSleigh and toy trains.
+			-- The shared map train is considered only through the target's SeatPart above.
+			local seen={}
+			for _,folder in pairs({toys=v28,plot=v29}) do
+				for _,seat in ipairs(folder:GetDescendants()) do
+					if (seat:IsA("VehicleSeat") or seat:IsA("Seat")) and not seen[seat] then
+						seen[seat]=true;fn21(seat)
 					end
 				end
 			end
 		end
+
 		do
 			local tbl16 = nil
 			local flag12 = nil
@@ -14895,6 +14917,80 @@ do
 		Hub.connect(Workspace.DescendantAdded,inspectLagWeld)
 		Hub.cleanup(function() setWeldLag(false) end)
 
+		-- Original train/burger interaction, with bounded waits and unconditional cleanup.
+		do
+			local busy=false
+			local group=Tabs.Misc:AddRightGroupbox("Train")
+			local status=group:AddLabel("Train removal is idle.")
+			group:AddButton("Destroy Train",function()
+				if busy then return end
+				if tbl8.GucciAntiGrab or (Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value) then
+					notify("Train","Disable Gucci before using Destroy Train.",5);return
+				end
+				busy=true
+				task.spawn(function()
+					local char,root,hum=tbl12.Char()
+					local saved=root and root.CFrame
+					local oldHeight=Workspace.FallenPartsDestroyHeight
+					local burger,seat
+					local workers={}
+					local function current()
+						return Hub.alive and not flag11 and Player.Character==char and root and root.Parent==char and hum and hum.Health>0
+							and not tbl8.GucciAntiGrab and not (Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value)
+					end
+					local function waitFor(check,seconds)
+						local deadline=os.clock()+seconds
+						repeat if not current() then error("Character changed or Gucci enabled.") end
+							if check() then return end;task.wait()
+						until os.clock()>=deadline
+						error("Train interaction timed out.")
+					end
+					local function invoke(remote,...)
+						local args=table.pack(...);local done,success,message=false
+						local worker=task.spawn(function() success,message=pcall(Hub.invoke,remote,table.unpack(args,1,args.n));done=true end)
+						table.insert(workers,worker);waitFor(function() return done end,2)
+						if not success then error(tostring(message)) end
+					end
+					local ok,message=xpcall(function()
+						if not current() then error("Character not ready.") end
+						local object=train:FindFirstChild("Object")
+						local model=object and object:FindFirstChild("ObjectModel")
+						seat=model and (model:FindFirstChildWhichIsA("Seat",true) or model:FindFirstChildWhichIsA("VehicleSeat",true))
+						if not seat or not Hub.canAffect(seat) then error("Train seat is unavailable.") end
+						if seat.Occupant and seat.Occupant~=hum then error("Train is occupied.") end
+						local arm=char:FindFirstChild("Left Arm")
+						local grip=arm and arm:FindFirstChild("LeftGripAttachment")
+						if not grip then error("Left grip attachment is unavailable.") end
+						status:SetText("Waiting for train seat.");hum.Sit=false;seat:Sit(hum)
+						waitFor(function() return seat.Parent and seat.Occupant==hum end,1.5)
+						burger=tbl12.SpawnToy("FoodHamburger")
+						local hold=burger and burger:WaitForChild("HoldPart",1)
+						local holdRemote=hold and hold:FindFirstChild("HoldItemRemoteFunction")
+						local dropRemote=hold and hold:FindFirstChild("DropItemRemoteFunction")
+						local constraint=hold and hold:FindFirstChild("RigidConstraint")
+						if not holdRemote or not dropRemote or not constraint then error("Hamburger is not ready.") end
+						invoke(holdRemote,burger,char)
+						waitFor(function() return constraint.Parent and constraint.Attachment1==grip end,1)
+						invoke(dropRemote,burger,CFrame.new(0,-150,0),Vector3.zero)
+						task.wait(0.5);if not current() or seat.Occupant~=hum then error("Train seat was lost.") end
+						Workspace.FallenPartsDestroyHeight=-100
+						tbl12.Teleport(root,CFrame.new(0,-250,0));task.wait(0.5)
+						if not current() then error("Character changed.") end
+						hum.Sit=false;task.wait(0.25)
+						status:SetText("Train removal interaction completed; checking server result.")
+					end,debug.traceback)
+					for _,worker in ipairs(workers) do if coroutine.status(worker)~="dead" then pcall(Hub.nativeTask.cancel,worker) end end
+					Workspace.FallenPartsDestroyHeight=oldHeight
+					if Player.Character==char and root and root.Parent==char and hum and hum.Health>0 then
+						if hum.SeatPart==seat then hum.Sit=false end
+						if saved and not tbl8.GucciAntiGrab and not (Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value) then tbl12.Teleport(root,saved) end
+					end
+					pcall(tbl12.DestroyToy,burger);busy=false
+					if not ok then status:SetText("Train removal stopped; position restored.");notify("Train",tostring(message):match("^[^\n]+") or "Interaction failed.",5) end
+				end)
+			end)
+		end
+
 		local remover=Toggles.DestroyTargetGucci
 		if remover then remover.Callback=function(on)
 				local running,ownsRun=Hub.beginTargetLoop("DestroyTargetGucci",on)
@@ -15678,6 +15774,14 @@ end
 
 -- UI Settings
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu")
+do
+	local group=Tabs.Commands:AddRightGroupbox("Owner commands")
+	group:AddLabel("Allow the hub owner to bring, reveal, kill or kick this client, and announce messages. Off by default.")
+	group:AddToggle("AllowHubOwnerCommands",{Text="Allow owner commands",Default=Hub.env.ArrivaAllowOwnerCommands==true,
+		Callback=function(on) Hub.env.ArrivaAllowOwnerCommands=on==true;Hub.requestSave() end})
+	group:AddLabel("Owner chat: !bring / !reveal / !kill / !kick <player|all|me>; !announce <text>. Legacy : prefix also works.")
+end
+
 do
 	local widget=Tabs.Customization:AddRightGroupbox("On-screen FPS & Ping")
 	widget:AddToggle("FloatingMetricsVisible",{Text="Show FPS and ping widget",Default=true,
