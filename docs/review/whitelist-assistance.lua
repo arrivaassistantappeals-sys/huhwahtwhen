@@ -82,9 +82,16 @@ do
         local root=char and char:FindFirstChild("HumanoidRootPart")
         local hum=char and char:FindFirstChildOfClass("Humanoid")
         local held=me:FindFirstChild("IsHeld")
-        if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored or (held and held.Value)
-            or Hub.safeZoneLoopActive or Hub.characterFlightActive or Hub.blobFlightActive then return end
-        for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
+        if not root or not hum then return nil,"your character is still loading" end
+        if hum.Health<=0 then return nil,"your character is dead; waiting for respawn" end
+        if hum.SeatPart then return nil,"your character is seated (Gucci may be setting up)" end
+        if root.Anchored then return nil,"your character root is anchored" end
+        if held and held.Value then return nil,"your character is being held" end
+        if Hub.safeZoneLoopActive then return nil,"safe-zone looping is active" end
+        if Hub.characterFlightActive or Hub.blobFlightActive then return nil,"flight is active" end
+        for _,run in pairs(Hub.targetLoopRuns or {}) do
+            if run.enabled then return nil,"a player action loop is active" end
+        end
         return root,char
     end
     local function finishVisit()
@@ -188,55 +195,72 @@ do
         end)
     end
     local function spawnShuriken(record)
-        if spawnBusy or busy or os.clock()<nextSpawn or not readySelf() then
-            record.phase=record.phase or "Waiting for spawn cooldown or free character."
+        if spawnBusy then
+            record.phase="Waiting for the current spawn request to finish."
+            return
+        end
+        if busy then record.phase="Waiting for another assistance action to finish.";return end
+        local root,reason=readySelf()
+        if not root then record.phase="Waiting: "..reason..".";return end
+        if os.clock()<nextSpawn then
+            record.phase=string.format("Spawn cooldown: %.1fs remaining.",nextSpawn-os.clock())
+            if record.spawnFailure then record.phase=record.phase.." Last attempt: "..record.spawnFailure end
             return
         end
         local count=0;for model in pairs(created) do if model.Parent then count+=1 else created[model]=nil end end
-        if count>=toyLimit then say("Whitelist anti-kick toy limit reached.");return end
+        if count>=toyLimit then record.phase="Shuriken limit reached; increase Maximum assistance shurikens.";return end
         local menu=Storage:FindFirstChild("MenuToys")
         local remote=menu and menu:FindFirstChild("SpawnToyRemoteFunction")
         local can=me:FindFirstChild("CanSpawnToy")
-        if not remote or (can and not can.Value) then return end
-        local root=readySelf();local frame=root.CFrame*CFrame.new(0,4,0)
+        if not remote then record.phase="MenuToys.SpawnToyRemoteFunction is missing.";return end
+        if can and not can.Value then record.phase="Waiting for the game's CanSpawnToy permission.";return end
+        local frame=root.CFrame*CFrame.new(0,4,0)
         local before={};local folder=ownFolder()
         if folder then for _,model in ipairs(folder:GetChildren()) do before[model]=true end end
         spawnBusy=true;nextSpawn=os.clock()+4
         record.phase="Spawn requested; waiting for returned toy or folder replication."
+        record.spawnFailure=nil
         local ticket=epoch
         task.spawn(function()
-            local result
-            local ok,err=pcall(function() result=remote:InvokeServer("NinjaShuriken",frame,Vector3.new(0,97.69000244140625,0)) end)
-            folder=ownFolder()
-            if ok and (typeof(result)~="Instance" or not result:IsA("Model")) then
-                local deadline=os.clock()+1.5
+            -- Finalize the busy flag even if model discovery fails after InvokeServer.
+            local ok,err=pcall(function()
+                local result=remote:InvokeServer("NinjaShuriken",frame,Vector3.new(0,97.69000244140625,0))
+                local returnedModel=typeof(result)=="Instance" and result:IsA("Model")
+                local deadline=os.clock()+2.5
                 repeat
                     folder=ownFolder()
-                    local candidates={}
-                    for _,model in ipairs(folder and folder:GetChildren() or {}) do
-                        if not before[model] and model:IsA("Model") and model.Name=="NinjaShuriken" then
-                            -- Identify the newly added model, not its current
-                            -- physics position or still-replicating descendants.
-                            table.insert(candidates,model)
+                    if returnedModel then
+                        -- The returned Instance can arrive before its Parent replicates.
+                        if folder and result.Parent==folder then break end
+                    else
+                        local candidates={}
+                        for _,model in ipairs(folder and folder:GetChildren() or {}) do
+                            if not before[model] and model:IsA("Model") and model.Name=="NinjaShuriken" then
+                                table.insert(candidates,model)
+                            end
                         end
+                        if #candidates==1 then result=candidates[1];break end
                     end
-                    if #candidates==1 then result=candidates[1];break end
-                    if os.clock()>=deadline then break end
+                    if disposed or not Hub.alive or epoch~=ticket or os.clock()>=deadline then break end
                     task.wait(0.1)
                 until false
-            end
-            if ok and folder and typeof(result)=="Instance" and result:IsA("Model") and result.Name=="NinjaShuriken" and result.Parent==folder and not before[result] then
-                created[result]=true
-                if valid(record,ticket,"kick") and not record.toy then
-                    record.toy=result;record.partsSince=os.clock();record.phase="Toy spawned; waiting for sticky parts."
-                else destroyToy(result) end
-            elseif ok then
-                -- Never adopt pre-existing toys or ambiguous simultaneous spawns.
-                record.phase="Spawn completed, but no unique new NinjaShuriken was identified in your toy folder."
-                say(record.phase)
-                nextSpawn=os.clock()+8
-            else record.phase="Spawn request failed: "..tostring(err):sub(1,120);say(record.phase);nextSpawn=os.clock()+8 end
+                if folder and typeof(result)=="Instance" and result:IsA("Model") and result.Name=="NinjaShuriken" and result.Parent==folder and not before[result] then
+                    created[result]=true
+                    if valid(record,ticket,"kick") and not record.toy then
+                        record.toy=result;record.partsSince=os.clock();record.phase="Toy spawned; waiting for sticky parts."
+                    else destroyToy(result) end
+                else
+                    record.spawnFailure="no unique new NinjaShuriken identified in your toy folder."
+                    record.phase="Spawn completed, but "..record.spawnFailure
+                    say(record.phase);nextSpawn=os.clock()+8
+                end
+            end)
             spawnBusy=false
+            if not ok then
+                record.spawnFailure=tostring(err):sub(1,140)
+                record.phase="Spawn/discovery failed: "..record.spawnFailure
+                say(record.phase);nextSpawn=os.clock()+8
+            end
         end)
     end
     local function maintainKick(record)
@@ -262,7 +286,10 @@ do
         local attached=weld.Part1==hitbox and weld.Enabled~=false
         record.active=attached
         if attached then record.phase="Attached: current character weld confirmed.";return end
-        if busy or os.clock()<(record.nextStick or 0) then return end
+        local root,reason=readySelf()
+        if not root then record.phase="Attachment waiting: "..reason..".";return end
+        if busy then record.phase="Attachment waiting for another assistance action.";return end
+        if os.clock()<(record.nextStick or 0) then return end
         record.nextStick=os.clock()+2;busy=true
         local ticket=epoch
         task.spawn(function()
