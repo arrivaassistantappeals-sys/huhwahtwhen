@@ -63,3 +63,14 @@ Automated verification covers formation target/range/death/leave/respawn handlin
 The latest [respawn and verification patch](Arriva%20Core%20Hub%202.5%20respawn%20fixes.md) restarts enabled protections for the new character and aligns the Gucci observer with the original setup checkpoint. Use !status to see exact pending setup and anti-kick details.
 
 Latest correction: anti-kick and Gucci are independent. Gucci waits only for Anti Banana leg removal when enabled, including the active removal pass; unrelated protection and config callback completion are not startup barriers. Cancelled spawn callers no longer retain the same-character spawn mutex.
+
+
+### Aura ownership and icons
+
+Visuals, KeyBinds, Commands and Sound now have their own Lucide sprite icons. Assets are embedded metadata from the pinned Rayfield icon set; no icon library executes at runtime.
+
+Player attraction/tornado and object attraction wait for observed simulation ownership before applying forces. Ownership requests stay within 30 studs, share a six-request-per-second budget, and use a two-second per-object cooldown. Objects awaiting ownership remain untouched. Object attraction uses BodyVelocity instead of local CFrame stepping and excludes humanoid rigs, seats, anchored assemblies and protected targets. Forces are removed when ownership is lost.
+
+Creative shapes (including Tornado) use actual toys in your spawned-toy folder. The former local-decoration source is retired; saved source choices migrate to My spawned toys. Creative controllers also wait for ownership and release on ownership loss.
+
+Validation: full-script Luau compilation and mocked ownership/cooldown/protection/loss checks passed, along with Gucci ordering, confirmation and cancelled-spawn-lock regressions. Roblox replication and appearance require in-game verification. Ownership uses isnetworkowner when available, otherwise the original ReceiveAge signal; server acceptance is not guaranteed.

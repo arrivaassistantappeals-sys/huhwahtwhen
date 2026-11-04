@@ -839,10 +839,12 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 		colors.noticeText = Color3.fromRGB(220,224,232)
 		-- Lucide image-sprite metadata from SiriusSoftwareLtd/Rayfield icons.lua,
 		-- commit 3ef72398fb4c8ba6fd1801e98704991d3cc9cbc2; Lucide icons: ISC license.
-		-- Only the 15 assets used here are retained; no icon-library script is fetched.
+		-- Only the assets used here are retained; no icon-library script is fetched.
 		local iconAssets = {
 			bot={16898612819,869,98}, boxes={16898612819,196,771}, compass={16898613044,514,967},
 			heart={16898613509,661,771},
+			eye={16898613353,771,563},keyboard={16898613509,453,820},
+			terminal={16898613869,820,257},["volume-2"]={16898613869,771,808},
 			palette={16898613613,453,918},history={16898613509,869,98},bell={16898612819,820,257},
 			activity={16898612629,514,771},["user-round-check"]={16898613869,869,404},
 			["door-open"]={16898613044,967,759},["log-out"]={16898613509,820,955},
@@ -7209,6 +7211,38 @@ do
 	end)
 end
 
+-- Shared aura ownership gate. Never move an unconfirmed assembly locally.
+do
+	local requests=setmetatable({}, {__mode="k"})
+	local window,budget=0,0
+	function Hub.auraOwned(part)
+		if not part or not part.Parent then return false end
+		local root=part.AssemblyRootPart or part
+		if root.Anchored then return false end
+		local ok,owned=pcall(function()
+			if type(isnetworkowner)=="function" then return isnetworkowner(root) end
+			-- Same simulation-ownership signal used by the original controllers.
+			return root.ReceiveAge==0
+		end)
+		return ok and owned==true
+	end
+	function Hub.acquireAuraPart(part,root)
+		if not part or not part.Parent or part.Anchored or not Hub.canAffect(part) then return false end
+		if Hub.auraOwned(part) then return true end
+		local now=os.clock()
+		if now-window>=1 then window,budget=now,0 end
+		if root and root.Parent==Player.Character and (part.Position-root.Position).Magnitude<=30
+			and now>=(requests[part] or 0) and budget<6 and setNetworkOwnerEvent then
+			requests[part]=now+2;budget+=1
+			local origin=root.Position+Vector3.new(0,1.593,0)
+			if (origin-part.Position).Magnitude>0.01 then
+				Hub.fire(setNetworkOwnerEvent,part,CFrame.lookAt(origin,part.Position))
+			end
+		end
+		return false
+	end
+end
+
 -- Player attraction and tornado forces.
 do
 	(function()
@@ -7239,17 +7273,13 @@ do
 			local now=os.clock()
 			for _,target in ipairs(targets) do
 				local part=target.Character:FindFirstChild("HumanoidRootPart")
-				if Hub.canAffect(part) and not part.Anchored then
+				if Hub.acquireAuraPart(part,root) then
 					local entry=entries[part]
 					if entry and not entry.force.Parent then remove(part);entry=nil end
 					if not entry then
 						local force=Hub.new("BodyVelocity",part);force.Name="ArrivaPlayerAura"
 						force.MaxForce=Vector3.new(1e7,1e7,1e7)
 						entry={force=force};entries[part]=entry;Hub.assetTargets[force]=part
-					end
-					if now>=(owners[part] or 0) and (root.Position-part.Position).Magnitude<=30 then
-						owners[part]=now+1
-						if setNetworkOwnerEvent then Hub.fire(setNetworkOwnerEvent,part,part.CFrame) end
 					end
 					local delta
 					if flags.tornado then
@@ -9072,14 +9102,13 @@ function Hub.freeCharacterForTools()
 	return root,char,hum
 end
 
--- Creative shapes: local decorations or the local player's existing toys only.
--- No ownership requests, grab remotes or collection of other players’/map objects.
+-- Creative shapes use real toys from your folder, after ownership confirmation.
 do
 	(function()
 		local shapes=Tabs.Fun:AddLeftGroupbox("Creative Object Aura")
 		local settings=Tabs.Fun:AddRightGroupbox("Shape Settings")
 		local enabled=false
-		local mode,shape="Local decorations","Heart"
+		local mode,shape="My spawned toys","Heart"
 		local count,radius,height,distance,speed=24,8,5,12,20
 		local entries={}
 		local connection,decorationFolder
@@ -9251,7 +9280,7 @@ do
 			local used={}
 			for index=#entries,1,-1 do
 				local entry=entries[index]
-				if not folder or not safeAssembly(entry.part,folder) then
+				if not folder or not safeAssembly(entry.part,folder) or not Hub.auraOwned(entry.part) then
 					release(entry);table.remove(entries,index)
 				else used[entry.part]=true end
 			end
@@ -9262,35 +9291,18 @@ do
 						if not used[part] and (part.Position-root.Position).Magnitude<=80 then
 							used[part]=true
 							local parts=safeAssembly(part,folder)
-							if parts then addToy(part,parts) end
+							if parts and Hub.acquireAuraPart(part,root) then addToy(part,parts) end
 						end
 					end
 					if #entries>=count then break end
 				end
 			end
-			status:SetText(string.format("Using %d of your toy assemblies, up to %d. Others may not see client-owned movement.",#entries,count))
+			status:SetText(string.format("Using %d of your toy assemblies, up to %d. Unconfirmed objects remain untouched.",#entries,count))
 		end
 		local function start(skipSpawn)
 			stopWorker()
 			if not enabled then status:SetText("Aura is off.");return end
 			phase=0
-			if mode=="Local decorations" then
-				decorationFolder=Hub.new("Folder",Workspace)
-				decorationFolder.Name="ArrivaCreativeDecorations"
-				for _=1,count do
-					local part=Hub.new("Part",decorationFolder)
-					part.Name="ShapeDot"
-					part.Shape=Enum.PartType.Ball
-					part.Size=Vector3.new(0.6,0.6,0.6)
-					part.Material=Enum.Material.Neon
-					part.Color=Color3.fromRGB(239,120,175)
-					part.Anchored=true
-					part.CanCollide=false;part.CanTouch=false;part.CanQuery=false;part.CastShadow=false
-					part.Transparency=1
-					table.insert(entries,{part=part,decoration=true})
-				end
-				status:SetText("Local decoration mode, visible only to you.")
-			end
 			connection=Hub.connect(RunService.Heartbeat,function(dt)
 				elapsed+=dt
 				if elapsed<1/30 then return end
@@ -9317,7 +9329,7 @@ do
 				end
 				for index=#entries,1,-1 do
 					local entry=entries[index]
-					if not entry.part.Parent then release(entry);table.remove(entries,index)
+					if not entry.part.Parent or not Hub.auraOwned(entry.part) then release(entry);table.remove(entries,index)
 					else
 						local goal=center:PointToWorldSpace(point(shape,index,#entries,phase)*radius)
 						if entry.decoration then
@@ -9335,8 +9347,8 @@ do
 		end
 		shapes:AddToggle("CreativeAuraEnabled",{Text="Creative Object Aura",Default=false,
 			Callback=function(on) enabled=on;start() end})
-		shapes:AddDropdown("CreativeAuraSource",{Text="Objects to use",Values={"Local decorations","My spawned toys"},Default=1,
-			Callback=function(value) mode=value;start() end})
+		shapes:AddDropdown("CreativeAuraSource",{Text="Objects to use",Values={"My spawned toys"},Default=1,
+			Callback=function(value) mode="My spawned toys";start() end})
 		settings:AddDropdown("CreativeAuraShape",{Text="Shape",Values={"Heart","Ring","Helix","Figure Eight","Tornado","Blackhole","Star","Wings","Cape","67"},Default=1,
 			Callback=function(value) shape=value end})
 		settings:AddSlider("CreativeAuraCount",{Text="Maximum objects",Default=24,Min=8,Max=40,Rounding=0,
@@ -9514,7 +9526,7 @@ do
 	end)()
 end
 
--- Nearby object attraction, without ownership requests or player manipulation.
+-- Nearby object attraction: move only assemblies with observed local ownership.
 do
 	(function()
 		local group=Tabs.Fun:AddRightGroupbox("Object Attraction")
@@ -9532,19 +9544,19 @@ do
 		local function characterPart(part)
 			local parent=part.Parent
 			while parent and parent~=Workspace do
-				if parent:IsA("Model") and Players:GetPlayerFromCharacter(parent) then return true end
+				if parent:IsA("Model") and parent:FindFirstChildOfClass("Humanoid") then return true end
 				parent=parent.Parent
 			end
 			return false
 		end
 		local function eligible(part)
 			if part and ((Hub.isMissileReserved and Hub.isMissileReserved(part)) or (Hub.toyBuildClaims and Hub.toyBuildClaims[part.AssemblyRootPart or part]) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[part.AssemblyRootPart or part])) then return false end
-			if not part or not part.Parent or not part:IsDescendantOf(Workspace) or part.Anchored then return false end
+			if not part or not part.Parent or not part:IsDescendantOf(Workspace) or part.Anchored or not Hub.canAffect(part) then return false end
 			if part:IsA("Seat") or part:IsA("VehicleSeat") or characterPart(part) then return false end
 			-- Avoid competing with the separate creative shape controller.
 			if part:FindFirstChild("ArrivaCreativeAttachment") then return false end
 			for _,other in ipairs(part:GetConnectedParts(true)) do
-				if other.Anchored or other:IsA("Seat") or other:IsA("VehicleSeat") or characterPart(other) then return false end
+				if not Hub.canAffect(other) or other.Anchored or other:IsA("Seat") or other:IsA("VehicleSeat") or characterPart(other) then return false end
 			end
 			return true
 		end
@@ -9563,27 +9575,6 @@ do
 				end)
 			end
 		end
-		local function applyPhysics(part,entry)
-			local members=part:GetConnectedParts(true)
-			table.insert(members,part)
-			local present={}
-			for _,member in ipairs(members) do
-				present[member]=true
-				if not entry.physics[member] then
-					entry.physics[member]={collide=member.CanCollide,massless=member.Massless}
-				end
-				member.CanCollide=false
-				member.Massless=true
-			end
-			for member,saved in pairs(entry.physics) do
-				if not present[member] then
-					pcall(function()
-						if member.Parent then member.CanCollide=saved.collide;member.Massless=saved.massless end
-					end)
-					entry.physics[member]=nil
-				end
-			end
-		end
 		local function stop()
 			if connection then connection:Disconnect();Hub.connections[connection]=nil;connection=nil end
 			local parts={}
@@ -9592,14 +9583,16 @@ do
 			elapsed,scanElapsed=0,0
 		end
 		local function add(part)
-			entries[part]={physics={}}
-			applyPhysics(part,entries[part])
+			local force=Hub.new("BodyVelocity",part)
+			force.Name="ArrivaObjectAttraction";force.MaxForce=Vector3.new(1e7,1e7,1e7);force.Velocity=Vector3.zero
+			Hub.assetTargets[force]=part
+			entries[part]={force,force=force,physics={}}
 		end
 		local function scan(root)
-			local active=0
+			local active,pending=0,0
 			for part in pairs(entries) do
-				if not eligible(part) or (part.Position-root.Position).Magnitude>range+5 then release(part)
-				else applyPhysics(part,entries[part]);active+=1 end
+				if not eligible(part) or not Hub.auraOwned(part) or (part.Position-root.Position).Magnitude>range+5 then release(part)
+				else active+=1 end
 			end
 			query.FilterDescendantsInstances=Player.Character and {Player.Character} or {}
 			if active<limit then
@@ -9609,13 +9602,13 @@ do
 					if not seen[part] and not entries[part] then
 						seen[part]=true
 						if (part.Position-root.Position).Magnitude<=range and eligible(part) then
-							add(part);active+=1
+							if Hub.acquireAuraPart(part,root) then add(part);active+=1 else pending+=1 end
 							if active>=limit then break end
 						end
 					end
 				end
 			end
-			status:SetText(string.format("Attracting %d objects, range %d studs.",active,range))
+			status:SetText(string.format("Controlling %d objects; %d awaiting ownership. Range %d studs.",active,pending,range))
 		end
 		local function start()
 			stop()
@@ -9633,18 +9626,14 @@ do
 				if scanElapsed>=0.5 then scanElapsed=0;scan(root) end
 				-- Gather around the character rather than targeting their body.
 				for part,entry in pairs(entries) do
-					if not part.Parent or part.Anchored then release(part)
+					if not eligible(part) or not Hub.auraOwned(part) then release(part)
 					else
 						local delta=part.Position-root.Position
 						local horizontal=Vector3.new(delta.X,0,delta.Z)
 						local direction=horizontal.Magnitude>0.01 and horizontal.Unit or root.CFrame.LookVector
 						local goal=root.Position+direction*6+Vector3.new(0,1,0)
 						local offset=goal-part.Position
-						local step=pullSpeed*deltaTime
-						local position=offset.Magnitude<=step and goal or part.Position+offset.Unit*step
-						part.CFrame=CFrame.new(position)*part.CFrame.Rotation
-						part.AssemblyLinearVelocity=Vector3.zero
-						part.AssemblyAngularVelocity=Vector3.zero
+						entry.force.Velocity=offset.Magnitude>0.05 and offset.Unit*math.min(pullSpeed,offset.Magnitude*6) or Vector3.zero
 					end
 				end
 			end)
