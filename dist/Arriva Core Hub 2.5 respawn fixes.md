@@ -1,5 +1,7 @@
 # Gucci verification and protection respawn fixes
 
+**Current ordering:** Gucci waits only for Anti Banana leg removal, not anti-kick or unrelated protection jobs. Toggling anti-kick does not pause Gucci. Dead spawn callers can be reclaimed on the same character; living spawn requests remain serialized.
+
 This patch addresses the stuck Verifying/Retrying state and protections failing to restart after respawn. It does not add gameplay features.
 
 ## Verification compared with the original
@@ -13,10 +15,10 @@ This is an observer correction, not a forced-success timeout or removal of actua
 ## Respawn lifecycle
 
 - Generic source protection workers are stopped and cleaned up on CharacterRemoving. Their enabled UI choices are kept. A new-character waiter replays those enabled controls once the current root and humanoid are ready. Initial setup jobs are new tokens; old work cannot clear a replacement job.
-- Gucci's old start task and controller worker are explicitly reset at the character boundary. Cleanup errors cannot leave the running flag set. A cleanup error during an intentional pause does not turn off the user's Gucci choice. Gucci is still queued after the other protection setup jobs.
+- Gucci's old start task and controller worker are explicitly reset at the character boundary. Cleanup errors cannot leave the running flag set. A cleanup error during an intentional pause does not turn off the user's Gucci choice. Gucci waits only for the requested leg-removal pass, not the other setup jobs.
 - The shared spawn mutex is scoped to a character and an individual request. A stale request cannot block the new character or unlock a newer request. The actual game-facing spawn implementation and parameters are unchanged.
 - Anti-kick has a separate enabled intent, per-character worker token, cancellation and restart. It waits for the live root/humanoid/hitbox and refreshes StickyPartEvent when restarting. Transient worker errors are logged and retried after one second instead of silently setting the internal protection off while the UI stays on. An explicit user off remains off across respawn.
-- Anti-kick's initial attempt participates in the setup barrier. Waiting for a missing remote or an ineligible plot is reported separately. Active status requires a weld attached to the current hitbox.
+- Anti-kick's initial attempt is tracked for diagnostics and does not gate Gucci. Waiting for a missing remote or an ineligible plot is reported separately. Active status requires a weld attached to the current hitbox.
 
 ## Diagnostics and retesting
 

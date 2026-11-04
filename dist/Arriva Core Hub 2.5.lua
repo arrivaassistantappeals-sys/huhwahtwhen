@@ -117,7 +117,7 @@ function Hub.stop()
 		Hub.env.ArrivaCoreStarting = nil
 	end
 end
--- Protection callbacks may yield or start workers. Track their setup before Gucci starts.
+-- Track setup for diagnostics. Only Anti Banana leg removal delays Gucci.
 Hub.protectionStartupJobs={}
 function Hub.applyControl(control,value,invoke)
 	local finish=Hub.beginProtectionChange and Hub.beginProtectionChange(control)
@@ -125,7 +125,7 @@ function Hub.applyControl(control,value,invoke)
 	if finish then finish() end
 	return ok,err
 end
--- Restore passive settings first, enabled protections next, and Gucci requests last.
+-- Restore passive settings first; Gucci requests are independent of unrelated setup.
 function Hub.queueSavedCallbacks(records,invoke)
 	Hub.restoreEpoch=(Hub.restoreEpoch or 0)+1
 	local ticket=Hub.restoreEpoch
@@ -151,6 +151,9 @@ function Hub.queueSavedCallbacks(records,invoke)
 		else task.defer(function() run(record) end) end
 	end
 	table.sort(gucci,function(a,b) return a.control.Id<b.control.Id end)
+	-- Passive settings are already deferred above. Gucci can request startup independently;
+	-- its own guard waits only for Anti Banana's actual leg-removal pass.
+	for _,record in ipairs(gucci) do task.defer(function() run(record) end) end
 	task.spawn(function()
 		if #delayed>0 then
 			local setting=Hub.library and Hub.library.Options.StartupFeatureDelay
@@ -160,10 +163,7 @@ function Hub.queueSavedCallbacks(records,invoke)
 				task.spawn(function() run(record) end);task.wait(0.1)
 			end
 		end
-		-- Callback completion matters: launching the last task is not a setup barrier.
-		while Hub.alive and ticket==Hub.restoreEpoch and progress.completed<#records-#gucci do task.wait(0.05) end
-		if not Hub.alive or ticket~=Hub.restoreEpoch then return end
-		for _,record in ipairs(gucci) do run(record) end
+
 	end)
 end
 
@@ -11237,8 +11237,8 @@ do
 			until os.clock()>=deadline
 		end
 		tbl12.SpawnToy=function(...)
-			if spawnBusy and spawnBusy.char==Player.Character then return nil end
-			local token={char=Player.Character};spawnBusy=token
+			if spawnBusy and spawnBusy.char==Player.Character and coroutine.status(spawnBusy.owner)~="dead" then return nil end
+			local token={char=Player.Character,owner=coroutine.running()};spawnBusy=token
 			local args=table.pack(...)
 			local ok,result=xpcall(function() return sourceSpawnImpl(table.unpack(args,1,args.n)) end,debug.traceback)
 			if spawnBusy==token then spawnBusy=false end
@@ -13509,7 +13509,7 @@ do
 					local ok,message=xpcall(function()
 						while Hub.alive and not flag11 and tbl8[key] and workers[key]==token do
 							local currentCharacter=Player.Character
-							if appliedCharacter~=currentCharacter then Hub.protectionStartupJobs[key]=token end
+							if key=="AntiBanana" or appliedCharacter~=currentCharacter then Hub.protectionStartupJobs[key]=token end
 							action()
 							if workers[key]~=token then return end
 							appliedCharacter=currentCharacter
@@ -13902,7 +13902,7 @@ do
 		add("SourceAntiBanana","Anti Banana","AntiBanana",0.03,function()
 			local char,root,hum,alive=charAlive()
 			if not alive then restoreBanana();return end
-			local leg=char:FindFirstChild("Right Leg")
+			local leg=char:FindFirstChild("Right Leg") or char:FindFirstChild("Left Leg")
 			if not leg or not tbl12.IsNetworkOwner(root) then return end
 			if bananaHum~=hum then restoreBanana();bananaHum=hum;bananaHip=hum.HipHeight end
 			local record
@@ -14933,7 +14933,7 @@ do
 		local notices={}
 		local messages={
 			Starting="Gucci starting; preparing the seat/weld controller.",
-			["Waiting for protections"]="Other protections are applying. Gucci will start last.",
+			["Waiting for leg removal"]="Anti Banana is removing legs. Gucci starts once that finishes.",
 			Retrying="Gucci retrying; waiting for seat/weld confirmation.",
 			Verifying="Gucci is verifying seat release, ownership and controller stability.",
 			Active="Gucci active. Setup complete; seat release and controller checks are stable.",
@@ -14966,49 +14966,42 @@ do
 			if tbl8.GucciAntiGrab then Hub.reportGucciStatus(Hub.gucciStage or "Starting") end
 		end
 		-- GUCCI NOTIFICATION STATES END
-		-- Keep one pending start; user intent stays in the toggle while setup is paused.
+		-- Gucci depends only on the current character's Anti Banana leg-removal pass.
 		local gucciDesired,gucciStartPending=false,false
-		local protectionCallbacks=0
-		local protectionChangedAt=os.clock()
-		local respawnReadyAt=0
 		local gucciStartWorker
+		local function legRemovalPending()
+			local toggle=Toggles.SourceAntiBanana
+			if not toggle or not toggle.Value then return false end
+			local char=Player.Character
+			return char and (char:FindFirstChild("Right Leg")~=nil or char:FindFirstChild("Left Leg")~=nil
+				or Hub.protectionStartupJobs.AntiBanana~=nil or (bananaSuspension and bananaSuspension.char==char)) or false
+		end
 		local function pauseGucci()
 			if tbl8.GucciAntiGrab then tbl12.SetGucciAntiGrab(false) end
 		end
 		local function requestGucciStart(reason)
 			if not gucciDesired or flag11 or not Hub.alive then return end
 			gucciStartPending=true
-			Hub.gucciWaitingReason=reason or "Waiting for protections to settle."
-			if Hub.reportGucciStatus then Hub.reportGucciStatus("Waiting for protections",Hub.gucciWaitingReason) end
+			Hub.gucciWaitingReason=legRemovalPending() and "Waiting for Anti Banana leg removal to finish." or (reason or "Waiting for the current character.")
+			if Hub.reportGucciStatus then Hub.reportGucciStatus(legRemovalPending() and "Waiting for leg removal" or "Starting",Hub.gucciWaitingReason) end
 			if gucciStartWorker then return end
 			gucciStartWorker=task.defer(function()
 				while Hub.alive and not flag11 and gucciDesired and gucciStartPending do
-					local progress=Hub.restoreProgress
 					local char,root,hum=tbl12.Char()
 					local held=Player:FindFirstChild("IsHeld")
-					local ready=not Hub.configLoading and (not progress or progress.done)
-						and protectionCallbacks==0 and next(Hub.protectionStartupJobs)==nil
-						and (tbl8.GucciAntiGrab or not tbl12.GucciWorkerRunning())
-						and os.clock()-protectionChangedAt>=0.75 and os.clock()>=respawnReadyAt
-						and char and root and hum and hum.Health>0 and root.Parent==char and hum.Parent==char
-						and not (held and held.Value)
-					if not ready then
-						local jobs={};for key in pairs(Hub.protectionStartupJobs) do table.insert(jobs,key) end;table.sort(jobs)
-						Hub.gucciWaitingReason=protectionCallbacks>0 and "Protection callback is still applying."
-							or #jobs>0 and ("Protection setup: "..table.concat(jobs,", "))
-							or (progress and not progress.done) and "Saved callbacks are still applying."
-							or tbl12.GucciWorkerRunning() and "Previous Gucci worker is still exiting."
-							or "Waiting for character readiness and the protection settling period."
-					end
+					local legs=legRemovalPending()
+					local previous=tbl12.GucciWorkerRunning()
+					local ready=not Hub.configLoading and not legs and not previous
+						and char and root and hum and hum.Health>0 and root.Parent==char and hum.Parent==char and not (held and held.Value)
 					if ready then
 						gucciStartPending=false;Hub.gucciWaitingReason=nil
 						if Hub.stopBlobFlight then Hub.stopBlobFlight() end
-						if not tbl8.GucciAntiGrab then
-							Hub.reportGucciStatus("Starting")
-							tbl12.SetGucciAntiGrab(true)
-						end
+						Hub.reportGucciStatus("Starting");tbl12.SetGucciAntiGrab(true)
 						break
 					end
+					Hub.gucciWaitingReason=legs and "Waiting for Anti Banana leg removal to finish."
+						or previous and "Previous Gucci worker is still exiting."
+						or "Waiting for the current character to be ready."
 					task.wait(0.1)
 				end
 				gucciStartWorker=nil
@@ -15026,32 +15019,22 @@ do
 		end
 		Hub.resumeGucciAfterProtection=function()
 			local toggle=Toggles.AutoGucciBlobToggle
-			if gucciDesired and toggle and toggle.Value and (not tbl8.GucciAntiGrab or gucciStartPending) then
-				protectionChangedAt=os.clock();requestGucciStart("Protection finished; preparing Gucci last.")
-			end
+			if gucciDesired and toggle and toggle.Value and (not tbl8.GucciAntiGrab or gucciStartPending) then requestGucciStart() end
 		end
 		Hub.beginProtectionChange=function(control)
-			if control.Tab~=Tabs.Defense.native or control.Id=="AutoGucciBlobToggle" or control.Id=="AutoGucciTrainToggle"
-				or control.Id:match("^SourceAntiKick") or (control.Type~="Toggle" and control.Id~="SourceGucciVehicle") then return end
-			protectionCallbacks+=1;protectionChangedAt=os.clock()
-			if gucciDesired then pauseGucci();requestGucciStart("Applying "..(control.Text or control.Id).." before Gucci.") end
-			local finished=false
-			return function()
-				if finished then return end;finished=true
-				protectionCallbacks=math.max(0,protectionCallbacks-1);protectionChangedAt=os.clock()
-				if gucciDesired then requestGucciStart() end
-			end
+			-- Anti-kick and unrelated settings must never stop or gate Gucci.
+			if control.Id~="SourceAntiBanana" then return end
+			if gucciDesired and legRemovalPending() then pauseGucci();requestGucciStart() end
+			return function() if gucciDesired and not tbl8.GucciAntiGrab then requestGucciStart() end end
 		end
 		Hub.connect(Player.CharacterRemoving,function()
 			local thread=gucciStartWorker;gucciStartWorker=nil
 			if thread and thread~=coroutine.running() then pcall(Hub.nativeTask.cancel,thread);Hub.threads[thread]=nil end
-			gucciStartPending=false;respawnReadyAt=math.huge
-			tbl12.ResetGucciCharacter()
+			gucciStartPending=false;tbl12.ResetGucciCharacter()
 			Hub.gucciWaitingReason=gucciDesired and "Waiting for respawn." or nil
 		end)
 		Hub.connect(Player.CharacterAdded,function()
-			respawnReadyAt=os.clock()+1.5;protectionChangedAt=os.clock()
-			if gucciDesired then pauseGucci();requestGucciStart("Waiting for respawn protections before Gucci.") end
+			if gucciDesired then pauseGucci();requestGucciStart() end
 		end)
 		Hub.cleanup(function()
 			gucciDesired=false;gucciStartPending=false
@@ -15069,7 +15052,10 @@ do
 			startAntiGucciTrain=function() if Toggles.AutoGucciTrainToggle.Value then pauseGucci();tbl9.GucciType="Train";setGucci(true) end end
 			stopAntiGucciTrain=function() if tbl9.GucciType=="Train" then setGucci(false) end end
 		end
-		DefenseExtra:AddDropdown("SourceGucciVehicle",{Text="Gucci vehicle",Values={"CreatureBlobman","TractorGreen","SantaSleigh","Train"},Default=1,Callback=function(value) tbl9.GucciType=value;Hub.requestSave() end})
+		DefenseExtra:AddDropdown("SourceGucciVehicle",{Text="Gucci vehicle",Values={"CreatureBlobman","TractorGreen","SantaSleigh","Train"},Default=1,Callback=function(value)
+			if tbl9.GucciType~=value then pauseGucci();tbl9.GucciType=value;if gucciDesired then requestGucciStart() end end
+			Hub.requestSave()
+		end})
 		DefenseExtra:AddButton({Text="Stop Gucci and remove its toy",Func=function() Toggles.AutoGucciBlobToggle:SetValue(false) end})
 		Hub.cleanup(function()
 			flag11=true;tbl12.SetGucciAntiGrab(false)
@@ -18285,9 +18271,9 @@ end
 		{"protect","!protect name","Immediately add a player to the whitelist. Use @username for exact username matching."},
 		{"unprotect","!unprotect name","Remove a manual whitelist entry. Friend protection can still apply."},
 		{"whitelist","!whitelist","List manually protected players."},
-		{"gucci","!gucci on / off / restart","Queue Gucci last, disable it, or request a clean restart."},
+		{"gucci","!gucci on / off / restart","Start Gucci after leg removal, disable it, or request a clean restart."},
 		{"status","!status","Show Gucci, protection setup, config restore and active-loop status."},
-		{"protection","!protection name on / off","Change a protection by its control ID or matching label. Gucci pauses while it applies."},
+		{"protection","!protection name on / off","Change a protection by its control ID or matching label."},
 		{"protections","!protections","List enabled protection toggles and their IDs."},
 		{"stop","!stop","Stop action loops, NPC control, recovery and flight; keep protection choices."},
 		{"select","!select name","Replace the player selection."},
@@ -18302,7 +18288,7 @@ end
 		{"unview","!unview","Restore your camera."},
 		{"menu","!menu on / off","Show or hide the hub menu."},
 		{"save","!save","Explicitly save settings."},
-		{"load","!load","Load AutoSave and apply Gucci after the other protections."},
+		{"load","!load","Load AutoSave. Gucci waits only for Anti Banana leg removal."},
 		{"camhere","!camhere","Move to stable ground below the camera."},
 		{"npcreturn","!npcreturn","Exit NPC viewing and steering."},
 		{"recoverbuild","!recoverbuild","Recover missing nearby ownership for your selected own-toy group."},
@@ -18375,7 +18361,7 @@ end
 	commands.load=function()
 		if not Hub.ready or not Hub.storage then error("Settings storage is unavailable or startup is incomplete.",0) end
 		local ok,reason=SaveManager:Load("AutoSave");if not ok then error(tostring(reason),0) end
-		message("Settings loaded. Protections apply first; Gucci starts last.","success")
+		message("Settings loaded. Gucci waits only for Anti Banana leg removal.","success")
 	end
 	commands.camhere=function()
 		local ok,reason=Hub.teleportBelowCamera()
@@ -18463,4 +18449,4 @@ end)()
 
 -- Send loaded message
 
-notify("Arriva Core Hub 2.5", "Controls ready. Gucci waits for the other protections before starting.", 5)
+notify("Arriva Core Hub 2.5", "Controls ready. Gucci waits only for leg removal when Anti Banana is enabled.", 5)

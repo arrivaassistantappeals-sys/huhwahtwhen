@@ -2,15 +2,11 @@
 
 This revision starts from the uploaded Arriva Core Hub 2.5 rollback file. It restores that file's synchronous Gucci callback pairs; the later deferred-callback patch is not included. The working spawner and seven seat/character event-handler pairs are unchanged from the upload. The uploaded Shutdown flood button is removed.
 
-Gucci starts last:
+Gucci waits only for Anti Banana leg removal when that toggle is enabled. It checks both remaining R6 legs and the active leg-removal pass, then starts as soon as that pass finishes. It does not wait for anti-kick, unrelated protection jobs, unrelated saved callbacks, or a general settling timer. Toggling anti-kick does not pause or restart Gucci. Anti-kick runs independently of Gucci.
 
-1. Saved passive values and other enabled-protection callbacks are applied first.
-2. The loader waits for callback completion, not merely for tasks to be launched.
-3. Gucci waits for tracked initial protection-worker passes, settings restore, a 0.75-second settling period, and any older Gucci worker to exit.
-4. Changing a protection pauses the current Gucci setup while keeping the user's toggle enabled. It queues one restart after the change settles. Disabling Gucci cancels that request.
-5. After respawn, the coordinator waits for a live current character, a short respawn grace period, and protection setup before requesting Gucci again.
+Gucci still needs a live current character and its previous controller worker to finish exiting; its actual weld/controller verification is retained. Disabling Gucci cancels pending startup. Selecting a different Gucci vehicle intentionally restarts that controller. The older respawn listener uses the same narrow start request.
 
-Anti Banana's cleanup and the older respawn listener now request Gucci through the same coordinator. Repeated requests do not reset an already active confirmation. Changing the Gucci vehicle and enabling Train mode also follow this ordering. The original Gucci success checks remain in place; queueing a start is not a claim of successful setup. An asynchronous game or server operation can still fail or wait. Use `!status` to inspect the current state.
+A shared spawn request is still serialized while its caller is alive. If anti-kick or another caller is cancelled during a spawn, the dead caller's lock can now be reclaimed on the same character. The original request parameters and model-identification implementation are unchanged.
 
 The empty Follow Player dropdown selection is handled without calling `FindFirstChild(nil)`. The single-result `select` fix and failed-config overwrite protection are retained.
 
@@ -38,7 +34,7 @@ All local chat commands now use `!`; the old `:` prefix is ignored. Matching sup
 | `!view name`, `!unview` | Spectate or restore your camera. |
 | `!menu on`, `!menu off` | Show or hide the menu. |
 | `!save` | Explicit manual save. |
-| `!load` | Load AutoSave with Gucci ordered last. |
+| `!load` | Load AutoSave; Gucci waits only for requested leg removal. |
 | `!camhere` | Move to stable ground below the camera. |
 | `!npcreturn` | Exit NPC viewing and steering. |
 | `!recoverbuild` | Recover nearby ownership for the selected own-toy group. |
