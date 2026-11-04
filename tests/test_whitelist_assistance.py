@@ -85,6 +85,50 @@ local function runWorker()
 end
 '''
 CASES={
+'seat_blocker_updates_to_flight_and_recovers_automatically':r'''
+    controls.WhitelistAssistKick:SetValue(true)
+    hum.SeatPart={};Hub.sampleWhitelistAssistance();buttons["Whitelist assistance status"]()
+    assert(notices[#notices].Description:find("seated",1,true) and spawned==0)
+    hum.SeatPart=nil;Hub.characterFlightActive=true
+    Hub.sampleWhitelistAssistance();buttons["Whitelist assistance status"]()
+    assert(notices[#notices].Description:find("flight is active",1,true) and spawned==0)
+    Hub.characterFlightActive=false;Hub.sampleWhitelistAssistance();runWorker()
+    assert(spawned==1)
+''',
+'returned_model_waits_for_parent_replication':r'''
+    local delayed
+    spawnRemote.InvokeServer=function()
+        spawned+=1;delayed=makeToy();delayed.Parent=nil;return delayed
+    end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance()
+    local worker=workers[#workers];local ok,err=coroutine.resume(worker);assert(ok,err)
+    assert(coroutine.status(worker)=="suspended")
+    delayed.Parent=folder;runWorker();buttons["Whitelist assistance status"]()
+    assert(notices[#notices].Description:find("Toy spawned",1,true))
+''',
+'discovery_error_releases_spawn_flag_and_retries_after_cooldown':r'''
+    local original=folder.GetChildren
+    spawnRemote.InvokeServer=function()
+        spawned+=1
+        folder.GetChildren=function() error("replication discovery failed") end
+        return true
+    end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();runWorker()
+    folder.GetChildren=original
+    Hub.sampleWhitelistAssistance();buttons["Whitelist assistance status"]()
+    assert(notices[#notices].Description:find("Spawn cooldown",1,true))
+    assert(notices[#notices].Description:find("replication discovery failed",1,true))
+    spawnRemote.InvokeServer=function() spawned+=1;return makeToy() end
+    now+=9;Hub.sampleWhitelistAssistance();runWorker();assert(spawned==2)
+''',
+'game_spawn_permission_blocker_clears_without_reset':r'''
+    local find=Player.FindFirstChild;local can={Value=false}
+    Player.FindFirstChild=function(self,key) if key=="CanSpawnToy" then return can end;return find(self,key) end
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();buttons["Whitelist assistance status"]()
+    assert(notices[#notices].Description:find("CanSpawnToy permission",1,true) and spawned==0)
+    can.Value=true;Hub.sampleWhitelistAssistance();runWorker();assert(spawned==1)
+''',
+
 'moving_spawn_without_returned_model_is_identified':r'''
     spawnRemote.InvokeServer=function()
         spawned+=1;local toy=makeToy()
