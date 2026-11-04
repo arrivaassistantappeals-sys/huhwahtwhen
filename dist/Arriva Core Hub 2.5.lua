@@ -1474,7 +1474,9 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			local kind=frame:GetAttribute("NoticeKind") or "info"
 			local defaults={info=Color3.fromRGB(106,177,255),warning=Color3.fromRGB(255,202,105),success=Color3.fromRGB(111,224,160),danger=Color3.fromRGB(255,115,125)}
 			local accent=self["noticeColor_"..kind] or defaults[kind] or defaults.info
-			frame.BackgroundColor3=self.noticeBackground or colors.card
+			if frame:GetAttribute("PurpleRosterNotice") then accent=Color3.fromRGB(190,140,255) end
+			frame.BackgroundColor3=frame:GetAttribute("PurpleRosterNotice") and Color3.fromRGB(34,25,48)
+				or self.noticeBackground or colors.card
 			frame.BackgroundTransparency=self.noticeBackgroundTransparency or 0
 			local newHex=string.format("#%02X%02X%02X",math.floor(accent.R*255+0.5),math.floor(accent.G*255+0.5),math.floor(accent.B*255+0.5))
 			local oldHex=frame:GetAttribute("NoticeAccentHex")
@@ -1570,6 +1572,10 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			if category:find("[protected]",1,true) then accent=Color3.fromRGB(111,224,160) end
 			local noticeKind=Hub.notificationKind and Hub.notificationKind(info) or (bad and "danger" or "info")
 			frame:SetAttribute("NoticeKind",noticeKind)
+			local eventTitle=title:lower()
+			local rosterNotice=eventTitle:find("respawn",1,true) or eventTitle:find("joined",1,true)
+				or eventTitle:find("returned",1,true) or eventTitle:find("%f[%a]left%f[%A]")
+			frame:SetAttribute("PurpleRosterNotice",rosterNotice~=nil)
 			local headerRow=make("Frame",frame,{BackgroundTransparency=1,
 				Position=UDim2.fromOffset(16,12),Size=UDim2.new(1,-32,0,24)})
 			icon(headerRow,iconName,{Name="NotificationIcon",AnchorPoint=Vector2.new(0,0.5),Position=UDim2.new(0,0,0.5,0),
