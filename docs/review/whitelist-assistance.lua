@@ -77,6 +77,15 @@ do
         local char,root=character(record.player)
         return char==record.char and root==record.root
     end
+    local function gucciEnabled()
+        local source=Hub.sourceGucci
+        return source and source.state and source.state.GucciAntiGrab==true
+    end
+    local function gucciPreparing(char)
+        if not gucciEnabled() then return false end
+        local proof=Hub.gucciVerifiedRun
+        return not (proof and proof.Confirmed and proof.Char==char)
+    end
     local function readySelf()
         local char=me.Character
         local root=char and char:FindFirstChild("HumanoidRootPart")
@@ -84,7 +93,8 @@ do
         local held=me:FindFirstChild("IsHeld")
         if not root or not hum then return nil,"your character is still loading" end
         if hum.Health<=0 then return nil,"your character is dead; waiting for respawn" end
-        if hum.SeatPart then return nil,"your character is seated (Gucci may be setting up)" end
+        if gucciPreparing(char) then return nil,"Gucci setup/retry is in progress" end
+        if hum.SeatPart then return nil,"your character is seated; waiting for seat release" end
         if root.Anchored then return nil,"your character root is anchored" end
         if held and held.Value then return nil,"your character is being held" end
         if Hub.safeZoneLoopActive then return nil,"safe-zone looping is active" end
@@ -112,7 +122,14 @@ do
         if Hub.interactionVisitLock and Hub.interactionVisitLock~=ownVisit then say("Assistance waiting: another movement visit is running.");return false end
         local root,char=readySelf()
         if not root then say("Assistance waiting: your character is busy, held, seated or flying.");return false end
+        -- Ownership already confirmed: attaching our toy needs no character visit.
+        if owned(part,not toy and record.char or nil,toy) then return true end
         if (root.Position-part.Position).Magnitude>30 then
+            -- Gucci owns its character positioning. Do not start a competing visit.
+            if gucciEnabled() then
+                record.phase="Waiting: distant ownership needs a visit, but Gucci controls character movement."
+                say(record.phase);return false
+            end
             if not allowVisits then say("Distant assistance needs Allow brief assist visits enabled.");return false end
             local destination=part.Position+Vector3.new(0,3,6)
             if destination.Y<=World.FallenPartsDestroyHeight+8 then return false end
@@ -298,7 +315,7 @@ do
             record.phase="Acquiring shuriken ownership."
             local ok,err=pcall(function()
                 if not acquire(sticky,record,ticket,"kick",toy) then
-                    if valid(record,ticket,"kick") then record.phase="Ownership not confirmed; check assistance status label for visit restrictions.";say("Whitelist anti-kick: waiting for verified ownership of the shuriken.") end
+                    if valid(record,ticket,"kick") then say("Whitelist anti-kick: "..(record.phase or "ownership not confirmed; retrying.")) end
                     return
                 end
                 if not valid(record,ticket,"kick") then return end
