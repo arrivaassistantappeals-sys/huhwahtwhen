@@ -244,7 +244,7 @@ function Hub.requestSave()
 		if not ok then warn("[Arriva autosave] " .. tostring(err)) end
 	end)
 end
-function Hub.flushSettings()
+function Hub.flushSettings(explicit)
 	if Hub.saveThread then
 		pcall(Hub.nativeTask.cancel,Hub.saveThread)
 		Hub.threads[Hub.saveThread]=nil
@@ -252,7 +252,7 @@ function Hub.flushSettings()
 	end
 	if not Hub.ready then return false, "Settings are not ready yet" end
 	if not Hub.storage then return false, "File storage is unavailable" end
-	return Hub.persistSettings(true)
+	return Hub.persistSettings(explicit == true)
 end
 function Hub.installConfigLoading(saveManager)
 	local original = saveManager.LoadJSON
@@ -10035,10 +10035,20 @@ do
 		local active
 		local slotAttempts=setmetatable({},{__mode="k"})
 		local status=group:AddLabel("Plots & slots: idle. Distant interactions visit and return automatically.")
+		local function gucciEnabled()
+			local toggle=Toggles.AutoGucciBlobToggle
+			return toggle and toggle.Value==true
+		end
 		local function selfRoot()
 			local char=Player.Character
 			local root=char and char:FindFirstChild("HumanoidRootPart")
 			local hum=char and char:FindFirstChildOfClass("Humanoid")
+			if gucciEnabled() then
+				local controller,proof=Hub.sourceGucci,Hub.gucciVerifiedRun
+				if not controller or not controller.state.GucciAntiGrab or not proof or not proof.Confirmed
+					or proof.Char~=char or proof.Hum~=hum or proof.HRP~=root then return end
+				root=proof.HRP
+			end
 			local held=Player:FindFirstChild("IsHeld")
 			if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
 				or (held and held.Value) or Hub.safeZoneLoopActive or Hub.blobFlightActive or Hub.characterFlightActive then return end
@@ -10060,33 +10070,53 @@ do
 		local function finish(ticket)
 			if active~=ticket then return end
 			active=nil
-			if Player.Character==ticket.char and ticket.root.Parent==ticket.char and selfRoot()==ticket.root
-				and (ticket.root.Position-ticket.destination).Magnitude<12 then
-				ticket.root.CFrame=ticket.original
-				ticket.root.AssemblyLinearVelocity=Vector3.zero;ticket.root.AssemblyAngularVelocity=Vector3.zero
-			end
 			if Hub.interactionVisitLock==ticket then Hub.interactionVisitLock=nil end
+			local root,hum=ticket.root,ticket.hum
+			-- Return even if Gucci lost confirmation during the interaction; never move a new character.
+			if ticket.moved and Player.Character==ticket.char and root.Parent==ticket.char
+				and hum.Parent==ticket.char and hum.Health>0 and not hum.SeatPart and not root.Anchored then
+				local ok,err=pcall(function()
+					root.CFrame=ticket.original
+					root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
+				end)
+				if not ok then warn("[Plots & slots return] "..tostring(err)) end
+			end
 		end
 		local function visit(kind,part,allowed,action)
 			if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
-			local root,char=selfRoot()
-			if not root then return false,"Character busy: leave seats/holds and stop flight, safe-zone or action loops." end
+			local char=Player.Character
+			local root=char and char:FindFirstChild("HumanoidRootPart")
+			local hum=char and char:FindFirstChildOfClass("Humanoid")
+			if not root or not hum or hum.Health<=0 then return false,"Waiting for a live character." end
 			if not part or not part.Parent or not part:IsA("BasePart") then return false,"Interaction part has not loaded." end
-			local destination=(root.Position-part.Position).Magnitude>25 and part.Position+Vector3.new(0,3,6) or root.Position
-			if kind=="House renewal" then destination=part.Position+Vector3.new(0,3,0) end
-			for _,value in ipairs({destination.X,destination.Y,destination.Z}) do
-				if value~=value or math.abs(value)==math.huge then return false,"Invalid interaction position." end
-			end
-			if destination.Y<=Workspace.FallenPartsDestroyHeight+8 then return false,"Destination is below the safe map height." end
-			local ticket={kind=kind,root=root,char=char,original=root.CFrame,destination=destination}
-			active=ticket;Hub.interactionVisitLock=ticket;status:SetText(kind..": visiting; will return when finished.")
+			local ticket={kind=kind,root=root,char=char,hum=hum,original=root.CFrame,gucci=gucciEnabled()}
+			active=ticket;Hub.interactionVisitLock=ticket
+			status:SetText(kind..(ticket.gucci and ": waiting for verified Gucci confirmation." or ": preparing visit."))
 			task.spawn(function()
-				local function valid()
+				local function pending()
 					return Hub.alive and active==ticket and allowed() and Player.Character==char
-						and selfRoot()==root and part.Parent and (root.Position-destination).Magnitude<12
+						and root.Parent==char and hum.Parent==char and hum.Health>0 and part.Parent
+						and (not ticket.gucci or gucciEnabled())
+				end
+				local function valid()
+					return pending() and selfRoot()==root and (root.Position-ticket.destination).Magnitude<12
 				end
 				local ok,err=pcall(function()
-					if active~=ticket or not Hub.alive or not allowed() or selfRoot()~=root then return end
+					local deadline=os.clock()+20
+					while pending() and selfRoot()~=root do
+						if not ticket.gucci then error("Character busy: leave seats/holds and stop flight, safe-zone or action loops.",0) end
+						if os.clock()>=deadline then error("Gucci confirmation timed out; no interaction performed.",0) end
+						task.wait(0.1)
+					end
+					if not pending() or selfRoot()~=root then return end
+					local destination=(root.Position-part.Position).Magnitude>25 and part.Position+Vector3.new(0,3,6) or root.Position
+					if kind=="House renewal" then destination=part.Position+Vector3.new(0,3,0) end
+					for _,value in ipairs({destination.X,destination.Y,destination.Z}) do
+						if value~=value or math.abs(value)==math.huge then error("Invalid interaction position.",0) end
+					end
+					if destination.Y<=Workspace.FallenPartsDestroyHeight+8 then error("Destination is below the safe map height.",0) end
+					ticket.destination=destination;ticket.moved=true
+					status:SetText(kind..": visiting; will return when finished.")
 					root.CFrame=CFrame.new(destination)*root.CFrame.Rotation
 					root.AssemblyLinearVelocity=Vector3.zero
 					task.wait(0.2)
@@ -10146,7 +10176,10 @@ do
 		end
 		local function spin(automatic)
 			if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
-			local root=selfRoot();if not root then return false,"Character busy: stop flight/loops and leave seats first." end
+			-- Used only to rank machines; visit() waits for the verified Gucci HRP before moving.
+			local char=Player.Character
+			local root=char and char:FindFirstChild("HumanoidRootPart")
+			if not root then return false,"Waiting for a live character." end
 			local slots=Workspace:FindFirstChild("Slots");if not slots then return false,"Slot machines have not loaded." end
 			local best,distance
 			for _,slot in ipairs(slots:GetChildren()) do
@@ -13606,10 +13639,25 @@ do
 		settings:AddSlider("SourceInputTransparency",{Text="Anti Input, item transparency",Default=1,Min=0,Max=1,Rounding=2,Callback=function(value) tbl9.AILTransparency=value;Hub.requestSave() end})
 
 		-- The supplied Anti Banana intentionally breaks the local character's legs.
-		local bananaHip,bananaHum
+		local bananaHip,bananaHum,bananaSuspension
+		local function releaseBananaGucci(record)
+			if not record or bananaSuspension~=record then return end
+			bananaSuspension=nil
+			local toggle=Toggles.AutoGucciBlobToggle
+			if Hub.alive and not flag11 and toggle and toggle.Value
+				and Player.Character==record.char and record.hum.Parent==record.char
+				and record.hum.Health>0 and not tbl8.GucciAntiGrab then
+				tbl12.SetGucciAntiGrab(true)
+			end
+		end
 		local function restoreBanana()
-			if bananaHum and bananaHum.Parent and bananaHip~=nil then bananaHum.HipHeight=bananaHip end
+			local hum,hip,record=bananaHum,bananaHip,bananaSuspension
 			bananaHip,bananaHum=nil,nil
+			if hum and hum.Parent and hip~=nil then
+				local ok,err=pcall(function() hum.HipHeight=hip end)
+				if not ok then warn("[Anti Banana restore] "..tostring(err)) end
+			end
+			releaseBananaGucci(record)
 		end
 		add("SourceAntiBanana","Anti Banana (supplied leg method)","AntiBanana",0.03,function()
 			local char,root,hum,alive=charAlive()
@@ -13617,17 +13665,24 @@ do
 			local leg=char:FindFirstChild("Right Leg")
 			if not leg or not tbl12.IsNetworkOwner(root) then return end
 			if bananaHum~=hum then restoreBanana();bananaHum=hum;bananaHip=hum.HipHeight end
-			local gucciWasOn=tbl8.GucciAntiGrab
-			if gucciWasOn then tbl12.SetGucciAntiGrab(false);task.wait(0.25) end
-			if not tbl8.AntiBanana or Player.Character~=char then return end
-			hum.Sit=false;hum.HipHeight=2
-			tbl12.BreakLimb(Player,"Legs")
-			local deadline=os.clock()+0.75
-			repeat
-				if not tbl8.AntiBanana or not Hub.alive or Player.Character~=char or hum.Health<=0 or not leg.Parent then break end
-				hum.HipHeight=2;task.wait()
-			until os.clock()>=deadline
-			if gucciWasOn and tbl8.AntiBanana and Hub.alive and Player.Character==char then tbl12.SetGucciAntiGrab(true) end
+			local record
+			local ok,err=xpcall(function()
+				if tbl8.GucciAntiGrab then
+					record={char=char,hum=hum};bananaSuspension=record
+					tbl12.SetGucciAntiGrab(false);task.wait(0.25)
+				end
+				if not tbl8.AntiBanana or not Hub.alive or flag11 or Player.Character~=char
+					or hum.Parent~=char or hum.Health<=0 or (record and bananaSuspension~=record) then return end
+				hum.Sit=false;hum.HipHeight=2
+				tbl12.BreakLimb(Player,"Legs")
+				local deadline=os.clock()+0.75
+				repeat
+					if not tbl8.AntiBanana or not Hub.alive or Player.Character~=char or hum.Health<=0 or not leg.Parent then break end
+					hum.HipHeight=2;task.wait()
+				until os.clock()>=deadline
+			end,debug.traceback)
+			releaseBananaGucci(record)
+			if not ok then error(err,0) end
 		end,restoreBanana)
 		defenseGroup:AddLabel("Anti Banana uses the source's leg-breaking method, respawn restores missing limbs.")
 
@@ -17213,7 +17268,7 @@ end
 			error("Settings saving unavailable.", 0)
 		end
 
-		local ok, reason = Hub.flushSettings()
+		local ok, reason = Hub.flushSettings(true)
 		if not ok then
 			error(tostring(reason or "Settings could not be saved."), 0)
 		end
