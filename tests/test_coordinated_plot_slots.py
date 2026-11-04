@@ -30,7 +30,54 @@ local function step()
     local ok,err=coroutine.resume(workers[#workers]);assert(ok,err)
 end
 '''
+SETUP+=r'''
+local function verifiedGucci()
+    Toggles.AutoGucciBlobToggle={Value=true}
+    Hub.sourceGucci={state={GucciAntiGrab=true},set=function() error("Gucci must stay enabled") end}
+    local proof={Confirmed=true,Char=char,HRP=root}
+    Hub.gucciVerifiedRun=proof
+    return proof
+end
+'''
 CASES={
+'gucci_enabled_without_success_waits_before_moving':r'''
+    verifiedGucci();Hub.gucciVerifiedRun=nil
+    buttons["Claim selected plot"]()
+    assert(#workers==0 and #requests==0 and root.Position.Magnitude==0)
+    assert(notices[#notices].Description:find("Waiting for Gucci",1,true))
+''',
+'gucci_confirmed_plot_visit_returns_without_disabling_controller':r'''
+    local proof=verifiedGucci()
+    buttons["Claim selected plot"]();step();assert(root.Position.X==200)
+    step();assert(#requests==1)
+    local marker=node("AnchoredPartGrab");marker.Value=Player.Name;table.insert(signPart.children,marker)
+    step();assert(root.Position.Magnitude==0)
+    assert(Hub.sourceGucci.state.GucciAntiGrab and Toggles.AutoGucciBlobToggle.Value and Hub.gucciVerifiedRun==proof)
+''',
+'gucci_confirmed_slot_visit_returns_without_changing_gucci':r'''
+    local proof=verifiedGucci()
+    local ready,handle,timer=slot("Ready",1000,"0:00");named.Slots=node("Slots",{ready})
+    buttons["Spin an available slot now"]();step();assert(root.Position.X==1000)
+    step();assert(requests[1][2]==handle)
+    timer.Text="0:30";step();assert(root.Position.Magnitude==0 and Hub.gucciVerifiedRun==proof)
+''',
+'gucci_uses_verified_real_root_instead_of_anchored_named_proxy':r'''
+    verifiedGucci()
+    local find=char.FindFirstChild
+    local proxy={Parent=char,Anchored=true,Position=Vector3.zero}
+    char.FindFirstChild=function(self,name) if name=="HumanoidRootPart" then return proxy end;return find(self,name) end
+    buttons["Claim selected plot"]();step();assert(root.Position.X==200 and proxy.Position.Magnitude==0)
+    controls.PackAutoClaimPlot:SetValue(false);assert(root.Position.Magnitude==0)
+''',
+'gucci_old_character_confirmation_does_not_allow_visit':r'''
+    verifiedGucci();Hub.gucciVerifiedRun.Char={}
+    buttons["Claim selected plot"]();assert(#workers==0 and #requests==0)
+''',
+'gucci_confirmation_loss_stops_requests':r'''
+    verifiedGucci();buttons["Claim selected plot"]();step()
+    Hub.gucciVerifiedRun=nil;step();assert(#requests==0 and not Hub.interactionVisitLock)
+''',
+
 'plot_and_slot_visits_wait_for_assistance_lock':r'''
     local another={};Hub.interactionVisitLock=another
     buttons["Claim selected plot"]()
