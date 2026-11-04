@@ -16505,7 +16505,69 @@ do
 			return value==me.Name or value==me
 		end
 		local function ownFolder() return World:FindFirstChild(me.Name.."SpawnedInToys") end
+		-- Appearance applies only to shurikens created by this assistance controller.
+		local appearanceGroup=Tabs.Whitelist:AddRightGroupbox("Whitelist Shuriken Appearance")
+		local appearance={enabled=false,fill=Color3.fromRGB(255,0,0),outline=Color3.fromRGB(255,255,255),
+			fillAlpha=0.5,outlineAlpha=0,rainbowFill=false,rainbowOutline=false}
+		local visuals={}
+		local function clearShurikenVisual(model)
+			local visual=visuals[model]
+			if not visual then return end
+			visuals[model]=nil
+			if visual.highlight then
+				Hub.instances[visual.highlight]=nil;Hub.assetTargets[visual.highlight]=nil
+				visual.highlight:Destroy()
+			end
+			for part,transparency in pairs(visual.parts) do
+				if part.Parent then pcall(function() part.Transparency=transparency end) end
+			end
+		end
+		local function updateShurikenVisuals()
+			local show=appearance.enabled or appearance.rainbowFill or appearance.rainbowOutline
+			local seen={}
+			local rainbow=Color3.fromHSV(os.clock()%5/5,1,1)
+			for _,record in pairs(records) do
+				local model=record.toy
+				if show and modes.kick and trusted(record.player) and model and created[model] and model.Parent==ownFolder() then
+					seen[model]=true
+					local visual=visuals[model]
+					if not visual then visual={parts={}};visuals[model]=visual end
+					local highlight=visual.highlight
+					if not highlight or highlight.Parent~=model then
+						if highlight then Hub.instances[highlight]=nil;Hub.assetTargets[highlight]=nil;highlight:Destroy() end
+						highlight=Hub.new("Highlight",model);highlight.Name="ArrivaWhitelistShurikenHighlight";visual.highlight=highlight
+					end
+					highlight.Adornee=model;highlight.Enabled=true;highlight.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+					highlight.FillColor=appearance.rainbowFill and rainbow or appearance.fill
+					highlight.OutlineColor=appearance.rainbowOutline and rainbow or appearance.outline
+					highlight.FillTransparency=appearance.fillAlpha;highlight.OutlineTransparency=appearance.outlineAlpha
+					for _,part in ipairs(model:GetDescendants()) do
+						if part:IsA("BasePart") and (part:IsA("MeshPart") or part.Name=="Part") then
+							if visual.parts[part]==nil then visual.parts[part]=part.Transparency end
+							part.Transparency=0
+						end
+					end
+				end
+			end
+			for model in pairs(visuals) do if not seen[model] then clearShurikenVisual(model) end end
+		end
+		local function appearanceChanged() updateShurikenVisuals();Hub.requestSave() end
+		appearanceGroup:AddToggle("WhitelistShurikenHighlight",{Text="Highlight whitelist shurikens",Default=false,Callback=function(on) appearance.enabled=on;appearanceChanged() end})
+		local function colorInput(id,label,key,default)
+			appearanceGroup:AddInput(id,{Text=label,Default=default,Finished=true,Callback=function(value)
+				local hex=tostring(value or ""):gsub("^#","")
+				if not hex:match("^%x%x%x%x%x%x$") then notify("Color warning","Enter a six-digit HEX color.",4,"warning");return end
+				appearance[key]=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16));appearanceChanged()
+			end})
+		end
+		colorInput("WhitelistShurikenFillColor","Fill color HEX","fill","FF0000")
+		colorInput("WhitelistShurikenOutlineColor","Outline color HEX","outline","FFFFFF")
+		appearanceGroup:AddSlider("WhitelistShurikenFillAlpha",{Text="Fill transparency",Default=0.5,Min=0,Max=1,Rounding=2,Callback=function(value) appearance.fillAlpha=value;appearanceChanged() end})
+		appearanceGroup:AddSlider("WhitelistShurikenOutlineAlpha",{Text="Outline transparency",Default=0,Min=0,Max=1,Rounding=2,Callback=function(value) appearance.outlineAlpha=value;appearanceChanged() end})
+		appearanceGroup:AddToggle("WhitelistShurikenRainbowFill",{Text="Rainbow fill",Default=false,Callback=function(on) appearance.rainbowFill=on;appearanceChanged() end})
+		appearanceGroup:AddToggle("WhitelistShurikenRainbowOutline",{Text="Rainbow outline",Default=false,Callback=function(on) appearance.rainbowOutline=on;appearanceChanged() end})
 		local function destroyToy(model)
+			clearShurikenVisual(model)
 			if not created[model] then return end
 			local folder=ownFolder()
 			if model.Parent and model.Parent==folder then
@@ -16828,8 +16890,12 @@ do
 			table.sort(details)
 			Library:Notify({Title="Whitelist assistance",Description=string.format("%d eligible players tracked; %d confirmed shuriken attachments. %s",tracked,active,allowVisits and "Distant visits enabled." or "Distant visits disabled.").."\n"..table.concat(details,"\n"),Time=10,Type="info"})
 		end})
-		local elapsed=0
-		Hub.connect(Run.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.2 then elapsed=0;Hub.sampleWhitelistAssistance() end end)
+		local elapsed,visualElapsed=0,0
+		Hub.connect(Run.Heartbeat,function(dt)
+			elapsed+=dt;visualElapsed+=dt
+			if elapsed>=0.2 then elapsed=0;Hub.sampleWhitelistAssistance() end
+			if visualElapsed>=0.05 then visualElapsed=0;updateShurikenVisuals() end
+		end)
 		Hub.connect(Players.PlayerRemoving,function(person) local record=records[person.UserId];if record then clearToy(record);records[person.UserId]=nil end end)
 		Hub.connect(me.CharacterRemoving,function()
 			epoch+=1
@@ -16843,6 +16909,7 @@ do
 			disposed=true;epoch+=1;finishVisit()
 			for _,record in pairs(records) do clearToy(record) end
 			for model in pairs(created) do destroyToy(model) end
+			for model in pairs(visuals) do clearShurikenVisual(model) end
 			table.clear(records);Hub.sampleWhitelistAssistance=nil
 		end)
 	end)()
@@ -17257,7 +17324,7 @@ do
 		Visual={sections={"Skybox Faces","Sun & Stars","Shaders","Water Appearance","Local environment","Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance"},controls={ToolTimeOverride="Sun & Stars",ToolTimeOfDay="Sun & Stars",ToolSyncTime="Sun & Stars"}},
 		Misc={sections={"Cheaters","Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Session tools"},
 			rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
-		Whitelist={sections={"Protected Players"}},
+		Whitelist={sections={"Protected Players","Whitelist Assistance","Whitelist Shuriken Appearance"}},
 		Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
 		KeyBinds={sections={"Menu & emergency","Action shortcuts","Missile throw","Keybind display"}},
 		Sound={sections={"Game Sound Filters","Toy Audio","Notification Sounds","Info Notifications","Warning Notifications","Success Notifications","Danger Notifications","Join Notifications","Leave Notifications","Respawn Notifications","Blackhole Notifications","Kick Notifications","Loop Alert Sounds","Blackhole Audio"},
@@ -17461,12 +17528,25 @@ end
 	commands.cmds = function()
 		message(
 			":to name | :select name | :add name | :remove name | :clear\n"
+				..":protect name — add to whitelist\n"
 				..":fly [on/off] | :unfly | :flyspeed 5–1000\n"
 				..":view name | :unview | :menu [on/off] | :save"
 		)
 	end
 
 	commands.help = commands.cmds
+
+	commands.protect = function(argument)
+		local person=target(argument)
+		local id=tostring(person.UserId)
+		Hub.manualWhitelist[id]=person.DisplayName.." (@"..person.Name..") ["..id.."]"
+		Hub.manualWhitelist["name:"..person.Name:lower()]=nil
+		-- Apply protection synchronously, before UI refreshes or disk saves.
+		Hub.reconcileProtection()
+		if Hub.refreshWhitelistUI then Hub.refreshWhitelistUI() end
+		Hub.queueSafetySave();Hub.requestSave()
+		message("Protected @"..person.Name..". Added to your whitelist.","success")
+	end
 
 	commands.select = function(argument)
 		selection(target(argument), "select")
