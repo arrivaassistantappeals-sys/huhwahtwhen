@@ -16,3 +16,18 @@ Compared against the uploaded Resonance v2.9 source, not an earlier Arriva revis
 Automated: full Luau compilation; original state-machine comparison; mocked repeated ownership requests, PartOwner confirmation, ReceiveAge-only rejection, timeout/error cleanup, original completion publication, train proof; existing respawn, leg-only ordering, cancelled spawn lock, saving, Anti Banana and plot-visit regressions. Owner-command and aura checks also pass.
 
 In-game: not performed. These checks establish source parity and mocked behavior, not server acceptance or successful gameplay protection. The previous added stability-verification regression is superseded by the original-completion tests.
+
+
+## Follow-up: interference after the first successful activation
+
+Found a concrete conflict between distant ownership acquisition and Arriva Anti Void: acquisition temporarily approaches the vehicle at high altitude, while Anti Void independently teleports the character to origin at Y >= 10,000. A mocked regression reproduces that conflict.
+
+Added a current-character setup/acquisition marker. Anti Void, grab freezing/recovery, extreme-velocity recovery, character flight, Loop TP, explosion anchoring, movement-correction Auto Reset and the legacy TeleportPlayer helper yield during that window. Their enabled settings are preserved. The marker clears at original completion, cleanup, cancellation and respawn; ordinary safety behavior resumes afterward. Flight does not recreate its controllers during setup.
+
+A previously confirmed non-train run now marks its vehicle for a fresh rebuild when invalidated. The next original loop discards that record through its existing cleanup and spawns a replacement, instead of repeatedly reusing a disturbed seat/controller. Shared map trains are never deleted through this rebuild flag. All seven original synchronous handler pairs are unchanged. This is one intentional additional retry condition beyond the original state-machine comparison above.
+
+Gucci's current vehicle is reserved against the creative toy manager's move/delete operations, creative shapes and object attraction. Anti Invis avoids repairing welds on the reserved Gucci seat. Legacy teleporting preserves the exact Gucci seat even after the vehicle is renamed.
+
+`!status` includes the last observed interruption: character changed/died, vehicle/seat missing, held, ragdolled, another seat/occupant, or an unspecified original validity change/stop. These describe observed state, not attribution to an attacker.
+
+Validation: full-script compilation and mocked interference/guard-resumption, disturbance/rebuild, fresh completion, shared-train exclusion, reservation and stale-character tests passed. Original controller comparison (excluding documented integration hooks and rebuild condition), ownership helper, respawn, leg-only ordering, save/Anti Banana/plot visit, owner-command and aura regressions also passed. No live Roblox verification was performed.

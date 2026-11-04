@@ -540,6 +540,16 @@ function Hub.reconcileProtection()
 		if not Hub.canAffect(instance) then Hub.restore(instance) end
 	end
 end
+-- Only the setup/acquisition window owns character movement; other toggles stay enabled.
+function Hub.gucciCharacterBusy(char)
+	return char~=nil and LocalPlayer.Character==char and (Hub.gucciSetupCharacter==char or Hub.gucciAcquiring==char)
+end
+function Hub.isGucciReserved(instance)
+	local run=Hub.gucciVehicleRun
+	local vehicle=run and run.Char==LocalPlayer.Character and run.Vehicle or nil
+	return instance~=nil and vehicle~=nil and vehicle.Parent~=nil and (instance==vehicle or instance:IsDescendantOf(vehicle))
+end
+
 function Hub.remoteAllowed(remote, ...)
 	if not remote or not Hub.canAffect(remote) then return false end
 	for index = 1, select("#", ...) do
@@ -3000,7 +3010,7 @@ do
 		local ticket = generation
 		task.delay(0.2, function()
 			if not enabled or not recoverMovement or generation ~= ticket or Player.Character ~= char
-				or (heldValue and heldValue.Value) or Hub.safeZoneLoopActive then return end
+				or (heldValue and heldValue.Value) or Hub.safeZoneLoopActive or Hub.gucciCharacterBusy(char) then return end
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
 			local ragdolled = hum and hum:FindFirstChild("Ragdolled")
 			if not hum or hum.Health <= 0 or hum.SeatPart or (ragdolled and ragdolled.Value) then return end
@@ -3018,7 +3028,7 @@ do
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		if not root or not hum or hum.Health <= 0 then return end
 		-- Keep deliberate seating and the safe-zone controller independent.
-		if hum.SeatPart or Hub.safeZoneLoopActive then return end
+		if hum.SeatPart or Hub.safeZoneLoopActive or Hub.gucciCharacterBusy(char) then return end
 		nextAttempt = os.clock() + 0.25
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
@@ -3041,7 +3051,7 @@ do
 		end
 		freezeConnection = Hub.connect(RunService.Heartbeat, function()
 			if not enabled or Player.Character ~= char or not root.Parent or hum.Health <= 0
-				or hum.SeatPart or Hub.safeZoneLoopActive or os.clock() - frozenAt >= 2 then release(); return end
+				or hum.SeatPart or Hub.safeZoneLoopActive or Hub.gucciCharacterBusy(char) or os.clock() - frozenAt >= 2 then release(); return end
 			root.AssemblyLinearVelocity = Vector3.zero
 			root.AssemblyAngularVelocity = Vector3.zero
 			root.CFrame = cframe
@@ -3517,7 +3527,7 @@ do
 			local hum=char and char:FindFirstChildOfClass("Humanoid")
 			local held=Player:FindFirstChild("IsHeld")
 			if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
-				or (held and held.Value) or Hub.safeZoneLoopActive then return end
+				or (held and held.Value) or Hub.safeZoneLoopActive or Hub.gucciCharacterBusy(char) then return end
 			local velocity,rotation=root.AssemblyLinearVelocity,root.AssemblyAngularVelocity
 			local unsafe=not vectorOK(root.Position) or not vectorOK(velocity) or not vectorOK(rotation)
 				or velocity.Magnitude>linearLimit or rotation.Magnitude>angularLimit
@@ -6497,9 +6507,10 @@ function TeleportPlayer(cframeOffset,teleportPriority)
 	local char=GetPlayerCharacter()
 	local root=char and char:FindFirstChild("HumanoidRootPart")
 	local hum=char and char:FindFirstChildOfClass("Humanoid")
-	if not root or not hum or hum.Health<=0 then return false end
+	if not root or not hum or hum.Health<=0 or Hub.gucciCharacterBusy(char) then return false end
 	root.CFrame=root.CFrame.Rotation+cframeOffset.Position
-	if not hum.SeatPart or not hum.SeatPart.Parent or hum.SeatPart.Parent.Name~="CreatureBlobman" then hum.Sit=false end
+	local run=Hub.gucciSeatRun
+	if not (run and run.Char==char and run.Seat==hum.SeatPart) and (not hum.SeatPart or not hum.SeatPart.Parent or hum.SeatPart.Parent.Name~="CreatureBlobman") then hum.Sit=false end
 	return true
 end
 
@@ -9264,6 +9275,7 @@ do
 			return char and char:FindFirstChild("HumanoidRootPart")
 		end
 		local function safeAssembly(part,folder)
+			if Hub.isGucciReserved(part) then return nil end
 			if Hub.isMissileReserved and Hub.isMissileReserved(part) then return nil end
 			if part and ((Hub.toyBuildClaims and Hub.toyBuildClaims[part.AssemblyRootPart or part]) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[part.AssemblyRootPart or part])) then return nil end
 			if not part.Parent or part.Anchored or not part:IsDescendantOf(folder) then return nil end
@@ -9584,6 +9596,7 @@ do
 			return false
 		end
 		local function eligible(part)
+			if Hub.isGucciReserved(part) then return false end
 			if part and ((Hub.isMissileReserved and Hub.isMissileReserved(part)) or (Hub.toyBuildClaims and Hub.toyBuildClaims[part.AssemblyRootPart or part]) or (Hub.missileLaunchClaims and Hub.missileLaunchClaims[part.AssemblyRootPart or part])) then return false end
 			if not part or not part.Parent or not part:IsDescendantOf(Workspace) or part.Anchored or not Hub.canAffect(part) then return false end
 			if part:IsA("Seat") or part:IsA("VehicleSeat") or characterPart(part) then return false end
@@ -11326,8 +11339,10 @@ do
 				if heartbeat then heartbeat:Disconnect();Hub.connections[heartbeat]=nil;heartbeat=nil end
 				if moved and Player.Character==char and root.Parent==char and head.Parent==char then root.CFrame=visibleRoot;head.CFrame=visibleHead end
 				gucciOwnershipCleanup=nil
+				if Hub.gucciAcquiring==char then Hub.gucciAcquiring=nil end
 			end
 			gucciOwnershipCleanup=restore
+			Hub.gucciAcquiring=char
 			local ok,message=xpcall(function()
 				if moved then
 					originalRunService:BindToRenderStep("ArrivaGucciOwnership",Enum.RenderPriority.Camera.Value-1,function()
@@ -11505,15 +11520,32 @@ do
 			local function clearGucciConfirmation(record,announce)
 				if not record then return end
 				local wasActive=record.Confirmed
+				if wasActive then
+					local hum=record.Hum;local rag=hum and hum:FindFirstChild("Ragdolled")
+					local reason=Player.Character~=record.Char and "Character changed."
+						or (not record.Vehicle or not record.Vehicle.Parent) and "Gucci vehicle disappeared."
+						or (not record.Seat or not record.Seat.Parent) and "Gucci seat disappeared."
+						or (not hum or not hum.Parent or hum.Health<=0) and "Character died or humanoid disappeared."
+						or isHeld.Value and "Character was held."
+						or (rag and rag.Value) and "Character became ragdolled."
+						or (record.Seat.Occupant and record.Seat.Occupant~=hum) and "Another humanoid occupied the Gucci seat."
+						or (hum.SeatPart and hum.SeatPart~=record.Seat) and "Character entered another seat."
+						or "Original controller validity changed or Gucci was stopped."
+					Hub.gucciLastInterruption=reason
+					-- A disturbed active toy can retain stale seat/controller state. Rebuild it once.
+					record.RebuildRequired=record.Type~="Train"
+				end
 				record.Confirmed=false
 				if Hub.gucciVerifiedRun==record then Hub.gucciVerifiedRun=nil end
 				if Hub.gucciSeatRun==record then Hub.gucciSeatRun=nil end
-				if announce and wasActive and Hub.alive and tbl8.GucciAntiGrab and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end
+				if Hub.gucciSetupCharacter==record.Char then Hub.gucciSetupCharacter=nil end
+				if announce and wasActive and Hub.alive and tbl8.GucciAntiGrab and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying","Gucci interrupted: "..tostring(Hub.gucciLastInterruption)) end
 			end
 			local function publishGucciCompletion(record,isValid,weldObserved)
 				if not weldObserved or not isValid() or Player.Character~=record.Char then return end
 				if record.Type~="Train" and (not record.BP or record.BP.Parent~=record.Root) then return end
 				record.Confirmed=true
+				if Hub.gucciSetupCharacter==record.Char then Hub.gucciSetupCharacter=nil end
 				Hub.gucciVerifiedRun=record;Hub.gucciVerificationReason=nil
 				if Hub.gucciStage~="Active" and Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 			end
@@ -11582,6 +11614,7 @@ do
 					tbl16.InvConn:Disconnect()
 				end
 
+				if Hub.gucciVehicleRun==tbl16 then Hub.gucciVehicleRun=nil end
 				local vehicle = tbl16.Vehicle
 				local seat = tbl16.Seat
 
@@ -11621,7 +11654,7 @@ do
 							n36 = os.clock() + 1
 						end
 
-						if tbl16 and (tbl16.Type ~= gucciType or not tbl16.Vehicle.Parent or not tbl16.Seat.Parent or tbl16.Char ~= v24) then
+						if tbl16 and (tbl16.RebuildRequired or tbl16.Type ~= gucciType or not tbl16.Vehicle.Parent or not tbl16.Seat.Parent or tbl16.Char ~= v24) then
 							fn23()
 						end
 
@@ -11678,7 +11711,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
-												Hub.gucciSeatRun=v27
+												Hub.gucciSeatRun=v27;Hub.gucciVehicleRun=v27;Hub.gucciSetupCharacter=v24
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -11860,7 +11893,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
-												Hub.gucciSeatRun=v27
+												Hub.gucciSeatRun=v27;Hub.gucciVehicleRun=v27;Hub.gucciSetupCharacter=v24
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12065,7 +12098,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
-												Hub.gucciSeatRun=v27
+												Hub.gucciSeatRun=v27;Hub.gucciVehicleRun=v27;Hub.gucciSetupCharacter=v24
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12247,7 +12280,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
-												Hub.gucciSeatRun=v27
+												Hub.gucciSeatRun=v27;Hub.gucciVehicleRun=v27;Hub.gucciSetupCharacter=v24
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12445,7 +12478,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
-												Hub.gucciSeatRun=v27
+												Hub.gucciSeatRun=v27;Hub.gucciVehicleRun=v27;Hub.gucciSetupCharacter=v24
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12627,7 +12660,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
-												Hub.gucciSeatRun=v27
+												Hub.gucciSeatRun=v27;Hub.gucciVehicleRun=v27;Hub.gucciSetupCharacter=v24
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12810,7 +12843,7 @@ do
 							v27 = tbl16
 							vehicle = v27.Vehicle
 							seat = v27.Seat
-							Hub.gucciSeatRun=v27
+							Hub.gucciSeatRun=v27;Hub.gucciVehicleRun=v27;Hub.gucciSetupCharacter=v24
 							root = v27.Root
 							flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -13447,6 +13480,7 @@ do
 			tbl12.ResetGucciCharacter=function()
 				if gucciOwnershipCleanup then gucciOwnershipCleanup() end
 				tbl8.GucciAntiGrab=false
+				Hub.gucciSetupCharacter=nil;Hub.gucciAcquiring=nil
 				local thread=gucciThread;gucciThread=nil;flag12=nil
 				if thread and thread~=coroutine.running() then pcall(Hub.nativeTask.cancel,thread);Hub.threads[thread]=nil end
 				local record=tbl16
@@ -13465,6 +13499,7 @@ do
 			tbl12.SetGucciAntiGrab = function(arg)
 				tbl8.GucciAntiGrab = arg and not flag11
 				if not tbl8.GucciAntiGrab then
+					Hub.gucciSetupCharacter=nil
 					if gucciOwnershipCleanup then gucciOwnershipCleanup() end
 					local ok,err=pcall(fn23)
 					if not ok then warn("[Gucci pause cleanup] "..tostring(err)) end
@@ -14022,7 +14057,7 @@ do
 		local corrections=ReplicatedStorage:FindFirstChild("GameCorrectionEvents")
 		local correctionRemote=corrections and corrections:FindFirstChild("GameCorrectionsNotify")
 		if correctionRemote then Hub.connect(correctionRemote.OnClientEvent,function(reason)
-				if reason~="Flying" then return end
+				if reason~="Flying" or Hub.gucciCharacterBusy(Player.Character) then return end
 				local now=os.clock()
 				if now-lastFlag>1 then lastFlag=now;tbl9.KickFlags=1 else tbl9.KickFlags+=1 end
 				if not tbl8.AutoReset then return end
@@ -14036,7 +14071,7 @@ do
 		local loopSaved,loopCharacter
 		bind("LoopTP","LoopTP",0.04,function()
 			local char,root,hum,alive=charAlive()
-			if not alive then return end
+			if not alive or Hub.gucciCharacterBusy(char) then return end
 			if loopCharacter~=char then loopCharacter=char;loopSaved=root.CFrame end
 			char:PivotTo(CFrame.new(math.random(-1000,1000),-7.35,math.random(-1000,1000)))
 		end,function()
@@ -14139,8 +14174,8 @@ do
 
 		-- Source anti-void thresholds and origin recovery; keep the separate safe-zone controls.
 		bind("AntiVoidToggle","AntiVoid",0.03,function()
-			local _,root,hum,alive=charAlive()
-			if not alive then return end
+			local char,root,hum,alive=charAlive()
+			if not alive or Hub.gucciCharacterBusy(char) then return end
 			if root.Position.Y>=10000 or root.Position.Y<=-500 then tbl12.Teleport(root,CFrame.new(0,15,0)) end
 		end)
 
@@ -14150,7 +14185,7 @@ do
 		Hub.connect(Workspace.ChildAdded,function(part)
 			if not tbl8.AntiExplosion or part.Name~="Part" or not part:IsA("BasePart") then return end
 			local char,root,hum,alive=charAlive()
-			if not alive or (part.Position-root.Position).Magnitude>20 then return end
+			if not alive or Hub.gucciCharacterBusy(char) or (part.Position-root.Position).Magnitude>20 then return end
 			local record=explosionAnchors[root]
 			if not record then record={original=root.Anchored,untilTime=0};explosionAnchors[root]=record end
 			record.untilTime=os.clock()+0.02;root.Anchored=true
@@ -15171,6 +15206,7 @@ do
 			Hub.sourceDefense=nil
 			Hub.sourceGucci=nil
 			Hub.reportGucciStatus=nil;Hub.gucciVerifiedRun=nil;Hub.gucciVerificationReason=nil
+			Hub.gucciSeatRun=nil;Hub.gucciVehicleRun=nil;Hub.gucciSetupCharacter=nil;Hub.gucciAcquiring=nil
 		end)
 	end)()
 end
@@ -15196,7 +15232,7 @@ do
 					if root then if savedMass[root]==nil then savedMass[root]=root.Massless end;root.Massless=false end
 					local seat=hum and hum.Sit and hum.SeatPart
 					local weld=seat and seat:FindFirstChild("SeatWeld")
-					if weld and not weld.Enabled then if savedWeld[weld]==nil then savedWeld[weld]=weld.Enabled end;weld.Enabled=true end
+					if weld and not weld.Enabled and not Hub.isGucciReserved(seat) then if savedWeld[weld]==nil then savedWeld[weld]=weld.Enabled end;weld.Enabled=true end
 				end end
 			for part in pairs(savedMass) do if not part.Parent then savedMass[part]=nil end end
 			for weld in pairs(savedWeld) do if not weld.Parent then savedWeld[weld]=nil end end
@@ -15230,7 +15266,7 @@ do
 			local char=Player.Character
 			local root=char and char:FindFirstChild("HumanoidRootPart")
 			local hum=char and char:FindFirstChildOfClass("Humanoid")
-			if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored or Hub.safeZoneLoopActive then stop();return end
+			if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored or Hub.safeZoneLoopActive or Hub.gucciCharacterBusy(char) then stop();return end
 			if flight and (flight.char~=char or flight.root~=root or not flight.velocity.Parent or not flight.gyro.Parent) then stop() end
 			if not flight then
 				if Hub.stopBlobFlight then Hub.stopBlobFlight() end
@@ -15824,7 +15860,7 @@ do
 		local function folder() return Workspace:FindFirstChild(Player.Name.."SpawnedInToys") end
 		local function own(model)
 			local f=folder()
-			return f and model and model.Parent==f and model:IsA("Model")
+			return f and model and model.Parent==f and model:IsA("Model") and not Hub.isGucciReserved(model)
 		end
 		local function movable(model)
 			if not own(model) or model:FindFirstChildOfClass("Humanoid") then return false end
@@ -18435,7 +18471,7 @@ end
 		for _ in pairs(Hub.protectionStartupJobs) do pending+=1 end
 		for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then loops+=1 end end
 		message(string.format("Gucci: %s\nProtection setup jobs: %d | Active action loops: %d\nSettings restore: %s | Storage: %s%s",
-			tostring(Hub.gucciStage or "off"),pending,loops,progress and (progress.completed.."/"..progress.total) or "none",
+			tostring(Hub.gucciStage or "off")..(Hub.gucciLastInterruption and " | Last interruption: "..Hub.gucciLastInterruption or ""),pending,loops,progress and (progress.completed.."/"..progress.total) or "none",
 			Hub.storage and "available" or "unavailable",(Hub.gucciWaitingReason and ("\n"..Hub.gucciWaitingReason) or "")
 				..(Hub.gucciVerificationReason and ("\nVerification: "..Hub.gucciVerificationReason) or "")
 				.."\nAnti Kick: "..tostring(Hub.antiKickStage or "Disabled")
