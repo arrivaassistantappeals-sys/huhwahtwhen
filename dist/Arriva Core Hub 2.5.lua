@@ -3558,6 +3558,9 @@ do
 			if not enabled or not char then return end
 			local function release(active,seat)
 				if not enabled or not active or Player.Character~=char then return end
+				-- Preserve only the active current-character Gucci seat (all supported vehicles).
+				local run=Hub.gucciSeatRun
+				if run and run.Char==char and run.Seat==seat then return end
 				-- Preserve the hub's deliberate Blobman seating sequence.
 				local cursor=seat
 				while cursor and cursor~=Workspace do
@@ -11297,6 +11300,66 @@ do
 			if root then tbl11.RagdollRemote:FireServer(root,0.35);return true end
 			return false
 		end
+		-- Gucci's original ownership contract: PartOwner, grab offset and heartbeat retries.
+		-- Isolated from the shared helper so other tools retain their existing behavior.
+		local gucciOwnershipCleanup
+		tbl12.GucciSNO=function(part)
+			local char,root,hum=tbl12.Char()
+			local head=char and char:FindFirstChild("Head")
+			if flag11 or not part or not part.Parent or not root or not hum or hum.Health<=0 or not head or not Hub.canAffect(part) then return false end
+			local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+			if not folder or not part:IsDescendantOf(folder) then return false end
+			local function owned()
+				if not part.Parent then return false end
+				local owner=part:FindFirstChild("PartOwner")
+				if not owner and part.Parent then owner=part.Parent:FindFirstChild("PartOwner",true) end
+				return owner and owner.Value==Player.Name or false
+			end
+			if owned() then return true end
+			if gucciOwnershipCleanup then return false end
+			local moved=(root.Position-part.Position).Magnitude>=31
+			local visibleRoot,visibleHead=root.CFrame,head.CFrame
+			local serverFrame=visibleRoot
+			local heartbeat,bound
+			local function restore()
+				if bound then originalRunService:UnbindFromRenderStep("ArrivaGucciOwnership");bound=false end
+				if heartbeat then heartbeat:Disconnect();Hub.connections[heartbeat]=nil;heartbeat=nil end
+				if moved and Player.Character==char and root.Parent==char and head.Parent==char then root.CFrame=visibleRoot;head.CFrame=visibleHead end
+				gucciOwnershipCleanup=nil
+			end
+			gucciOwnershipCleanup=restore
+			local ok,message=xpcall(function()
+				if moved then
+					originalRunService:BindToRenderStep("ArrivaGucciOwnership",Enum.RenderPriority.Camera.Value-1,function()
+						if Player.Character==char and root.Parent==char and head.Parent==char then root.CFrame=visibleRoot;head.CFrame=visibleHead end
+					end);bound=true
+					heartbeat=Hub.connect(originalRunService.Heartbeat,function()
+						if Player.Character==char and root.Parent==char and head.Parent==char then
+							visibleRoot,visibleHead=root.CFrame,head.CFrame;root.CFrame=serverFrame;head.CFrame=serverFrame
+						end
+					end)
+				end
+				local deadline=os.clock()+0.65
+				while Hub.alive and not flag11 and tbl8.GucciAntiGrab and Player.Character==char and root.Parent==char
+					and part.Parent and hum.Health>0 and not owned() and os.clock()<deadline do
+					local predicted=part.CFrame+part.AssemblyLinearVelocity*math.clamp(Player:GetNetworkPing(),0,0.35)
+					if moved then serverFrame=predicted-Vector3.new(0,22,0) end
+					originalRunService.Heartbeat:Wait()
+					if not Hub.alive or flag11 or not tbl8.GucciAntiGrab or Player.Character~=char or not part.Parent or hum.Health<=0 then break end
+					local origin=((moved and serverFrame or root.CFrame)*CFrame.new(0,1.593,0)).Position
+					local basis=(predicted.Position-origin).Magnitude>0.000001 and CFrame.new(origin,predicted.Position) or Hub.safeLookAt(origin,predicted.Position)
+					if basis then Hub.fire(setNetworkOwnerEvent,part,basis) end
+				end
+			end,debug.traceback)
+			restore()
+			if not ok then warn("[Gucci ownership] "..tostring(message));return false end
+			local acquired=Player.Character==char and part.Parent and owned() or false
+			if not acquired and Hub.reportGucciStatus and tbl8.GucciAntiGrab and Player.Character==char then
+				Hub.gucciVerificationReason="Game did not confirm the toy's PartOwner during acquisition."
+				Hub.reportGucciStatus("Retrying","Gucci is retrying ownership acquisition; waiting for the game's PartOwner confirmation.")
+			end
+			return acquired
+		end
 		local obj=setmetatable({},{__mode="k"})
 		local obj2=setmetatable({},{__mode="k"})
 		local runtimeConnections={}
@@ -11441,66 +11504,18 @@ do
 			-- GUCCI CONFIRMATION BEGIN
 			local function clearGucciConfirmation(record,announce)
 				if not record then return end
-				record.ConfirmEpoch=(record.ConfirmEpoch or 0)+1
-				record.Confirmed=false;record.OwnershipChecked=false
+				local wasActive=record.Confirmed
+				record.Confirmed=false
 				if Hub.gucciVerifiedRun==record then Hub.gucciVerifiedRun=nil end
-				local worker=record.ConfirmWorker;record.ConfirmWorker=nil
-				if worker and coroutine.status(worker)~="dead" and worker~=coroutine.running() then
-					pcall(Hub.nativeTask.cancel,worker);Hub.threads[worker]=nil
-				end
-				if announce and Hub.alive and not flag11 and tbl8.GucciAntiGrab and tbl16==record
-					and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end
+				if Hub.gucciSeatRun==record then Hub.gucciSeatRun=nil end
+				if announce and wasActive and Hub.alive and tbl8.GucciAntiGrab and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end
 			end
-			local function beginGucciConfirmation(record,isValid,weldObserved)
-				clearGucciConfirmation(record,false)
-				if not weldObserved then return end
-				local ticket=record.ConfirmEpoch
-				if Hub.reportGucciStatus then Hub.reportGucciStatus("Verifying") end
-				record.ConfirmWorker=task.spawn(function()
-					local stableSince
-					while Hub.alive and not flag11 and tbl8.GucciAntiGrab and tbl16==record and record.ConfirmEpoch==ticket do
-						local checked,valid=pcall(isValid)
-						if not checked or not valid then clearGucciConfirmation(record,true);return end
-						local hum,hrp=record.Hum,record.HRP
-						local seat,vehicle=record.Seat,record.Vehicle
-						local ragdolled=hum and hum:FindFirstChild("Ragdolled")
-						local weld=seat and seat:FindFirstChild("SeatWeld")
-						local reason
-						if Player.Character~=record.Char or not hum or hum.Parent~=record.Char or hum.Health<=0 or not hrp or hrp.Parent~=record.Char then reason="Current character is not ready."
-						elseif not vehicle or not vehicle.Parent or not seat or not seat.Parent or not seat:IsDescendantOf(vehicle) then reason="Vehicle or seat is unavailable."
-						elseif record.Ragdoll or not ragdolled or ragdolled.Value or isHeld.Value then reason="Waiting for ragdoll/held state to release."
-						elseif hum.SeatPart and hum.SeatPart~=seat then reason="Character is seated in another vehicle."
-						elseif seat.Occupant and seat.Occupant~=hum then reason="Another humanoid occupies the seat."
-						elseif weld and weld.Enabled then reason="Waiting for the actual SeatWeld to release."
-						elseif record.Type~="Train" then
-							local root=record.Root
-							if not root or not root.Parent or not record.BP or record.BP.Parent~=root or not record.OwnershipChecked then
-								reason="Waiting for the original ownership/controller setup to complete."
-							end
-						end
-						Hub.gucciVerificationReason=reason
-						if not reason then
-							stableSince=stableSince or os.clock()
-							if os.clock()-stableSince>=1 then
-								record.Confirmed=true
-								-- Republish if an older status listener cleared only the public pointer.
-								if Hub.gucciVerifiedRun~=record or Hub.gucciStage~="Active" then
-									Hub.gucciVerifiedRun=record
-									if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
-								end
-							end
-						else
-							stableSince=nil
-							if record.Confirmed then
-								record.Confirmed=false
-								if Hub.gucciVerifiedRun==record then Hub.gucciVerifiedRun=nil end
-								if Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying",reason) end
-							end
-						end
-						task.wait(0.1)
-					end
-					clearGucciConfirmation(record,false)
-				end)
+			local function publishGucciCompletion(record,isValid,weldObserved)
+				if not weldObserved or not isValid() or Player.Character~=record.Char then return end
+				if record.Type~="Train" and (not record.BP or record.BP.Parent~=record.Root) then return end
+				record.Confirmed=true
+				Hub.gucciVerifiedRun=record;Hub.gucciVerificationReason=nil
+				if Hub.gucciStage~="Active" and Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
 			end
 			-- GUCCI CONFIRMATION END
 
@@ -11586,16 +11601,13 @@ do
 				tbl16 = nil
 			end
 
-			local function fn24()
+						local function fn24()
 				local character = localPlayer.Character
 				local n36 = 0
-				local attempts=0
 				local v23 = nil
 				local v24, v25, v26, gucciType, ragdolled, object, v27, seat
 
 				while tbl8.GucciAntiGrab do
-					attempts+=1
-					if attempts>1 and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end
 					local exitTo = nil
 					local vehicle, root, flag13, fn25, flag14, now3, cFrame2, n37, connection, flag15, flag16, now4, flag17, parent2, v28, bodyPosition, random, parent3, seatPart, flag18, occupant, playerFromCharacter
 
@@ -11666,6 +11678,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
+												Hub.gucciSeatRun=v27
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -11757,7 +11770,6 @@ do
 															v26.Sit = false
 															now4 = os.clock()
 															n37 = now4 + 0.15
-															beginGucciConfirmation(v27,fn25,flag14)
 
 															if now4 < n36 then
 																tbl12.Teleport(v25, cFrame2)
@@ -11768,7 +11780,7 @@ do
 
 															if parent2 then
 																v28 = root:IsDescendantOf(workspace.PlotItems)
-																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.GucciSNO(root)
 															end
 
 															if parent2 then
@@ -11785,10 +11797,10 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
-																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
+																		publishGucciCompletion(v27,fn25,flag14)
 																		task.wait()
 																	end
 
@@ -11848,6 +11860,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
+												Hub.gucciSeatRun=v27
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -11939,7 +11952,6 @@ do
 															v26.Sit = false
 															now4 = os.clock()
 															n37 = now4 + 0.15
-															beginGucciConfirmation(v27,fn25,flag14)
 
 															if now4 < n36 then
 																tbl12.Teleport(v25, cFrame2)
@@ -11950,7 +11962,7 @@ do
 
 															if parent2 then
 																v28 = root:IsDescendantOf(workspace.PlotItems)
-																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.GucciSNO(root)
 															end
 
 															if parent2 then
@@ -11967,10 +11979,10 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
-																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
+																		publishGucciCompletion(v27,fn25,flag14)
 																		task.wait()
 																	end
 
@@ -12053,6 +12065,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
+												Hub.gucciSeatRun=v27
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12144,7 +12157,6 @@ do
 															v26.Sit = false
 															now4 = os.clock()
 															n37 = now4 + 0.15
-															beginGucciConfirmation(v27,fn25,flag14)
 
 															if now4 < n36 then
 																tbl12.Teleport(v25, cFrame2)
@@ -12155,7 +12167,7 @@ do
 
 															if parent2 then
 																v28 = root:IsDescendantOf(workspace.PlotItems)
-																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.GucciSNO(root)
 															end
 
 															if parent2 then
@@ -12172,10 +12184,10 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
-																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
+																		publishGucciCompletion(v27,fn25,flag14)
 																		task.wait()
 																	end
 
@@ -12235,6 +12247,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
+												Hub.gucciSeatRun=v27
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12326,7 +12339,6 @@ do
 															v26.Sit = false
 															now4 = os.clock()
 															n37 = now4 + 0.15
-															beginGucciConfirmation(v27,fn25,flag14)
 
 															if now4 < n36 then
 																tbl12.Teleport(v25, cFrame2)
@@ -12337,7 +12349,7 @@ do
 
 															if parent2 then
 																v28 = root:IsDescendantOf(workspace.PlotItems)
-																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.GucciSNO(root)
 															end
 
 															if parent2 then
@@ -12354,10 +12366,10 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
-																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
+																		publishGucciCompletion(v27,fn25,flag14)
 																		task.wait()
 																	end
 
@@ -12433,6 +12445,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
+												Hub.gucciSeatRun=v27
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12524,7 +12537,6 @@ do
 															v26.Sit = false
 															now4 = os.clock()
 															n37 = now4 + 0.15
-															beginGucciConfirmation(v27,fn25,flag14)
 
 															if now4 < n36 then
 																tbl12.Teleport(v25, cFrame2)
@@ -12535,7 +12547,7 @@ do
 
 															if parent2 then
 																v28 = root:IsDescendantOf(workspace.PlotItems)
-																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.GucciSNO(root)
 															end
 
 															if parent2 then
@@ -12552,10 +12564,10 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
-																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
+																		publishGucciCompletion(v27,fn25,flag14)
 																		task.wait()
 																	end
 
@@ -12615,6 +12627,7 @@ do
 												v27 = tbl16
 												vehicle = v27.Vehicle
 												seat = v27.Seat
+												Hub.gucciSeatRun=v27
 												root = v27.Root
 												flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12706,7 +12719,6 @@ do
 															v26.Sit = false
 															now4 = os.clock()
 															n37 = now4 + 0.15
-															beginGucciConfirmation(v27,fn25,flag14)
 
 															if now4 < n36 then
 																tbl12.Teleport(v25, cFrame2)
@@ -12717,7 +12729,7 @@ do
 
 															if parent2 then
 																v28 = root:IsDescendantOf(workspace.PlotItems)
-																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.GucciSNO(root)
 															end
 
 															if parent2 then
@@ -12734,10 +12746,10 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
-																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
+																		publishGucciCompletion(v27,fn25,flag14)
 																		task.wait()
 																	end
 
@@ -12798,6 +12810,7 @@ do
 							v27 = tbl16
 							vehicle = v27.Vehicle
 							seat = v27.Seat
+							Hub.gucciSeatRun=v27
 							root = v27.Root
 							flag13 = seat.Occupant and seat.Occupant ~= v26
 
@@ -12899,7 +12912,6 @@ do
 										v26.Sit = false
 										now4 = os.clock()
 										n37 = now4 + 0.15
-										beginGucciConfirmation(v27,fn25,flag14)
 
 										if now4 < n36 then
 											tbl12.Teleport(v25, cFrame2)
@@ -12910,7 +12922,7 @@ do
 
 										if parent2 then
 											v28 = root:IsDescendantOf(workspace.PlotItems)
-											parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+											parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.GucciSNO(root)
 										end
 
 										if parent2 then
@@ -12930,10 +12942,10 @@ do
 												v27.BP = bodyPosition
 												vehicle.Name = "GucciRSC"
 												bodyPosition.Parent = root
-												v27.OwnershipChecked = true
 												v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 												while fn25() do
+													publishGucciCompletion(v27,fn25,flag14)
 													task.wait()
 												end
 
@@ -12966,6 +12978,7 @@ do
 											v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 											while fn25() do
+												publishGucciCompletion(v27,fn25,flag14)
 												task.wait()
 											end
 
@@ -13038,6 +13051,7 @@ do
 								v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 								while fn25() do
+									publishGucciCompletion(v27,fn25,flag14)
 									task.wait()
 								end
 
@@ -13100,6 +13114,7 @@ do
 								v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 								while fn25() do
+									publishGucciCompletion(v27,fn25,flag14)
 									task.wait()
 								end
 
@@ -13171,6 +13186,7 @@ do
 								v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 								while fn25() do
+									publishGucciCompletion(v27,fn25,flag14)
 									task.wait()
 								end
 
@@ -13233,6 +13249,7 @@ do
 								v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 								while fn25() do
+									publishGucciCompletion(v27,fn25,flag14)
 									task.wait()
 								end
 
@@ -13320,6 +13337,7 @@ do
 								v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 								while fn25() do
+									publishGucciCompletion(v27,fn25,flag14)
 									task.wait()
 								end
 
@@ -13382,6 +13400,7 @@ do
 								v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 								while fn25() do
+									publishGucciCompletion(v27,fn25,flag14)
 									task.wait()
 								end
 
@@ -13426,6 +13445,7 @@ do
 			end
 
 			tbl12.ResetGucciCharacter=function()
+				if gucciOwnershipCleanup then gucciOwnershipCleanup() end
 				tbl8.GucciAntiGrab=false
 				local thread=gucciThread;gucciThread=nil;flag12=nil
 				if thread and thread~=coroutine.running() then pcall(Hub.nativeTask.cancel,thread);Hub.threads[thread]=nil end
@@ -13445,6 +13465,7 @@ do
 			tbl12.SetGucciAntiGrab = function(arg)
 				tbl8.GucciAntiGrab = arg and not flag11
 				if not tbl8.GucciAntiGrab then
+					if gucciOwnershipCleanup then gucciOwnershipCleanup() end
 					local ok,err=pcall(fn23)
 					if not ok then warn("[Gucci pause cleanup] "..tostring(err)) end
 					return
@@ -15020,8 +15041,8 @@ do
 			Starting="Gucci starting; preparing the seat/weld controller.",
 			["Waiting for leg removal"]="Anti Banana is removing legs. Gucci starts once that finishes.",
 			Retrying="Gucci retrying; waiting for seat/weld confirmation.",
-			Verifying="Gucci is verifying seat release, ownership and controller stability.",
-			Active="Gucci active. Setup complete; seat release and controller checks are stable.",
+			Verifying="Gucci is completing the original setup sequence.",
+			Active="Gucci active. Original setup completed.",
 			["Waiting for respawn"]="Gucci is waiting for your character to respawn.",
 			Disabled="Gucci disabled.",
 			Error="Gucci stopped because its controller encountered an error.",
@@ -15040,8 +15061,8 @@ do
 			local repeated=lastPhase==phase
 			lastPhase=phase
 			-- Retry reminders are useful, but never emit a toast every controller frame.
-			local cooldown=phase=="Retrying" and 10 or 2
-			if repeated and phase~="Retrying" then return end
+			local cooldown=(phase=="Active" or phase=="Retrying") and 30 or 2
+			if repeated then return end
 			if now-(notices[phase] or -math.huge)<cooldown then return end
 			notices[phase]=now
 			notify("Gucci",message or messages[phase] or ("Gucci: "..phase),4,
