@@ -59,3 +59,5 @@ Manual and automatic slot spins now show a Slot winnings notification and a last
 NPC selection is session-only. NPC viewing, steering and exit teleport default off. Roblox must actually grant local NPC/prop ownership for movement to replicate; these controls do not guarantee the server accepts it. NPCs driven by game scripts may override humanoid movement.
 
 Automated verification covers formation target/range/death/leave/respawn handling; NPC view/input/camera restoration and ownership-loss cleanup; camera ground, distance, interaction-lock and confirmed-Gucci-root gates; own-folder, anchored, external-connection and missile exclusions; and recovery cancellation/error cleanup. Full-script compilation and existing Gucci-order, command UI and slot-result regressions also pass. UI layout, touch/gamepad feel, NPC movement, ownership replication and camera travel still need in-game verification.
+
+The latest [respawn and verification patch](Arriva%20Core%20Hub%202.5%20respawn%20fixes.md) restarts enabled protections for the new character and aligns the Gucci observer with the original setup checkpoint. Use !status to see exact pending setup and anti-kick details.

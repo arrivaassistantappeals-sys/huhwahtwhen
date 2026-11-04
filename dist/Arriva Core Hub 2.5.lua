@@ -2813,7 +2813,7 @@ end
 
 Hub.connect(Player.CharacterRemoving, function()
 	Hub.gucciRespawnReadyAt=math.huge
-	Hub.gucciStage="Waiting for respawn"
+	Hub.gucciStage=Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value and "Waiting for respawn" or "Disabled"
 	if Hub.updateGucciStatus then Hub.updateGucciStatus() end
 	Hub.blobGeneration = (Hub.blobGeneration or 0) + 1
 	Hub.trainGeneration = (Hub.trainGeneration or 0) + 1
@@ -11237,11 +11237,11 @@ do
 			until os.clock()>=deadline
 		end
 		tbl12.SpawnToy=function(...)
-			if spawnBusy then return nil end
-			spawnBusy=true
+			if spawnBusy and spawnBusy.char==Player.Character then return nil end
+			local token={char=Player.Character};spawnBusy=token
 			local args=table.pack(...)
 			local ok,result=xpcall(function() return sourceSpawnImpl(table.unpack(args,1,args.n)) end,debug.traceback)
-			spawnBusy=false
+			if spawnBusy==token then spawnBusy=false end
 			if not ok then warn("[Source defense spawn] "..tostring(result));return nil end
 			return result
 		end
@@ -11425,12 +11425,13 @@ do
 		do
 			local tbl16 = nil
 			local flag12 = nil
+			local gucciThread
 
 			-- GUCCI CONFIRMATION BEGIN
 			local function clearGucciConfirmation(record,announce)
 				if not record then return end
 				record.ConfirmEpoch=(record.ConfirmEpoch or 0)+1
-				record.Confirmed=false
+				record.Confirmed=false;record.OwnershipChecked=false
 				if Hub.gucciVerifiedRun==record then Hub.gucciVerifiedRun=nil end
 				local worker=record.ConfirmWorker;record.ConfirmWorker=nil
 				if worker and coroutine.status(worker)~="dead" and worker~=coroutine.running() then
@@ -11446,40 +11447,43 @@ do
 				if Hub.reportGucciStatus then Hub.reportGucciStatus("Verifying") end
 				record.ConfirmWorker=task.spawn(function()
 					local stableSince
-					while Hub.alive and not flag11 and tbl8.GucciAntiGrab and tbl16==record
-						and record.ConfirmEpoch==ticket do
+					while Hub.alive and not flag11 and tbl8.GucciAntiGrab and tbl16==record and record.ConfirmEpoch==ticket do
 						local checked,valid=pcall(isValid)
 						if not checked or not valid then clearGucciConfirmation(record,true);return end
 						local hum,hrp=record.Hum,record.HRP
 						local seat,vehicle=record.Seat,record.Vehicle
 						local ragdolled=hum and hum:FindFirstChild("Ragdolled")
 						local weld=seat and seat:FindFirstChild("SeatWeld")
-						local ready=Player.Character==record.Char and hum and hum.Parent==record.Char
-							and hum.Health>0 and hrp and hrp.Parent==record.Char
-							and vehicle and vehicle.Parent and seat and seat.Parent and seat:IsDescendantOf(vehicle)
-							and not hum.Sit and hum.SeatPart==nil and not record.Ragdoll
-							and ragdolled and not ragdolled.Value and not isHeld.Value
-							and (not seat.Occupant or seat.Occupant==hum)
-							and (not weld or not weld.Enabled)
-						if ready and record.Type~="Train" then
+						local reason
+						if Player.Character~=record.Char or not hum or hum.Parent~=record.Char or hum.Health<=0 or not hrp or hrp.Parent~=record.Char then reason="Current character is not ready."
+						elseif not vehicle or not vehicle.Parent or not seat or not seat.Parent or not seat:IsDescendantOf(vehicle) then reason="Vehicle or seat is unavailable."
+						elseif record.Ragdoll or not ragdolled or ragdolled.Value or isHeld.Value then reason="Waiting for ragdoll/held state to release."
+						elseif hum.SeatPart and hum.SeatPart~=seat then reason="Character is seated in another vehicle."
+						elseif seat.Occupant and seat.Occupant~=hum then reason="Another humanoid occupies the seat."
+						elseif weld and weld.Enabled then reason="Waiting for the actual SeatWeld to release."
+						elseif record.Type~="Train" then
 							local root=record.Root
-							local ok,owned=false,false
-							if root and root.Parent and type(tbl12.IsNetworkOwner)=="function" then ok,owned=pcall(tbl12.IsNetworkOwner,root) end
-							ready=ok and owned and record.BP and record.BP.Parent==root
+							if not root or not root.Parent or not record.BP or record.BP.Parent~=root or not record.OwnershipChecked then
+								reason="Waiting for the original ownership/controller setup to complete."
+							end
 						end
-						if ready then
+						Hub.gucciVerificationReason=reason
+						if not reason then
 							stableSince=stableSince or os.clock()
-							if not record.Confirmed and os.clock()-stableSince>=1 then
+							if os.clock()-stableSince>=1 then
 								record.Confirmed=true
-								Hub.gucciVerifiedRun=record
-								if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+								-- Republish if an older status listener cleared only the public pointer.
+								if Hub.gucciVerifiedRun~=record or Hub.gucciStage~="Active" then
+									Hub.gucciVerifiedRun=record
+									if Hub.reportGucciStatus then Hub.reportGucciStatus("Active") end
+								end
 							end
 						else
 							stableSince=nil
 							if record.Confirmed then
 								record.Confirmed=false
 								if Hub.gucciVerifiedRun==record then Hub.gucciVerifiedRun=nil end
-								if Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying") end
+								if Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying",reason) end
 							end
 						end
 						task.wait(0.1)
@@ -11770,6 +11774,7 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
+																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
@@ -11951,6 +11956,7 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
+																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
@@ -12155,6 +12161,7 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
+																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
@@ -12336,6 +12343,7 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
+																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
@@ -12533,6 +12541,7 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
+																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
@@ -12714,6 +12723,7 @@ do
 																	v27.BP = bodyPosition
 																	vehicle.Name = "GucciRSC"
 																	bodyPosition.Parent = root
+																	v27.OwnershipChecked = true
 																	v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 																	while fn25() do
@@ -12909,6 +12919,7 @@ do
 												v27.BP = bodyPosition
 												vehicle.Name = "GucciRSC"
 												bodyPosition.Parent = root
+												v27.OwnershipChecked = true
 												v26:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 
 												while fn25() do
@@ -13403,11 +13414,28 @@ do
 				end
 			end
 
+			tbl12.ResetGucciCharacter=function()
+				tbl8.GucciAntiGrab=false
+				local thread=gucciThread;gucciThread=nil;flag12=nil
+				if thread and thread~=coroutine.running() then pcall(Hub.nativeTask.cancel,thread);Hub.threads[thread]=nil end
+				local record=tbl16
+				Hub.gucciVerificationReason=nil
+				local ok,err=pcall(fn23)
+				if not ok then
+					if record then
+						clearGucciConfirmation(record,false)
+						for _,connection in ipairs(record.Connections or {}) do pcall(function() connection:Disconnect() end) end
+						if record.BP then pcall(function() record.BP:Destroy() end) end
+					end
+					tbl16=nil;warn("[Gucci respawn cleanup] "..tostring(err))
+				end
+			end
 			tbl12.GucciWorkerRunning=function() return flag12==true end
 			tbl12.SetGucciAntiGrab = function(arg)
 				tbl8.GucciAntiGrab = arg and not flag11
 				if not tbl8.GucciAntiGrab then
-					fn23()
+					local ok,err=pcall(fn23)
+					if not ok then warn("[Gucci pause cleanup] "..tostring(err)) end
 					return
 				end
 
@@ -13416,12 +13444,18 @@ do
 				end
 				flag12 = true
 
-				task.spawn(function()
+				local launchedCharacter=Player.Character
+				gucciThread=task.defer(function()
 					local ok, result = pcall(fn24)
-					fn23()
-					flag12 = nil
+					if gucciThread~=coroutine.running() then return end
+					local stillRequested=tbl8.GucciAntiGrab
+					local cleaned,cleanupError=pcall(fn23)
+					if not cleaned then warn("[Gucci worker cleanup] "..tostring(cleanupError)) end
+					flag12=nil;gucciThread=nil
+					if not cleaned then ok=false;result=cleanupError end
+					if Player.Character~=launchedCharacter then return end
 
-					if not ok then
+					if not ok and stillRequested then
 						warn("[GUCCI Anti Grab] " .. tostring(result))
 						if Hub.reportGucciStatus then Hub.reportGucciStatus("Error","Gucci controller error: "..tostring(result):sub(1,160)) end
 
@@ -13454,33 +13488,44 @@ do
 			local char,root,hum=tbl12.Char()
 			return char,root,hum,root and hum and hum.Health>0
 		end
+		local workerThreads={}
 		local function stopWorker(key)
-			tbl8[key]=false
-			if stopActions[key] then stopActions[key]() end
+			tbl8[key]=false;workers[key]=nil
+			local thread=workerThreads[key];workerThreads[key]=nil
+			if thread and thread~=coroutine.running() then pcall(Hub.nativeTask.cancel,thread);Hub.threads[thread]=nil end
+			Hub.protectionStartupJobs[key]=nil
+			if stopActions[key] then local ok,err=pcall(stopActions[key]);if not ok then warn("[Protection cleanup] "..tostring(err)) end end
 		end
 		local function runWorker(key,interval,action,cleanup)
 			stopActions[key]=cleanup
 			return function(on)
-				tbl8[key]=on
 				Hub.requestSave()
-				if not on then if cleanup then cleanup() end;return end
+				if not on then stopWorker(key);return end
+				tbl8[key]=true
 				if workers[key] then return end
-				workers[key]=true
-				Hub.protectionStartupJobs[key]=true
-				task.spawn(function()
+				local token={};workers[key]=token;Hub.protectionStartupJobs[key]=token
+				workerThreads[key]=task.defer(function()
 					local appliedCharacter
 					local ok,message=xpcall(function()
-						while Hub.alive and not flag11 and tbl8[key] do
+						while Hub.alive and not flag11 and tbl8[key] and workers[key]==token do
 							local currentCharacter=Player.Character
-							if appliedCharacter~=currentCharacter then Hub.protectionStartupJobs[key]=true end
+							if appliedCharacter~=currentCharacter then Hub.protectionStartupJobs[key]=token end
 							action()
-							appliedCharacter=currentCharacter;Hub.protectionStartupJobs[key]=nil
+							if workers[key]~=token then return end
+							appliedCharacter=currentCharacter
+							if Hub.protectionStartupJobs[key]==token then Hub.protectionStartupJobs[key]=nil end
 							task.wait(type(interval)=="function" and interval() or interval)
 						end
 					end,debug.traceback)
-					workers[key]=nil;Hub.protectionStartupJobs[key]=nil
-					if cleanup then cleanup() end
-					if not ok then tbl8[key]=false;local control=workerControls[key];if control and control.Value then control:SetValue(false) end;warn("[Source defense "..key.."] "..tostring(message));notify("Defense error",key.." stopped, check the console for details.",5) end
+					if workers[key]~=token then return end
+					workers[key]=nil;workerThreads[key]=nil
+					if Hub.protectionStartupJobs[key]==token then Hub.protectionStartupJobs[key]=nil end
+					if cleanup then pcall(cleanup) end
+					if not ok then
+						tbl8[key]=false;local control=workerControls[key]
+						if control and control.Value then control:SetValue(false) end
+						warn("[Source defense "..key.."] "..tostring(message));notify("Defense error",key.." stopped; check the console.",5)
+					end
 				end)
 			end
 		end
@@ -13979,9 +14024,30 @@ do
 			restoreCollision();restoreProperties();restoreBlob();clearInput();restoreBanana()
 			if originalVoid~=nil then Workspace.FallenPartsDestroyHeight=originalVoid end
 		end)
+		local sourceRespawnEpoch=0
 		Hub.connect(Player.CharacterRemoving,function()
+			sourceRespawnEpoch+=1
+			for key in pairs(workers) do stopWorker(key) end
+			Hub.protectionStartupJobs.SourceRespawn=nil
 			tbl7.States["Anti Grab"]=false
 			restoreCollision();restoreProperties();restoreBlob();clearInput();restoreBanana()
+		end)
+		Hub.connect(Player.CharacterAdded,function(char)
+			sourceRespawnEpoch+=1;local ticket=sourceRespawnEpoch;local token={char=char}
+			Hub.protectionStartupJobs.SourceRespawn=token
+			task.spawn(function()
+				while Hub.alive and not flag11 and sourceRespawnEpoch==ticket and Player.Character==char do
+					local c,r,h=tbl12.Char()
+					if c==char and r and h and h.Health>0 and r.Parent==char and h.Parent==char then
+						for _,control in pairs(workerControls) do
+							if control.Value and control.Callback then Hub.applyControl(control,true,function(fn,value) return pcall(fn,value) end) end
+						end
+						break
+					end
+					task.wait(0.1)
+				end
+				if Hub.protectionStartupJobs.SourceRespawn==token then Hub.protectionStartupJobs.SourceRespawn=nil end
+			end)
 		end)
 		Hub.sourceDefense={state=tbl8,settings=tbl9,workers=workers,stop=stopWorker}
 
@@ -14156,6 +14222,8 @@ do
 		local updateAntiKickAppearance
 		local v18
 		local antiKickRunning=false
+		local antiKickWanted=false
+		local antiKickToken,antiKickThread
 		local antiKickStart
 		local trackingEpoch=0
 		local trackerElapsed=0
@@ -14416,6 +14484,7 @@ do
 			end
 
 			local function sourceAntiKickWorker()
+				local setupToken=antiKickToken
 				while task.wait(0.03) do
 					if flag11 then
 						return
@@ -14437,10 +14506,15 @@ do
 					local ragdollTouchedHitbox = v23 and v23:FindFirstChild("RagdollTouchedHitbox")
 
 					if v23 and v24 and ragdollTouchedHitbox and v24.Health > 0 then
-						if localPlayer.InPlot.Value then
+						local inPlot=localPlayer:FindFirstChild("InPlot")
+						local ownedPlot=localPlayer:FindFirstChild("InOwnedPlot")
+						if inPlot and inPlot.Value then
+							Hub.antiKickStage="Waiting for an eligible plot"
+							if Hub.protectionStartupJobs.AntiKick==setupToken then Hub.protectionStartupJobs.AntiKick=nil end
 							while true do
 								task.wait()
-								if not (not localPlayer.InPlot.Value or localPlayer.InOwnedPlot.Value) then
+								if antiKickToken~=setupToken or not tbl8.AntiKick then return end
+								if not (not inPlot.Parent or not inPlot.Value or (ownedPlot and ownedPlot.Value)) then
 									continue
 								end
 								break
@@ -14598,32 +14672,76 @@ do
 							end
 						end
 					end
+					if Hub.protectionStartupJobs.AntiKick==setupToken then Hub.protectionStartupJobs.AntiKick=nil end
+					local currentRoot=select(2,tbl12.Char())
+					local currentHitbox=currentRoot and currentRoot:FindFirstChild("RagdollTouchedHitbox")
+					local sticky=v18 and v18.Parent and v18:FindFirstChild("StickyPart")
+					local attached=sticky and sticky:FindFirstChild("StickyWeld")
+					Hub.antiKickStage=currentHitbox and attached and attached.Part1==currentHitbox and attached.Enabled~=false and "Active" or "Waiting for shuriken attachment"
 				end
 			end
 			antiKickStart=sourceAntiKickWorker
 		end
+		local function stopAntiKickWorker()
+			antiKickToken=nil;tbl8.AntiKick=false;trackingEpoch+=1
+			local thread=antiKickThread;antiKickThread=nil;antiKickRunning=false
+			if thread and thread~=coroutine.running() then pcall(Hub.nativeTask.cancel,thread);Hub.threads[thread]=nil end
+			Hub.protectionStartupJobs.AntiKick=nil
+			local ok,err=pcall(clearKick);if not ok then warn("[Anti Kick cleanup] "..tostring(err)) end
+		end
 		local function setAntiKick(on)
-			tbl8.AntiKick=on;trackingEpoch+=1;local ticket=trackingEpoch
-			Hub.requestSave()
-			if not on then clearKick();return end
-			if not stickyRemote then tbl8.AntiKick=false;fn18("StickyPartEvent is unavailable.","Anti Kick");return end
-			Hub.scanDescendants(Workspace,trackPCLD,function() return tbl8.AntiKick and trackingEpoch==ticket end)
-			if antiKickRunning then return end
-			antiKickRunning=true
-			task.spawn(function()
-				local ok,message=xpcall(antiKickStart,debug.traceback)
-				antiKickRunning=false
-				clearKick()
-				if not ok then tbl8.AntiKick=false;warn("[Source Anti Kick] "..tostring(message)) end
+			antiKickWanted=on==true;Hub.requestSave()
+			if not antiKickWanted then stopAntiKickWorker();Hub.antiKickStage="Disabled";return end
+			local char=Player.Character
+			if antiKickRunning and antiKickToken and antiKickToken.char==char then return end
+			if antiKickRunning then stopAntiKickWorker() end
+			local token={char=char};antiKickToken=token;antiKickRunning=true
+			Hub.protectionStartupJobs.AntiKick=token;Hub.antiKickStage="Waiting for character"
+			antiKickThread=task.defer(function()
+				local function current() return Hub.alive and not flag11 and antiKickWanted and antiKickToken==token and Player.Character==char end
+				while current() do
+					local c,r,h=tbl12.Char()
+					if c==char and r and h and h.Parent==char and h.Health>0 and r:FindFirstChild("RagdollTouchedHitbox") then break end
+					task.wait(0.1)
+				end
+				while current() do
+					stickyEvents=ReplicatedStorage:FindFirstChild("PlayerEvents")
+					stickyRemote=stickyEvents and stickyEvents:FindFirstChild("StickyPartEvent")
+					if stickyRemote then
+						tbl8.AntiKick=true;trackingEpoch+=1;local ticket=trackingEpoch
+						Hub.scanDescendants(Workspace,trackPCLD,function() return current() and tbl8.AntiKick and trackingEpoch==ticket end)
+						Hub.antiKickStage="Starting"
+						local ok,message=xpcall(antiKickStart,debug.traceback)
+						if not current() then return end
+						tbl8.AntiKick=false;pcall(clearKick)
+						if Hub.protectionStartupJobs.AntiKick==token then Hub.protectionStartupJobs.AntiKick=nil end
+						Hub.antiKickStage="Retrying";Hub.lastAntiKickError=not ok and tostring(message) or "Worker ended; restarting."
+						if not ok then warn("[Source Anti Kick] "..tostring(message)) end
+					else
+						Hub.antiKickStage="Waiting for StickyPartEvent"
+						if Hub.protectionStartupJobs.AntiKick==token then Hub.protectionStartupJobs.AntiKick=nil end
+					end
+					task.wait(1)
+				end
+				if antiKickToken==token then
+					antiKickToken=nil;antiKickThread=nil;antiKickRunning=false
+					if Hub.protectionStartupJobs.AntiKick==token then Hub.protectionStartupJobs.AntiKick=nil end
+				end
 			end)
 		end
+		Hub.connect(Player.CharacterRemoving,function()
+			stopAntiKickWorker();Hub.antiKickStage=antiKickWanted and "Waiting for respawn" or "Disabled"
+		end)
+		Hub.connect(Player.CharacterAdded,function()
+			if antiKickWanted and Toggles.ShurikenAntiKick and Toggles.ShurikenAntiKick.Value then setAntiKick(true) end
+		end)
 		if Toggles.ShurikenAntiKick then Toggles.ShurikenAntiKick.Callback=setAntiKick end
 		settings:AddToggle("SourceAntiKickHighlight",{Text="Anti Kick, highlight shuriken",Default=false,Callback=function(on) tbl7.AntiKickSettings.Highlight=on;if updateAntiKickAppearance then updateAntiKickAppearance() end;Hub.requestSave() end})
 		for _,info in ipairs({{"SourceAntiKickFillAlpha","Anti Kick, fill transparency","HighlightFT",0.5},{"SourceAntiKickOutlineAlpha","Anti Kick, outline transparency","HighlightOT",0},{"SourceAntiKickToyAlpha","Anti Kick, shuriken transparency","Transparency",0.9}}) do
 			local property=info[3]
 			settings:AddSlider(info[1],{Text=info[2],Default=info[4],Min=0,Max=1,Rounding=2,Callback=function(value) tbl7.AntiKickSettings[property]=value;if updateAntiKickAppearance then updateAntiKickAppearance() end;Hub.requestSave() end})
 		end
-		Hub.cleanup(function() tbl8.AntiKick=false;trackingEpoch+=1;clearKick();highlight:Destroy() end)
+		Hub.cleanup(function() antiKickWanted=false;stopAntiKickWorker();Hub.antiKickStage=nil;highlight:Destroy() end)
 
 		-- ANTI KICK APPEARANCE BEGIN
 		local rainbowFill,rainbowOutline=false,false
@@ -14874,6 +14992,14 @@ do
 						and os.clock()-protectionChangedAt>=0.75 and os.clock()>=respawnReadyAt
 						and char and root and hum and hum.Health>0 and root.Parent==char and hum.Parent==char
 						and not (held and held.Value)
+					if not ready then
+						local jobs={};for key in pairs(Hub.protectionStartupJobs) do table.insert(jobs,key) end;table.sort(jobs)
+						Hub.gucciWaitingReason=protectionCallbacks>0 and "Protection callback is still applying."
+							or #jobs>0 and ("Protection setup: "..table.concat(jobs,", "))
+							or (progress and not progress.done) and "Saved callbacks are still applying."
+							or tbl12.GucciWorkerRunning() and "Previous Gucci worker is still exiting."
+							or "Waiting for character readiness and the protection settling period."
+					end
 					if ready then
 						gucciStartPending=false;Hub.gucciWaitingReason=nil
 						if Hub.stopBlobFlight then Hub.stopBlobFlight() end
@@ -14916,6 +15042,13 @@ do
 				if gucciDesired then requestGucciStart() end
 			end
 		end
+		Hub.connect(Player.CharacterRemoving,function()
+			local thread=gucciStartWorker;gucciStartWorker=nil
+			if thread and thread~=coroutine.running() then pcall(Hub.nativeTask.cancel,thread);Hub.threads[thread]=nil end
+			gucciStartPending=false;respawnReadyAt=math.huge
+			tbl12.ResetGucciCharacter()
+			Hub.gucciWaitingReason=gucciDesired and "Waiting for respawn." or nil
+		end)
 		Hub.connect(Player.CharacterAdded,function()
 			respawnReadyAt=os.clock()+1.5;protectionChangedAt=os.clock()
 			if gucciDesired then pauseGucci();requestGucciStart("Waiting for respawn protections before Gucci.") end
@@ -14945,7 +15078,7 @@ do
 			for connection in pairs(sourceConnections) do connection:Disconnect() end
 			Hub.sourceDefense=nil
 			Hub.sourceGucci=nil
-			Hub.reportGucciStatus=nil;Hub.gucciVerifiedRun=nil
+			Hub.reportGucciStatus=nil;Hub.gucciVerifiedRun=nil;Hub.gucciVerificationReason=nil
 		end)
 	end)()
 end
@@ -18203,7 +18336,10 @@ end
 		for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then loops+=1 end end
 		message(string.format("Gucci: %s\nProtection setup jobs: %d | Active action loops: %d\nSettings restore: %s | Storage: %s%s",
 			tostring(Hub.gucciStage or "off"),pending,loops,progress and (progress.completed.."/"..progress.total) or "none",
-			Hub.storage and "available" or "unavailable",Hub.gucciWaitingReason and ("\n"..Hub.gucciWaitingReason) or ""))
+			Hub.storage and "available" or "unavailable",(Hub.gucciWaitingReason and ("\n"..Hub.gucciWaitingReason) or "")
+				..(Hub.gucciVerificationReason and ("\nVerification: "..Hub.gucciVerificationReason) or "")
+				.."\nAnti Kick: "..tostring(Hub.antiKickStage or "Disabled")
+				..(Hub.lastAntiKickError and ("\nLast Anti Kick error: "..Hub.lastAntiKickError) or "")))
 	end
 	commands.protections=function()
 		local lines={}
