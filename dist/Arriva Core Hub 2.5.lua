@@ -161,12 +161,29 @@ function Hub.queueSavedCallbacks(records,invoke)
 end
 
 
+-- Notification preferences and history are shared by all notification entry points.
+Hub.noticePreferences={enabled=true,events={},templates={}}
+Hub.noticeHistory={}
+function Hub.formatEventText(template,values)
+	return (tostring(template):sub(1,512):gsub("%%([%a]+)%%",function(key)
+		local value=values[key]
+		return value~=nil and tostring(value) or ("%"..key.."%")
+	end))
+end
+function Hub.profileName(value)
+	value=tostring(value or ""):match("^%s*(.-)%s*$")
+	if #value<1 or #value>40 or not value:match("^[%w _%-]+$") then
+		return nil,"Use 1–40 letters, numbers, spaces, underscores or hyphens."
+	end
+	if value:lower()=="autosave" then return nil,"AutoSave is reserved for your automatic settings." end
+	return value
+end
 -- Shared event classification keeps event visuals and sounds consistent.
 function Hub.notificationEvent(info)
 	local explicit=tostring(info.Type or info.Kind or ""):lower()
 	local events={join=true,leave=true,respawn=true,blackhole=true,kick=true}
 	if events[explicit] then return explicit end
-	if explicit~="" then return nil end
+	if explicit~="" and explicit~="info" then return nil end
 	local title=tostring(info.Title or ""):lower()
 	local content=tostring(info.Description or info.Content or ""):lower()
 	if (title=="player kicked" or title=="player kicked preview")
@@ -1779,6 +1796,21 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 		return ok,err
 	end
 	function Library:Notify(info)
+		local prefs=Hub.noticePreferences
+		local event=Hub.notificationEvent(info)
+		if not prefs.enabled or (event and prefs.events[event]==false) then return end
+		info=table.clone(info)
+		if event and info.PlayerName then
+			info.Description=Hub.formatEventText(prefs.templates[event] or "%message%",{
+				player=info.PlayerName,kickedPlayer=info.PlayerName,leftPlayer=info.PlayerName,
+				rejoinedPlayer=info.PlayerName,event=event,message=info.Description or info.Content or ""})
+		end
+		if not info.HistoryReplay then
+			table.insert(Hub.noticeHistory,{Title=tostring(info.Title or "Arriva"):sub(1,180),
+				Description=tostring(info.Description or info.Content or ""):sub(1,2048),
+				Type=event or info.Type or info.Kind,Time=info.Time or info.Duration or 5,at=os.date("%H:%M:%S")})
+			if #Hub.noticeHistory>50 then table.remove(Hub.noticeHistory,1) end
+		end
 		if Hub.playNotificationSound then pcall(Hub.playNotificationSound,info) end
 		Rayfield:Notify({Type = info.Type or info.Kind, Title = info.Title or "Arriva", Content = info.Description or info.Content or "",
 			Duration = info.Time or info.Duration or 5})
@@ -2313,12 +2345,13 @@ Hub.cleanup(function()
 end)
 
 -- Helper Functions
-local function notify(title, content, duration, kind)
+local function notify(title, content, duration, kind, playerName)
 	-- Legacy calls use notify(message, seconds).
 	if type(content) == "number" and duration == nil then
 		duration, content = content, ""
 	end
 	Library:Notify({
+		PlayerName = playerName,
 		Type = kind,
 		Title = title or "Notification",
 		Description = content or "",
@@ -5288,13 +5321,13 @@ end
 do
 	Hub.loopNoticePrefs = {targets = true, ready = false, seats = true, warnings = true, loops = false, sounds = false}
 	Hub.loopNoticeTimes = {}
-	function Hub.loopNotice(kind, title, message, key)
+	function Hub.loopNotice(kind, title, message, key, playerName)
 		if not Hub.alive or not Hub.loopNoticePrefs[kind] then return end
 		local token = kind .. ":" .. (key or title)
 		local now = os.clock()
 		if now < (Hub.loopNoticeTimes[token] or -math.huge) then return end
 		Hub.loopNoticeTimes[token] = now + (kind == "warnings" and 15 or 3)
-		Library:Notify({Title = title, Description = message, Type = kind == "warnings" and "warning" or kind == "ready" and "success" or "info", Time = kind == "warnings" and 6 or 4})
+		Library:Notify({Title = title, Description = message, PlayerName = playerName, Type = kind == "warnings" and "warning" or kind == "ready" and "success" or "info", Time = kind == "warnings" and 6 or 4})
 		if Hub.loopNoticePrefs.sounds and not Hub.playNotificationSound then
 			local sound = Hub.new("Sound", Workspace)
 			sound.SoundId = "rbxassetid://4590662766"
@@ -5476,7 +5509,7 @@ do
 		roster[person] = entry
 		entry.connection = Hub.connect(person.CharacterAdded, function(char)
 			if entry.seen and Hub.targetIdentities[person.UserId] then
-				Hub.loopNotice("targets", "Selected player respawned", person.Name .. " respawned. Waiting for their character to become eligible.", "respawn" .. person.UserId)
+				Hub.loopNotice("targets", "Selected player respawned", person.Name .. " respawned. Waiting for their character to become eligible.", "respawn" .. person.UserId,person.Name)
 			end
 			entry.seen = true
 			Hub.reconcileTargetIdentities()
@@ -5490,7 +5523,7 @@ do
 		local remembered = Hub.targetIdentities[person.UserId] ~= nil
 		Hub.reconcileTargetIdentities()
 		watch(person)
-		if remembered then Hub.loopNotice("targets", "Selected player returned", person.Name .. " rejoined this server; their selection is restored.", "return" .. person.UserId) end
+		if remembered then Hub.loopNotice("targets", "Selected player returned", person.Name .. " rejoined this server; their selection is restored.", "return" .. person.UserId,person.Name) end
 		refresh()
 	end)
 	Hub.connect(Players.PlayerRemoving, function(person)
@@ -5500,7 +5533,7 @@ do
 		if entry then entry.connection:Disconnect(); Hub.connections[entry.connection] = nil end
 		if remembered and not Hub.rememberLoopTargets then Hub.targetIdentities[person.UserId] = nil end
 		Hub.reconcileTargetIdentities(person)
-		if remembered then Hub.loopNotice("targets", "Selected player left", person.Name .. (Hub.rememberLoopTargets and " left. Selection retained for a return to this server." or " left. Their selection was removed."), "left" .. person.UserId) end
+		if remembered then Hub.loopNotice("targets", "Selected player left", person.Name .. (Hub.rememberLoopTargets and " left. Selection retained for a return to this server." or " left. Their selection was removed."), "left" .. person.UserId,person.Name) end
 		refresh()
 	end)
 	TargetGroup:AddToggle("RememberLoopTargets", {Text = "Remember selected players who leave", Default = true, Callback = function(on)
@@ -6862,13 +6895,9 @@ TargetNotificationGroup:AddToggle("JoinedNotifyBtn", {
 				end
 
 				if detected then
-					notify("Target Returned!" .. reason .. " | Player: " .. newPlayer.Name, 8)
+					notify("Target Returned!",newPlayer.Name.." returned. "..reason,8,"join",newPlayer.Name)
 					if Hub.isSelectedTarget(newPlayer) and Hub.canHarm(newPlayer) then SelectedPlayer = SelectedPlayer or newPlayer end
-					local sound = Hub.new("Sound", workspace)
-					sound.SoundId = "rbxassetid://4590662766"
-					sound.Volume = 2
-					sound:Play()
-					Debris:AddItem(sound, 3)
+					-- Join sound follows the event sound controls and notification master switch.
 				end
 			end)
 		else
@@ -6900,15 +6929,10 @@ local function trackRespawn(player)
 		local tracked, reason = isTrackedPlayer(player)
 		if not tracked then return end
 
-		notify("Target respawned", player.Name .. " has respawned. " .. reason, 8)
+		notify("Target respawned", player.Name .. " has respawned. " .. reason, 8,"respawn",player.Name)
 		if Hub.isSelectedTarget(player) and Hub.canHarm(player) then SelectedPlayer = SelectedPlayer or player end
 
-		local sound = Hub.new("Sound")
-		sound.SoundId = "rbxassetid://4590662766"
-		sound.Volume = 2
-		sound.Parent = workspace
-		sound:Play()
-		Debris:AddItem(sound, 3)
+		-- Respawn sound follows the event sound controls and notification master switch.
 	end)
 end
 
@@ -8747,7 +8771,7 @@ do
 				local holePosition=hole.object.Parent and getBHPosition(hole.object) or hole.position
 				if holePosition and (position-holePosition).Magnitude<=100 then
 					if Hub.blackholeNoticeEnabled~=false then
-						notify("Blackhole detected",person.Name .. " left near a blackhole.",6,"blackhole")
+						notify("Blackhole detected",person.Name .. " left near a blackhole.",6,"blackhole",person.Name)
 					end
 					return
 				end
@@ -15999,11 +16023,11 @@ do
 			if respawn and os.clock()-entry.last>=8 then
 				entry.last=os.clock()
 				if person==Player then
-					if preferences.self then notify("Character respawned","Your character has respawned.",4) end
+					if preferences.self then notify("Character respawned","Your character has respawned.",4,"respawn",Player.Name) end
 				elseif preferences.respawns then
 					-- Let the existing targeted respawn alert handle tracked players.
 					local duplicate=respawnNotifyActive and isTrackedPlayer(person)
-					if not duplicate then notify("Player respawned",person.Name .. " has respawned.",4) end
+					if not duplicate then notify("Player respawned",person.Name .. " has respawned.",4,"respawn",person.Name) end
 				end
 			end
 			watchDeath(char)
@@ -16015,13 +16039,13 @@ do
 	for _,person in ipairs(Players:GetPlayers()) do track(person) end
 	Hub.connect(Players.PlayerAdded,function(person)
 		track(person)
-		if preferences.joins then notify("Player joined",person.Name .. " joined the server.",4) end
+		if preferences.joins then notify("Player joined",person.Name .. " joined the server.",4,"join",person.Name) end
 	end)
 	Hub.connect(Players.PlayerRemoving,function(person)
 		local entry=roster[person]
 		roster[person]=nil
 		if entry then disconnect(entry.character);disconnect(entry.death) end
-		if preferences.leaves then notify("Player left",person.Name .. " left the server.",4) end
+		if preferences.leaves then notify("Player left",person.Name .. " left the server.",4,"leave",person.Name) end
 	end)
 	Hub.cleanup(function()
 		for _,entry in pairs(roster) do disconnect(entry.character);disconnect(entry.death) end
@@ -16150,9 +16174,9 @@ do
 		local function classify(info)
 			local explicit=tostring(info.Type or info.Kind or ""):lower()
 			if explicit=="error" then explicit="danger" end
-			if settings[explicit] then return explicit end
 			local event=Hub.notificationEvent(info)
 			if event then return event end
+			if settings[explicit] then return explicit end
 			local text=(tostring(info.Title or "").." "..tostring(info.Description or info.Content or "")):lower()
 			for _,word in ipairs({"error","failed","failure","died","danger","respawn","blackhole","black hole","kicked","disconnected","lost"}) do if text:find(word,1,true) then return "danger" end end
 			for _,word in ipairs({"warning","retry","retrying","unavailable","could not","couldn't","not confirmed","not active","waiting"}) do if text:find(word,1,true) then return "warning" end end
@@ -16824,6 +16848,247 @@ do
 	end)()
 end
 
+-- BEGIN SESSION AND PERSONALIZATION TOOLS
+-- Register these controls before settings load; gameplay controllers are unchanged.
+do
+	(function()
+		local group=Tabs.Notifications:AddLeftGroupbox("Event messages")
+		local prefs=Hub.noticePreferences
+		group:AddToggle("NotificationMaster",{Text="Enable notifications",Default=true,Callback=function(on) prefs.enabled=on end})
+		group:AddLabel("Message placeholders: %player%, %event%, %message%. Blank restores the original message.")
+		for _,entry in ipairs({{"join","Join / rejoin"},{"leave","Leave"},{"respawn","Respawn"},{"blackhole","Blackhole"},{"kick","Player kicked"}}) do
+			local kind,label=entry[1],entry[2]
+			group:AddToggle("EventNotice_"..kind,{Text=label.." alerts",Default=true,Callback=function(on) prefs.events[kind]=on end})
+			group:AddInput("EventMessage_"..kind,{Text=label.." message",Default="%message%",Finished=true,Callback=function(value)
+				local text=tostring(value or ""):sub(1,512)
+				prefs.templates[kind]=text:match("^%s*$") and "%message%" or text
+			end})
+		end
+		local history=Tabs.Notifications:AddRightGroupbox("Notification history")
+		local entries={};local selected
+		local detail=history:AddLabel("The most recent 50 notifications are kept for this session.")
+		local picker
+		local function refresh()
+			local names={};entries={};selected=nil
+			for index=#Hub.noticeHistory,1,-1 do
+				local entry=Hub.noticeHistory[index]
+				local label=string.format("%02d | %s | %s",index,entry.at,entry.Title:sub(1,90))
+				entries[label]=entry;table.insert(names,label)
+			end
+			picker:SetValues(names);picker:SetValue(nil)
+			detail:SetText("History: "..#names.." notifications. Select an entry.")
+		end
+		picker=history:AddDropdown("NotificationHistoryEntry",{Text="Recent notifications",Values={},Callback=function(value)
+			selected=entries[value]
+			detail:SetText(selected and (selected.Title..": "..selected.Description) or "Select an entry.")
+		end})
+		SaveManager.ignored.NotificationHistoryEntry=true
+		history:AddButton({Text="Refresh history",Func=refresh})
+		history:AddButton({Text="Replay selected alert",Func=function()
+			if not selected then return end
+			local info=table.clone(selected);info.HistoryReplay=true;Library:Notify(info)
+		end})
+		history:AddButton({Text="Copy notification history",Func=function()
+			if not setclipboard then notify("Clipboard unavailable","Your environment does not support clipboard access.",4,"warning");return end
+			local lines={}
+			for _,entry in ipairs(Hub.noticeHistory) do table.insert(lines,entry.at.." | "..entry.Title.." | "..entry.Description) end
+			setclipboard(table.concat(lines,"\n"))
+		end})
+		history:AddButton({Text="Clear history",Func=function() table.clear(Hub.noticeHistory);refresh() end})
+		Hub.cleanup(function() table.clear(Hub.noticeHistory) end)
+	end)();
+
+	(function()
+		local group=Tabs["UI Settings"]:AddRightGroupbox("Config profiles")
+		local name,selected="",""
+		local status=group:AddLabel("Save named profiles alongside your automatic settings.")
+		local picker
+		local function refresh()
+			local names={}
+			if type(listfiles)=="function" and Hub.storage and SaveManager.folder then
+				local ok,files=pcall(listfiles,SaveManager.folder)
+				if ok then
+					for _,file in ipairs(files) do
+						local candidate=tostring(file):gsub("\\","/"):match("([^/]+)%.json$")
+						if candidate and Hub.profileName(candidate) then table.insert(names,candidate) end
+					end
+				end
+			end
+			table.sort(names);picker:SetValues(names)
+			if not table.find(names,selected) then selected="";picker:SetValue(nil) end
+		end
+		local function run(action)
+			if not Hub.ready or not Hub.storage then status:SetText("File storage is unavailable or settings are still loading.");return end
+			local ok,err=pcall(action)
+			if not ok then status:SetText(tostring(err));notify("Profile warning",tostring(err),6,"warning") end
+		end
+		group:AddInput("ProfileName",{Text="Profile name",Default="",Finished=true,Callback=function(value) name=tostring(value or "") end})
+		picker=group:AddDropdown("ProfileSelection",{Text="Saved profiles",Values={},Callback=function(value) selected=value or "" end})
+		SaveManager.ignored.ProfileName=true;SaveManager.ignored.ProfileSelection=true
+		group:AddButton({Text="Refresh profiles",Func=refresh})
+		group:AddButton({Text="Save named profile",Func=function() run(function()
+			local valid,err=Hub.profileName(name);assert(valid,err)
+			local ok,reason=SaveManager:Save(valid);assert(ok,reason)
+			refresh();status:SetText("Saved and verified: "..valid)
+		end) end})
+		group:AddButton({Text="Load selected profile",Func=function() run(function()
+			local valid,err=Hub.profileName(selected);assert(valid,err)
+			local ok,reason=SaveManager:Load(valid);assert(ok,reason)
+			status:SetText("Loaded: "..valid..". Enabled features may still be starting.")
+		end) end})
+		group:AddButton({Text="Delete selected profile",Func=function() run(function()
+			assert(type(delfile)=="function","Deleting files is unavailable.")
+			local valid,err=Hub.profileName(selected);assert(valid,err)
+			local path=SaveManager.folder.."/"..valid..".json"
+			if isfile(path) then delfile(path) end
+			if isfile(path..".bak") then delfile(path..".bak") end
+			refresh();status:SetText("Deleted: "..valid)
+		end) end})
+		group:AddButton({Text="Copy current settings JSON",Func=function()
+			if not setclipboard then status:SetText("Clipboard access is unavailable.");return end
+			local json,ok,err=SaveManager:SaveJSON()
+			if not ok then status:SetText(tostring(err));return end
+			setclipboard(json);status:SetText("Settings copied, including your whitelist.")
+		end})
+		group:AddLabel("Save named profile overwrites that name. AutoSave is reserved; failed-load protection stays in place.")
+	end)();
+
+	(function()
+		local group=Tabs.Misc:AddRightGroupbox("Session tools")
+		local teleporting=false
+		local function copy(value)
+			if setclipboard then setclipboard(value) else notify("Clipboard unavailable","Clipboard access is unavailable.",4,"warning") end
+		end
+		group:AddLabel("Place: "..tostring(game.PlaceId).." | Server: "..(game.JobId~="" and game.JobId or "Studio"))
+		group:AddButton({Text="Copy server ID",Func=function() copy(game.JobId) end})
+		group:AddButton({Text="Copy server join link",Func=function()
+			copy("https://www.roblox.com/games/start?placeId="..game.PlaceId.."&gameInstanceId="..game.JobId)
+		end})
+		group:AddButton({Text="Rejoin this server",Func=function()
+			if teleporting then return end
+			if game.JobId=="" then notify("Rejoin unavailable","This session has no live server ID.",4,"warning");return end
+			local saved,reason=Hub.flushSettings(false)
+			if not saved then notify("Rejoin paused",tostring(reason),6,"warning");return end
+			teleporting=true
+			local ok,err=pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId,game.JobId,Player) end)
+			if not ok then teleporting=false;notify("Rejoin failed",tostring(err),6,"warning") end
+		end})
+		Hub.connect(game:GetService("TeleportService").TeleportInitFailed,function(person,_,message)
+			if person==Player and teleporting then teleporting=false;notify("Rejoin failed",tostring(message),6,"warning") end
+		end)
+		group:AddButton({Text="Unlock mouse",Func=function() if Hub.menuMouse then Hub.menuMouse(true) end end})
+		group:AddButton({Text="Restore mouse control",Func=function() if Hub.menuMouse then Hub.menuMouse(false) end end})
+	end)();
+
+	(function()
+		local group=Tabs.Player:AddRightGroupbox("Spawn bookmark")
+		local saved,autoReturn,generation=nil,false,0
+		local status=group:AddLabel("No spawn bookmark saved. Bookmarks last for this session.")
+		local function readyRoot(char)
+			if not Hub.alive or Player.Character~=char or Hub.interactionVisitLock or Hub.safeZoneLoopActive
+				or Hub.blobFlightActive or Hub.characterFlightActive then return end
+			for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
+			local root,hum
+			if Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value then
+				local proof=Hub.gucciVerifiedRun
+				if not proof or not proof.Confirmed or proof.Char~=char then return end
+				root,hum=proof.HRP,proof.Hum
+			else
+				root=char and char:FindFirstChild("HumanoidRootPart")
+				hum=char and char:FindFirstChildOfClass("Humanoid")
+			end
+			local held=Player:FindFirstChild("IsHeld")
+			if root and root.Parent==char and hum and hum.Parent==char and hum.Health>0
+				and not hum.SeatPart and not root.Anchored and not (held and held.Value) then return root end
+		end
+		local function restore(char)
+			local root=readyRoot(char)
+			if not saved or not root then return false end
+			if not Hub.finiteVector(saved.Position) or saved.Position.Y<=Workspace.FallenPartsDestroyHeight+8 then return false end
+			root.CFrame=saved;root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
+			status:SetText("Returned to your spawn bookmark.");return true
+		end
+		group:AddButton({Text="Save current spawn location",Func=function()
+			local root=readyRoot(Player.Character)
+			if not root or not Hub.finiteVector(root.Position) then status:SetText("Wait for a free, live character and confirmed Gucci if enabled.");return end
+			saved=root.CFrame;status:SetText(string.format("Spawn bookmark saved at %.0f, %.0f, %.0f.",root.Position.X,root.Position.Y,root.Position.Z))
+		end})
+		group:AddButton({Text="Return to spawn bookmark",Func=function()
+			if not restore(Player.Character) then status:SetText("No valid bookmark, or your character is busy.") end
+		end})
+		group:AddToggle("ReturnToSpawnBookmark",{Text="Return here after respawning",Default=false,Callback=function(on) autoReturn=on;generation+=1 end})
+		group:AddButton({Text="Clear spawn bookmark",Func=function() saved=nil;generation+=1;status:SetText("Spawn bookmark cleared.") end})
+		Hub.connect(Player.CharacterAdded,function(char)
+			generation+=1;local ticket=generation
+			if not autoReturn or not saved then return end
+			task.spawn(function()
+				local deadline=os.clock()+20
+				while Hub.alive and autoReturn and saved and generation==ticket and Player.Character==char and os.clock()<deadline do
+					if restore(char) then return end
+					task.wait(0.2)
+				end
+			end)
+		end)
+		Hub.cleanup(function() autoReturn=false;generation+=1;saved=nil end)
+	end)();
+
+	(function()
+		local group=Tabs.Customization:AddRightGroupbox("Session overlay")
+		local keys=Tabs.KeyBinds:AddRightGroupbox("Keybind display")
+		local watermarkOn,keysOn,assignedOnly=false,false,true
+		local gui,watermark,keyText
+		local started=os.clock()
+		local function create()
+			if gui then return end
+			gui=Hub.new("ScreenGui",Player:WaitForChild("PlayerGui"));gui.Name="ArrivaSessionOverlay";gui.ResetOnSpawn=false;gui.IgnoreGuiInset=true
+			local function label(name,position,size)
+				local item=Hub.new("TextLabel",gui);item.Name=name;item.Position=position;item.Size=size
+				item.BackgroundColor3=Color3.fromRGB(29,21,40);item.BackgroundTransparency=0.15
+				item.TextColor3=Color3.fromRGB(220,195,255);item.Font=Enum.Font.Gotham;item.TextSize=13
+				item.TextXAlignment=Enum.TextXAlignment.Left;item.TextYAlignment=Enum.TextYAlignment.Top;item.TextWrapped=true;item.RichText=false
+				local padding=Hub.new("UIPadding",item);padding.PaddingLeft=UDim.new(0,10);padding.PaddingTop=UDim.new(0,8)
+				local corner=Hub.new("UICorner",item);corner.CornerRadius=UDim.new(0,8)
+				item.Visible=false;return item
+			end
+			watermark=label("Watermark",UDim2.new(0,12,0,48),UDim2.fromOffset(340,34))
+			keyText=label("Keybinds",UDim2.new(0,12,0,90),UDim2.fromOffset(280,280))
+		end
+		local function visibility()
+			if watermarkOn or keysOn then create() end
+			if watermark then watermark.Visible=watermarkOn;keyText.Visible=keysOn end
+		end
+		group:AddToggle("SessionWatermark",{Text="Show session watermark",Default=false,Callback=function(on) watermarkOn=on;visibility() end})
+		keys:AddToggle("KeybindOverlay",{Text="Show keybind list",Default=false,Callback=function(on) keysOn=on;visibility() end})
+		keys:AddToggle("KeybindAssignedOnly",{Text="Only show assigned keys",Default=true,Callback=function(on) assignedOnly=on end})
+		keys:AddButton({Text="Check keybind conflicts",Func=function()
+			local conflicts=Hub.keybindConflictReport()
+			notify("Keybind check",#conflicts>0 and table.concat(conflicts,"\n") or "No shared shortcuts found.",8,#conflicts>0 and "warning" or "success")
+		end})
+		local elapsed,frames=0,0
+		Hub.connect(RunService.Heartbeat,function(dt)
+			if not watermarkOn and not keysOn then return end
+			elapsed+=dt;frames+=1;if elapsed<1 then return end
+			local fps=math.floor(frames/elapsed+0.5);elapsed=0;frames=0
+			if watermarkOn then
+				local ping="N/A"
+				pcall(function() ping=game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValueString() end)
+				local minutes=math.floor((os.clock()-started)/60)
+				watermark.Text=string.format("ARRIVA 2.5  |  %d FPS  |  %s  |  %dm",fps,ping,minutes)
+			end
+			if keysOn then
+				local lines={"KEYBINDS"}
+				for _,definition in ipairs(Hub.keybindDefinitions) do
+					local option=Options[definition.id];local key=tostring(option and option.Value or definition.default or "None")
+					if not assignedOnly or (key~="None" and key~="Unknown" and key~="") then table.insert(lines,key.."  —  "..definition.label) end
+				end
+				keyText.Text=table.concat(lines,"\n");keyText.Size=UDim2.fromOffset(280,math.max(42,#lines*18+18))
+			end
+		end)
+		Hub.cleanup(function() watermarkOn=false;keysOn=false;if gui then gui:Destroy();gui=nil end end)
+	end)();
+end
+-- END SESSION AND PERSONALIZATION TOOLS
+
 -- Register every saved control before loading settings.
 MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
 -- Session customization does not require executor file-storage support.
@@ -16943,7 +17208,7 @@ do
 		end)
 	end
 	local layouts = {
-		Player={sections={"Movement","Flight","Camera","Spectator Camera","Follow Player Position","Character animations","Plot Barriers","Performance"},
+		Player={sections={"Movement","Spawn bookmark","Flight","Camera","Spectator Camera","Follow Player Position","Character animations","Plot Barriers","Performance"},
 			rename={["View & Movement"]="Movement"},
 			controls={ThirdPersonToggle="Camera",ToolFirstPerson="Camera",FOVSlider="Camera"},
 			order={Movement={"SpeedModifierToggle","SpeedValue","JumpModifierToggle","JumpValue","infJumpToggle","SelfNoclipToggle","ToolGravity","ToolGravityValue","SpinToggle","SpinSpeed"}}},
@@ -16990,11 +17255,11 @@ do
 		Fun={sections={"My Toys & Groups","Own Toy Builder & Recovery","Creative Object Aura","Shape Toy Picker","Shape Settings","Object Attraction","Group Appearance","Local Decoy Formation"},
 			rename={["My Toy Manager and Groups"]="My Toys & Groups"}},
 		Visual={sections={"Skybox Faces","Sun & Stars","Shaders","Water Appearance","Local environment","Player ESP","World ESP","Camera and cursor","Camera clipping","Camera Effects","Lighting","Water Controls","Visual Effects","Local appearance extras","Blackhole Appearance"},controls={ToolTimeOverride="Sun & Stars",ToolTimeOfDay="Sun & Stars",ToolSyncTime="Sun & Stars"}},
-		Misc={sections={"Cheaters","Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools"},
+		Misc={sections={"Cheaters","Travel","Travel Settings","World Utilities","Plots & Slots","Part Tools","Session tools"},
 			rename={Miscellaneous="World Utilities"},controls={TPToggle="Travel",WaterWalkToggle="Travel"}},
 		Whitelist={sections={"Protected Players"}},
 		Explosions={sections={"Launch Settings","Missile Throw Status","Explosions Spam","FAQ about Explosions Spam"}},
-		KeyBinds={sections={"Menu & emergency","Action shortcuts","Missile throw"}},
+		KeyBinds={sections={"Menu & emergency","Action shortcuts","Missile throw","Keybind display"}},
 		Sound={sections={"Game Sound Filters","Toy Audio","Notification Sounds","Info Notifications","Warning Notifications","Success Notifications","Danger Notifications","Join Notifications","Leave Notifications","Respawn Notifications","Blackhole Notifications","Kick Notifications","Loop Alert Sounds","Blackhole Audio"},
 			prefixes={{"NoticeInfo","Info Notifications"},{"NoticeWarning","Warning Notifications"},{"NoticeSuccess","Success Notifications"},{"NoticeDanger","Danger Notifications"},{"NoticeJoin","Join Notifications"},{"NoticeLeave","Leave Notifications"},{"NoticeRespawn","Respawn Notifications"},{"NoticeBlackhole","Blackhole Notifications"},{"NoticeKick","Kick Notifications"}},
 			names={["Preview info sound"]="Info Notifications",["Preview warning sound"]="Warning Notifications",["Preview success sound"]="Success Notifications",["Preview danger sound"]="Danger Notifications",
@@ -17003,9 +17268,9 @@ do
 				["Preview respawn sound"]="Respawn Notifications",["Preview respawn alert"]="Respawn Notifications",
 				["Preview blackhole sound"]="Blackhole Notifications",["Preview blackhole alert"]="Blackhole Notifications",
 				["Preview kick sound"]="Kick Notifications",["Preview kick alert"]="Kick Notifications"}},
-		Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Notification theme","Position & Appearance"}},
-		Customization={sections={"Hub Theme","Appearance","Custom Theme Colors","On-screen FPS & Ping","Anchor Appearance","Touch Action Buttons"}},
-		["UI Settings"]={sections={"Menu","Saved settings"}},
+		Notifications={sections={"Player Events","Target Alerts","Loop & Blobman Alerts","Notification theme","Event messages","Notification history","Position & Appearance"}},
+		Customization={sections={"Hub Theme","Appearance","Custom Theme Colors","On-screen FPS & Ping","Anchor Appearance","Touch Action Buttons","Session overlay"}},
+		["UI Settings"]={sections={"Menu","Saved settings","Config profiles"}},
 	}
 	for key,layout in pairs(layouts) do
 		local tab=Tabs[key]
