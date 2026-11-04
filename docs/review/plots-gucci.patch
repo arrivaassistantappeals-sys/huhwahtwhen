@@ -1,0 +1,132 @@
+--- a/dist/resonance.lua
++++ b/dist/resonance.lua
+@@ -10035,12 +10035,24 @@
+     local status=group:AddLabel("Plots & slots: idle. Distant interactions visit and return automatically.")
+     local function selfRoot()
+         local char=Player.Character
+-        local root=char and char:FindFirstChild("HumanoidRootPart")
++        local source=Hub.sourceGucci
++        local blob=Toggles.AutoGucciBlobToggle
++        local train=Toggles.AutoGucciTrainToggle
++        local gucci=(source and source.state and source.state.GucciAntiGrab)
++            or (blob and blob.Value) or (train and train.Value)
++        local proof=Hub.gucciVerifiedRun
++        if gucci and not (proof and proof.Confirmed and proof.Char==char) then
++            return nil,"Waiting for Gucci to finish successfully."
++        end
++        -- Use the same live root that Gucci actually verified.
++        local root=gucci and proof.HRP or char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+         local hum=char and char:FindFirstChildOfClass("Humanoid")
+         local held=Player:FindFirstChild("IsHeld")
+-        if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
+-            or (held and held.Value) or Hub.safeZoneLoopActive or Hub.blobFlightActive or Hub.characterFlightActive then return end
+-        for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
++        if not root or root.Parent~=char or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
++            or (held and held.Value) or Hub.safeZoneLoopActive or Hub.blobFlightActive or Hub.characterFlightActive then
++            return nil,"Character busy: leave seats/holds and stop flight, safe-zone or action loops."
++        end
++        for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return nil,"Stop player action loops before visiting." end end
+         return root,char
+     end
+     local function ownerIsSelf(owner) return owner.Value==Player.Name or owner.Value==Player end
+@@ -10068,7 +10080,7 @@
+     local function visit(kind,part,allowed,action)
+         if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
+         local root,char=selfRoot()
+-        if not root then return false,"Character busy: leave seats/holds and stop flight, safe-zone or action loops." end
++        if not root then return false,char end
+         if not part or not part.Parent or not part:IsA("BasePart") then return false,"Interaction part has not loaded." end
+         local destination=(root.Position-part.Position).Magnitude>25 and part.Position+Vector3.new(0,3,6) or root.Position
+         if kind=="House renewal" then destination=part.Position+Vector3.new(0,3,0) end
+@@ -10144,7 +10156,7 @@
+     end
+     local function spin(automatic)
+         if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
+-        local root=selfRoot();if not root then return false,"Character busy: stop flight/loops and leave seats first." end
++        local root,reason=selfRoot();if not root then return false,reason end
+         local slots=Workspace:FindFirstChild("Slots");if not slots then return false,"Slot machines have not loaded." end
+         local best,distance
+         for _,slot in ipairs(slots:GetChildren()) do
+@@ -10204,7 +10216,7 @@
+     group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (visit and return)",Default=false,Callback=function(on) slotOn=on;nextSlot=0;if not on then cancel("Slot spin") end end})
+     group:AddToggle("ToolAutoSaveHouse",{Text="Auto renew owned house time",Default=false,Callback=function(on) houseOn=on;nextHouse=0;if not on then cancel("House renewal") end end})
+     group:AddButton({Text="Cancel plot / slot visit",Func=function() if active then finish(active);status:SetText("Visit cancelled.") end end})
+-    group:AddLabel("No need to walk nearby. Visits require a loaded destination and a free character; seated/held/flying characters and action loops are left alone.")
++    group:AddLabel("No need to walk nearby. Visits require a loaded destination and a free character; Gucci stays enabled; visits wait for its verified success. Seats/holds/flight and action loops still block visits.")
+     function Hub.sampleToolAutomation()
+         if active then return end
+         local now=os.clock()
+@@ -10238,6 +10250,7 @@
+     end})
+ end)()
+ end
++
+ -- Local presentation tools inspired by the supplied code’s Perspective settings.
+ do
+ (function()
+--- a/dist/resonance.txt
++++ b/dist/resonance.txt
+@@ -10035,12 +10035,24 @@
+     local status=group:AddLabel("Plots & slots: idle. Distant interactions visit and return automatically.")
+     local function selfRoot()
+         local char=Player.Character
+-        local root=char and char:FindFirstChild("HumanoidRootPart")
++        local source=Hub.sourceGucci
++        local blob=Toggles.AutoGucciBlobToggle
++        local train=Toggles.AutoGucciTrainToggle
++        local gucci=(source and source.state and source.state.GucciAntiGrab)
++            or (blob and blob.Value) or (train and train.Value)
++        local proof=Hub.gucciVerifiedRun
++        if gucci and not (proof and proof.Confirmed and proof.Char==char) then
++            return nil,"Waiting for Gucci to finish successfully."
++        end
++        -- Use the same live root that Gucci actually verified.
++        local root=gucci and proof.HRP or char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+         local hum=char and char:FindFirstChildOfClass("Humanoid")
+         local held=Player:FindFirstChild("IsHeld")
+-        if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
+-            or (held and held.Value) or Hub.safeZoneLoopActive or Hub.blobFlightActive or Hub.characterFlightActive then return end
+-        for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
++        if not root or root.Parent~=char or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
++            or (held and held.Value) or Hub.safeZoneLoopActive or Hub.blobFlightActive or Hub.characterFlightActive then
++            return nil,"Character busy: leave seats/holds and stop flight, safe-zone or action loops."
++        end
++        for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return nil,"Stop player action loops before visiting." end end
+         return root,char
+     end
+     local function ownerIsSelf(owner) return owner.Value==Player.Name or owner.Value==Player end
+@@ -10068,7 +10080,7 @@
+     local function visit(kind,part,allowed,action)
+         if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
+         local root,char=selfRoot()
+-        if not root then return false,"Character busy: leave seats/holds and stop flight, safe-zone or action loops." end
++        if not root then return false,char end
+         if not part or not part.Parent or not part:IsA("BasePart") then return false,"Interaction part has not loaded." end
+         local destination=(root.Position-part.Position).Magnitude>25 and part.Position+Vector3.new(0,3,6) or root.Position
+         if kind=="House renewal" then destination=part.Position+Vector3.new(0,3,0) end
+@@ -10144,7 +10156,7 @@
+     end
+     local function spin(automatic)
+         if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
+-        local root=selfRoot();if not root then return false,"Character busy: stop flight/loops and leave seats first." end
++        local root,reason=selfRoot();if not root then return false,reason end
+         local slots=Workspace:FindFirstChild("Slots");if not slots then return false,"Slot machines have not loaded." end
+         local best,distance
+         for _,slot in ipairs(slots:GetChildren()) do
+@@ -10204,7 +10216,7 @@
+     group:AddToggle("ToolAutoSpin",{Text="Auto slot spin (visit and return)",Default=false,Callback=function(on) slotOn=on;nextSlot=0;if not on then cancel("Slot spin") end end})
+     group:AddToggle("ToolAutoSaveHouse",{Text="Auto renew owned house time",Default=false,Callback=function(on) houseOn=on;nextHouse=0;if not on then cancel("House renewal") end end})
+     group:AddButton({Text="Cancel plot / slot visit",Func=function() if active then finish(active);status:SetText("Visit cancelled.") end end})
+-    group:AddLabel("No need to walk nearby. Visits require a loaded destination and a free character; seated/held/flying characters and action loops are left alone.")
++    group:AddLabel("No need to walk nearby. Visits require a loaded destination and a free character; Gucci stays enabled; visits wait for its verified success. Seats/holds/flight and action loops still block visits.")
+     function Hub.sampleToolAutomation()
+         if active then return end
+         local now=os.clock()
+@@ -10238,6 +10250,7 @@
+     end})
+ end)()
+ end
++
+ -- Local presentation tools inspired by the supplied code’s Perspective settings.
+ do
+ (function()
