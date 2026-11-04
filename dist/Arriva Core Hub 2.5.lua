@@ -1510,7 +1510,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			local defaults={info=Color3.fromRGB(106,177,255),warning=Color3.fromRGB(255,202,105),success=Color3.fromRGB(111,224,160),danger=Color3.fromRGB(255,115,125),join=Color3.fromRGB(190,140,255),leave=Color3.fromRGB(190,140,255),respawn=Color3.fromRGB(190,140,255),blackhole=Color3.fromRGB(234,112,255),kick=Color3.fromRGB(255,115,125)}
 			local accent=self["noticeColor_"..kind] or defaults[kind] or defaults.info
 			local background=self.noticeBackground or colors.card
-			frame.BackgroundColor3=background:Lerp(accent,0.14)
+			frame.BackgroundColor3=background:Lerp(accent,self.noticeBackgroundTint or 0.14)
 			frame.BackgroundTransparency=self.noticeBackgroundTransparency or 0
 			local newHex=string.format("#%02X%02X%02X",math.floor(accent.R*255+0.5),math.floor(accent.G*255+0.5),math.floor(accent.B*255+0.5))
 			local oldHex=frame:GetAttribute("NoticeAccentHex")
@@ -16256,7 +16256,8 @@ do
 		color("NoticeKickColor","Player kicked HEX","noticeColor_kick","#FF737D")
 		color("NoticeBackgroundColor","Background base HEX","noticeBackground","#212121")
 		color("NoticeBodyColor","Message text HEX","noticeBodyColor","#DCE0E8")
-		group:AddSlider("NoticeBackgroundTransparency",{Text="Background transparency",Default=0,Min=0,Max=0.8,Rounding=2,Callback=function(value) Hub.setNoticePreference("noticeBackgroundTransparency",value) end})
+		group:AddSlider("NoticeBackgroundTransparency",{Text="Background transparency (1 = hidden)",Default=0,Min=0,Max=1,Rounding=2,Callback=function(value) Hub.setNoticePreference("noticeBackgroundTransparency",value) end})
+		group:AddSlider("NoticeBackgroundTint",{Text="Background color tint (%)",Default=14,Min=0,Max=100,Rounding=0,Callback=function(value) Hub.setNoticePreference("noticeBackgroundTint",value/100) end})
 		group:AddSlider("NoticeBorderThickness",{Text="Border thickness",Default=1.2,Min=0,Max=4,Rounding=1,Callback=function(value) Hub.setNoticePreference("noticeBorderThickness",value) end})
 		group:AddSlider("NoticeCornerRadius",{Text="Corner radius",Default=10,Min=0,Max=24,Rounding=0,Callback=function(value) Hub.setNoticePreference("noticeCornerRadius",value) end})
 		for _,kind in ipairs({"info","warning","success","danger"}) do
