@@ -1,0 +1,738 @@
+--- a/dist/resonance.lua
++++ b/dist/resonance.lua
+@@ -2795,7 +2795,7 @@
+ 		reset(pingState);reset(fpsState);unavailable=false
+ 		disconnectBad,disconnectSent=0,false
+ 		if not pingOn and not framesOn and not disconnectOn then return end
+-		connection=Hub.connect(originalRunService.Heartbeat,function(dt)
++		connection=Hub.connect(RunService.Heartbeat,function(dt)
+ 			elapsed+=dt;frames+=1;worstFrame=math.max(worstFrame,dt)
+ 			if elapsed<1 then return end
+ 			local seconds=elapsed
+@@ -10956,7 +10956,8 @@
+     local toggles={GucciAntiGrab={SetValue=function(_,v) if Toggles.AutoGucciBlobToggle then Toggles.AutoGucciBlobToggle:SetValue(v) end end}}
+     local train=setmetatable({},{__index=function(_,method)
+         if method=="FindFirstChild" then return function(_,name)
+-            local folder=Workspace:FindFirstChild("AlwaysHereTweenedObjects")
++            local map=Workspace:FindFirstChild("Map")
++            local folder=(map and map:FindFirstChild("AlwaysHereTweenedObjects")) or Workspace:FindFirstChild("AlwaysHereTweenedObjects")
+             local current=folder and folder:FindFirstChild("Train")
+             return current and current:FindFirstChild(name)
+         end end
+@@ -11000,34 +11001,64 @@
+         spawned[model]=nil
+     end
+     local spawnBusy=false
++    local spawnInvocation
++    local nextSpawnAttempt=0
++    local function spawnStatus(text) Hub.sourceSpawnStatus=text end
+     local function sourceSpawnImpl(name,frame,timeout)
+         local char,root,hum=tbl12.Char()
+-        if flag11 or not root or not hum or hum.Health<=0 then return end
++        if flag11 or not root or not hum or hum.Health<=0 then spawnStatus("Waiting for a living character.");return end
+         local menu=ReplicatedStorage:FindFirstChild("MenuToys")
+         local remote=menu and menu:FindFirstChild("SpawnToyRemoteFunction")
+-        if not remote then return end
+-        local allowed=Player:FindFirstChild("CanSpawnToy");if allowed and not allowed.Value then return end
++        if not remote then spawnStatus("MenuToys.SpawnToyRemoteFunction is missing.");return end
++        local allowed=Player:FindFirstChild("CanSpawnToy")
++        if allowed and not allowed.Value then spawnStatus("The game's CanSpawnToy flag is false.");return end
++        frame=frame or root.CFrame*CFrame.new(0,5,0)
+         local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+         local before={};if folder then for _,model in ipairs(folder:GetChildren()) do before[model]=true end end
+-        local result=Hub.invoke(remote,name,frame,Vector3.new(0,97.69000244140625,0))
+-        local deadline=os.clock()+(timeout or 2)
++        local invocation={started=os.clock(),name=name}
++        spawnInvocation=invocation
++        spawnStatus("Requested "..name.."; waiting for replication.")
++        task.spawn(function()
++            invocation.ok,invocation.result=pcall(function()
++                return Hub.invoke(remote,name,frame,Vector3.new(0,97.69000244140625,0))
++            end)
++            invocation.done=true
++            if spawnInvocation==invocation then spawnInvocation=nil end
++        end)
++        -- Bound model discovery, independently of InvokeServer returning.
++        local deadline=os.clock()+math.clamp(tonumber(timeout) or 2,1,5)
+         repeat
+-            if flag11 or Player.Character~=char then return end
++            if flag11 or not Hub.alive or Player.Character~=char then spawnStatus("Spawn cancelled after character/unload change.");return end
+             folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
++            local result=invocation.result
+             if folder then
+-                if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder and not before[result] then spawned[result]=true;return result end
+-                for _,model in ipairs(folder:GetChildren()) do if not before[model] and model:IsA("Model") and model.Name==name then spawned[model]=true;return model end end
++                if typeof(result)=="Instance" and result:IsA("Model") and result.Name==name and result.Parent==folder and not before[result] then
++                    spawned[result]=true;spawnStatus(name.." replicated.");return result
++                end
++                local candidate,count=nil,0
++                for _,model in ipairs(folder:GetChildren()) do
++                    if not before[model] and model:IsA("Model") and model.Name==name then candidate=model;count+=1 end
++                end
++                if count==1 then spawned[candidate]=true;spawnStatus(name.." replicated.");return candidate end
+             end
++            if invocation.done and not invocation.ok then spawnStatus("Spawn request failed: "..tostring(invocation.result):sub(1,140));return end
+             task.wait()
+         until os.clock()>=deadline
++        spawnStatus(invocation.done and "Spawn returned, but no unique new toy replicated." or "Server spawn response still pending; further defense spawns wait to avoid duplicate requests.")
+     end
+     tbl12.SpawnToy=function(...)
+         if spawnBusy then return nil end
++        if spawnInvocation then
++            spawnStatus(string.format("Waiting for pending %s server response (%.1fs).",spawnInvocation.name,os.clock()-spawnInvocation.started))
++            return nil
++        end
++        if os.clock()<nextSpawnAttempt then return nil end
+         spawnBusy=true
+         local args=table.pack(...)
+         local ok,result=xpcall(function() return sourceSpawnImpl(table.unpack(args,1,args.n)) end,debug.traceback)
+         spawnBusy=false
+-        if not ok then warn("[Source defense spawn] "..tostring(result));return nil end
++        if not result or not ok then nextSpawnAttempt=os.clock()+0.5 end
++        if not ok then spawnStatus("Spawn helper error: "..tostring(result):sub(1,140));warn("[Source defense spawn] "..tostring(result));return nil end
+         return result
+     end
+     tbl12.SNO=function(part)
+@@ -11463,16 +11494,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -11644,16 +11683,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -11848,16 +11895,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -12029,16 +12084,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -12226,16 +12289,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -12407,16 +12478,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -12588,16 +12667,24 @@
+ 
+ 											table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 												if tbl16 == v27 and child.Name == "SeatWeld" then
+-													child.Enabled = false
+-													child:Destroy()
+-													flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 												end
+ 											end))
+ 
+ 											table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 												if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-													child.Enabled = false
+-													child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 												end
+ 											end))
+ 
+@@ -13624,7 +13711,8 @@
+     if not leg or not tbl12.IsNetworkOwner(root) then return end
+     if bananaHum~=hum then restoreBanana();bananaHum=hum;bananaHip=hum.HipHeight end
+     local gucciWasOn=tbl8.GucciAntiGrab
+-    if gucciWasOn then tbl12.SetGucciAntiGrab(false);task.wait(0.25) end
++    local ok,err=pcall(function()
++        if gucciWasOn then tbl12.SetGucciAntiGrab(false);task.wait(0.25) end
+     if not tbl8.AntiBanana or Player.Character~=char then return end
+     hum.Sit=false;hum.HipHeight=2
+     tbl12.BreakLimb(Player,"Legs")
+@@ -13633,7 +13721,12 @@
+         if not tbl8.AntiBanana or not Hub.alive or Player.Character~=char or hum.Health<=0 or not leg.Parent then break end
+         hum.HipHeight=2;task.wait()
+     until os.clock()>=deadline
+-    if gucciWasOn and tbl8.AntiBanana and Hub.alive and Player.Character==char then tbl12.SetGucciAntiGrab(true) end
++    end)
++    local control=Toggles.AutoGucciBlobToggle
++    if gucciWasOn and control and control.Value and not flag11 and Hub.alive and Player.Character==char then
++        tbl12.SetGucciAntiGrab(true)
++    end
++    if not ok then error(err,0) end
+ end,restoreBanana)
+ defenseGroup:AddLabel("Anti Banana uses the source's leg-breaking method, respawn restores missing limbs.")
+ 
+@@ -16750,6 +16843,31 @@
+ end)()
+ end
+ 
++-- Paste before: -- Register every saved control before loading settings.
++MenuGroup:AddButton({Text="Spawn diagnostics",Func=function()
++    local lines={}
++    local function value(name)
++        local object=Player:FindFirstChild(name)
++        return object and tostring(object.Value) or "unavailable"
++    end
++    local menu=ReplicatedStorage:FindFirstChild("MenuToys")
++    local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
++    local source=Hub.sourceGucci
++    local proof=Hub.gucciVerifiedRun
++    table.insert(lines,"Spawn remote: "..tostring(menu and menu:FindFirstChild("SpawnToyRemoteFunction")~=nil or false))
++    table.insert(lines,"CanSpawnToy: "..value("CanSpawnToy"))
++    table.insert(lines,"Toy points: "..value("UsedToyPoints").." / "..value("ToysLimitCap"))
++    table.insert(lines,"Own toy folder: "..(folder and tostring(#folder:GetChildren()).." models" or "missing"))
++    table.insert(lines,"Gucci controller enabled: "..tostring(source and source.state.GucciAntiGrab or false))
++    table.insert(lines,"Gucci verified for current character: "..tostring(proof and proof.Confirmed and proof.Char==Player.Character or false))
++    table.insert(lines,"Defense spawn: "..(Hub.sourceSpawnStatus or "no attempt recorded"))
++    if Hub.lastWorkerError then table.insert(lines,"Worker error: "..Hub.lastWorkerError:sub(1,180)) end
++    if Hub.lastCallbackError then table.insert(lines,"Callback error: "..Hub.lastCallbackError:sub(1,180)) end
++    local text=table.concat(lines,"\n")
++    print("[Arriva spawn diagnostics]\n"..text)
++    notify("Spawn diagnostics",text,12)
++end})
++
+ -- Register every saved control before loading settings.
+ MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
+ -- Session customization does not require executor file-storage support.
+@@ -16803,6 +16921,7 @@
+     if Hub.lastUIError then message..=" Last callback error: "..Hub.lastUIError:sub(1,180) end
+     if Hub.lastCallbackError then message..=" Last event error: "..Hub.lastCallbackError:sub(1,180) end
+     if Hub.lastWorkerError then message..=" Last worker error: "..Hub.lastWorkerError:sub(1,180) end
++    if Hub.sourceSpawnStatus then message..=" Defense spawn: "..Hub.sourceSpawnStatus end
+     print("[Arriva startup] "..message);notify("Startup diagnostics",message,10)
+ end})
+ MenuGroup:AddButton({Text = "Save status", Func = function()
+--- a/dist/resonance.txt
++++ b/dist/resonance.txt
+@@ -2795,7 +2795,7 @@
+ 		reset(pingState);reset(fpsState);unavailable=false
+ 		disconnectBad,disconnectSent=0,false
+ 		if not pingOn and not framesOn and not disconnectOn then return end
+-		connection=Hub.connect(originalRunService.Heartbeat,function(dt)
++		connection=Hub.connect(RunService.Heartbeat,function(dt)
+ 			elapsed+=dt;frames+=1;worstFrame=math.max(worstFrame,dt)
+ 			if elapsed<1 then return end
+ 			local seconds=elapsed
+@@ -10956,7 +10956,8 @@
+     local toggles={GucciAntiGrab={SetValue=function(_,v) if Toggles.AutoGucciBlobToggle then Toggles.AutoGucciBlobToggle:SetValue(v) end end}}
+     local train=setmetatable({},{__index=function(_,method)
+         if method=="FindFirstChild" then return function(_,name)
+-            local folder=Workspace:FindFirstChild("AlwaysHereTweenedObjects")
++            local map=Workspace:FindFirstChild("Map")
++            local folder=(map and map:FindFirstChild("AlwaysHereTweenedObjects")) or Workspace:FindFirstChild("AlwaysHereTweenedObjects")
+             local current=folder and folder:FindFirstChild("Train")
+             return current and current:FindFirstChild(name)
+         end end
+@@ -11000,34 +11001,64 @@
+         spawned[model]=nil
+     end
+     local spawnBusy=false
++    local spawnInvocation
++    local nextSpawnAttempt=0
++    local function spawnStatus(text) Hub.sourceSpawnStatus=text end
+     local function sourceSpawnImpl(name,frame,timeout)
+         local char,root,hum=tbl12.Char()
+-        if flag11 or not root or not hum or hum.Health<=0 then return end
++        if flag11 or not root or not hum or hum.Health<=0 then spawnStatus("Waiting for a living character.");return end
+         local menu=ReplicatedStorage:FindFirstChild("MenuToys")
+         local remote=menu and menu:FindFirstChild("SpawnToyRemoteFunction")
+-        if not remote then return end
+-        local allowed=Player:FindFirstChild("CanSpawnToy");if allowed and not allowed.Value then return end
++        if not remote then spawnStatus("MenuToys.SpawnToyRemoteFunction is missing.");return end
++        local allowed=Player:FindFirstChild("CanSpawnToy")
++        if allowed and not allowed.Value then spawnStatus("The game's CanSpawnToy flag is false.");return end
++        frame=frame or root.CFrame*CFrame.new(0,5,0)
+         local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+         local before={};if folder then for _,model in ipairs(folder:GetChildren()) do before[model]=true end end
+-        local result=Hub.invoke(remote,name,frame,Vector3.new(0,97.69000244140625,0))
+-        local deadline=os.clock()+(timeout or 2)
++        local invocation={started=os.clock(),name=name}
++        spawnInvocation=invocation
++        spawnStatus("Requested "..name.."; waiting for replication.")
++        task.spawn(function()
++            invocation.ok,invocation.result=pcall(function()
++                return Hub.invoke(remote,name,frame,Vector3.new(0,97.69000244140625,0))
++            end)
++            invocation.done=true
++            if spawnInvocation==invocation then spawnInvocation=nil end
++        end)
++        -- Bound model discovery, independently of InvokeServer returning.
++        local deadline=os.clock()+math.clamp(tonumber(timeout) or 2,1,5)
+         repeat
+-            if flag11 or Player.Character~=char then return end
++            if flag11 or not Hub.alive or Player.Character~=char then spawnStatus("Spawn cancelled after character/unload change.");return end
+             folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
++            local result=invocation.result
+             if folder then
+-                if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder and not before[result] then spawned[result]=true;return result end
+-                for _,model in ipairs(folder:GetChildren()) do if not before[model] and model:IsA("Model") and model.Name==name then spawned[model]=true;return model end end
++                if typeof(result)=="Instance" and result:IsA("Model") and result.Name==name and result.Parent==folder and not before[result] then
++                    spawned[result]=true;spawnStatus(name.." replicated.");return result
++                end
++                local candidate,count=nil,0
++                for _,model in ipairs(folder:GetChildren()) do
++                    if not before[model] and model:IsA("Model") and model.Name==name then candidate=model;count+=1 end
++                end
++                if count==1 then spawned[candidate]=true;spawnStatus(name.." replicated.");return candidate end
+             end
++            if invocation.done and not invocation.ok then spawnStatus("Spawn request failed: "..tostring(invocation.result):sub(1,140));return end
+             task.wait()
+         until os.clock()>=deadline
++        spawnStatus(invocation.done and "Spawn returned, but no unique new toy replicated." or "Server spawn response still pending; further defense spawns wait to avoid duplicate requests.")
+     end
+     tbl12.SpawnToy=function(...)
+         if spawnBusy then return nil end
++        if spawnInvocation then
++            spawnStatus(string.format("Waiting for pending %s server response (%.1fs).",spawnInvocation.name,os.clock()-spawnInvocation.started))
++            return nil
++        end
++        if os.clock()<nextSpawnAttempt then return nil end
+         spawnBusy=true
+         local args=table.pack(...)
+         local ok,result=xpcall(function() return sourceSpawnImpl(table.unpack(args,1,args.n)) end,debug.traceback)
+         spawnBusy=false
+-        if not ok then warn("[Source defense spawn] "..tostring(result));return nil end
++        if not result or not ok then nextSpawnAttempt=os.clock()+0.5 end
++        if not ok then spawnStatus("Spawn helper error: "..tostring(result):sub(1,140));warn("[Source defense spawn] "..tostring(result));return nil end
+         return result
+     end
+     tbl12.SNO=function(part)
+@@ -11463,16 +11494,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -11644,16 +11683,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -11848,16 +11895,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -12029,16 +12084,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -12226,16 +12289,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -12407,16 +12478,24 @@
+ 
+ 																table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child.Name == "SeatWeld" then
+-																		child.Enabled = false
+-																		child:Destroy()
+-																		flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+ 																table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 																	if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-																		child.Enabled = false
+-																		child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 																	end
+ 																end))
+ 
+@@ -12588,16 +12667,24 @@
+ 
+ 											table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
+ 												if tbl16 == v27 and child.Name == "SeatWeld" then
+-													child.Enabled = false
+-													child:Destroy()
+-													flag14 = true
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == seat then
++                                child.Enabled = false
++                                child:Destroy()
++                                flag14 = true
++                            end
++                        end)
+ 												end
+ 											end))
+ 
+ 											table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
+ 												if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
+-													child.Enabled = false
+-													child:Destroy()
++                        task.defer(function()
++                            if tbl16 == v27 and tbl8.GucciAntiGrab and localPlayer.Character == v24 and child.Parent == v24 then
++                                child.Enabled = false
++                                child:Destroy()
++                            end
++                        end)
+ 												end
+ 											end))
+ 
+@@ -13624,7 +13711,8 @@
+     if not leg or not tbl12.IsNetworkOwner(root) then return end
+     if bananaHum~=hum then restoreBanana();bananaHum=hum;bananaHip=hum.HipHeight end
+     local gucciWasOn=tbl8.GucciAntiGrab
+-    if gucciWasOn then tbl12.SetGucciAntiGrab(false);task.wait(0.25) end
++    local ok,err=pcall(function()
++        if gucciWasOn then tbl12.SetGucciAntiGrab(false);task.wait(0.25) end
+     if not tbl8.AntiBanana or Player.Character~=char then return end
+     hum.Sit=false;hum.HipHeight=2
+     tbl12.BreakLimb(Player,"Legs")
+@@ -13633,7 +13721,12 @@
+         if not tbl8.AntiBanana or not Hub.alive or Player.Character~=char or hum.Health<=0 or not leg.Parent then break end
+         hum.HipHeight=2;task.wait()
+     until os.clock()>=deadline
+-    if gucciWasOn and tbl8.AntiBanana and Hub.alive and Player.Character==char then tbl12.SetGucciAntiGrab(true) end
++    end)
++    local control=Toggles.AutoGucciBlobToggle
++    if gucciWasOn and control and control.Value and not flag11 and Hub.alive and Player.Character==char then
++        tbl12.SetGucciAntiGrab(true)
++    end
++    if not ok then error(err,0) end
+ end,restoreBanana)
+ defenseGroup:AddLabel("Anti Banana uses the source's leg-breaking method, respawn restores missing limbs.")
+ 
+@@ -16750,6 +16843,31 @@
+ end)()
+ end
+ 
++-- Paste before: -- Register every saved control before loading settings.
++MenuGroup:AddButton({Text="Spawn diagnostics",Func=function()
++    local lines={}
++    local function value(name)
++        local object=Player:FindFirstChild(name)
++        return object and tostring(object.Value) or "unavailable"
++    end
++    local menu=ReplicatedStorage:FindFirstChild("MenuToys")
++    local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
++    local source=Hub.sourceGucci
++    local proof=Hub.gucciVerifiedRun
++    table.insert(lines,"Spawn remote: "..tostring(menu and menu:FindFirstChild("SpawnToyRemoteFunction")~=nil or false))
++    table.insert(lines,"CanSpawnToy: "..value("CanSpawnToy"))
++    table.insert(lines,"Toy points: "..value("UsedToyPoints").." / "..value("ToysLimitCap"))
++    table.insert(lines,"Own toy folder: "..(folder and tostring(#folder:GetChildren()).." models" or "missing"))
++    table.insert(lines,"Gucci controller enabled: "..tostring(source and source.state.GucciAntiGrab or false))
++    table.insert(lines,"Gucci verified for current character: "..tostring(proof and proof.Confirmed and proof.Char==Player.Character or false))
++    table.insert(lines,"Defense spawn: "..(Hub.sourceSpawnStatus or "no attempt recorded"))
++    if Hub.lastWorkerError then table.insert(lines,"Worker error: "..Hub.lastWorkerError:sub(1,180)) end
++    if Hub.lastCallbackError then table.insert(lines,"Callback error: "..Hub.lastCallbackError:sub(1,180)) end
++    local text=table.concat(lines,"\n")
++    print("[Arriva spawn diagnostics]\n"..text)
++    notify("Spawn diagnostics",text,12)
++end})
++
+ -- Register every saved control before loading settings.
+ MenuGroup:AddSlider("StartupFeatureDelay",{Text="Saved-feature startup delay (seconds)",Default=3,Min=0,Max=10,Rounding=1,Callback=function() end})
+ -- Session customization does not require executor file-storage support.
+@@ -16803,6 +16921,7 @@
+     if Hub.lastUIError then message..=" Last callback error: "..Hub.lastUIError:sub(1,180) end
+     if Hub.lastCallbackError then message..=" Last event error: "..Hub.lastCallbackError:sub(1,180) end
+     if Hub.lastWorkerError then message..=" Last worker error: "..Hub.lastWorkerError:sub(1,180) end
++    if Hub.sourceSpawnStatus then message..=" Defense spawn: "..Hub.sourceSpawnStatus end
+     print("[Arriva startup] "..message);notify("Startup diagnostics",message,10)
+ end})
+ MenuGroup:AddButton({Text = "Save status", Func = function()
