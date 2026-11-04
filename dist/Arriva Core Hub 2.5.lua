@@ -10257,6 +10257,42 @@ do
 			local light=holder and holder:FindFirstChild("LightBall")
 			if light then return light.Material==Enum.Material.Neon end
 		end
+		local winnings=group:AddLabel("Slot winnings: no spin result yet.")
+		local resultGeneration=0
+		local function slotCoinAmount(slot)
+			local screen=slot:FindFirstChild("Screen")
+			local gui=screen and screen:FindFirstChild("SlotGui")
+			local frame=gui and gui:FindFirstChild("CoinsFrame")
+			local label=frame and frame:FindFirstChild("CoinAmount")
+			if not label or not (label:IsA("TextLabel") or label:IsA("TextButton") or label:IsA("TextBox")) then return end
+			local text=tostring(label.Text):gsub("<[^>]->","")
+			-- Read the complete displayed award, including thousands separators.
+			local digits=text:match("([%d][%d,]*)%s*[Cc][Oo][Ii][Nn][Ss]?[%s!%.]*$")
+				or text:match("([%d][%d,]*)[%s!]*$")
+			local amount=digits and tonumber((digits:gsub(",","")))
+			if amount and amount>=0 and amount<math.huge then return amount,text end
+			return nil,text
+		end
+		local function watchSlotWinnings(slot)
+			resultGeneration+=1;local ticket=resultGeneration
+			winnings:SetText("Slot winnings: waiting for the result…")
+			task.spawn(function()
+				local started=os.clock();local changedAt=started;local previous
+				while Hub.alive and ticket==resultGeneration and slot.Parent and os.clock()-started<6 do
+					local amount,text=slotCoinAmount(slot)
+					if text~=previous then previous=text;changedAt=os.clock() end
+					-- Match the original's result delay, allowing animated text to settle.
+					if amount and os.clock()-started>=1 and os.clock()-changedAt>=0.35 then
+						local message="You won "..string.format("%.0f",amount).." coins!"
+						winnings:SetText("Slot winnings: "..message)
+						notify("Slot winnings",message,6,"success")
+						return
+					end
+					task.wait(0.1)
+				end
+				if Hub.alive and ticket==resultGeneration then winnings:SetText("Slot winnings: result display unavailable.") end
+			end)
+		end
 		local function spin(automatic)
 			if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
 			-- Rank machines without selecting a visit root before Gucci confirmation.
@@ -10276,15 +10312,23 @@ do
 			if not best then return false,"No ready slot machine yet; waiting for cooldown/loading." end
 			slotAttempts[best.slot]=os.clock()
 			return visit("Slot spin",best.handle,function() return not automatic or slotOn end,function(ownRoot,valid)
+				local requested=false
+				local function accepted()
+					if requested then
+						status:SetText("Slots: spin accepted. Returning while the result loads.")
+						watchSlotWinnings(best.slot)
+					else status:SetText("Slots: machine became busy before our request. Returning.") end
+				end
 				for _=1,10 do
 					if not valid() then return end
 					local ready=best.slot.Parent and slotState(best.slot,slots)
-					if ready==false then status:SetText("Slots: timer changed; spin accepted. Returning.");return end
+					if ready==false then accepted();return end
 					if not request(best.handle,ownRoot) then status:SetText("Slots: ownership remote unavailable; returning.");return end
+					requested=true
 					task.wait(0.2)
 				end
 				local ready=best.slot.Parent and slotState(best.slot,slots)
-				status:SetText(ready==false and "Slots: timer changed; spin accepted. Returning." or "Slots: request not confirmed. Returned; will try another available machine.")
+				if ready==false then accepted() else status:SetText("Slots: request not confirmed. Returned; will try another available machine.") end
 			end)
 		end
 		local function renewHouse()
@@ -10334,7 +10378,7 @@ do
 		local elapsed=0
 		Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.5 then elapsed=0;Hub.sampleToolAutomation() end end)
 		Hub.connect(Player.CharacterRemoving,function() if active and Hub.interactionVisitLock==active then Hub.interactionVisitLock=nil end;active=nil end)
-		Hub.cleanup(function() slotOn=false;houseOn=false;claimOn=false;if active then finish(active) end;Hub.sampleToolAutomation=nil end)
+		Hub.cleanup(function() resultGeneration+=1;slotOn=false;houseOn=false;claimOn=false;if active then finish(active) end;Hub.sampleToolAutomation=nil end)
 	end)();
 
 	(function()
