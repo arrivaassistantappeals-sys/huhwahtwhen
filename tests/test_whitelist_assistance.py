@@ -85,6 +85,44 @@ local function runWorker()
 end
 '''
 CASES={
+'gucci_setup_waits_then_confirmed_run_resumes_without_reset':r'''
+    Hub.sourceGucci={state={GucciAntiGrab=true}}
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();buttons["Whitelist assistance status"]()
+    assert(spawned==0 and notices[#notices].Description:find("Gucci setup/retry",1,true))
+    Hub.gucciVerifiedRun={Confirmed=true,Char=char}
+    Hub.sampleWhitelistAssistance();runWorker();assert(spawned==1)
+    Hub.sampleWhitelistAssistance();runWorker()
+    assert(requests[#requests].kind=="sticky")
+''',
+'gucci_stale_confirmation_does_not_allow_new_character_setup':r'''
+    Hub.sourceGucci={state={GucciAntiGrab=true}}
+    Hub.gucciVerifiedRun={Confirmed=true,Char={}}
+    controls.WhitelistAssistKick:SetValue(true);Hub.sampleWhitelistAssistance();assert(spawned==0)
+''',
+'owned_distant_toy_attaches_without_visit_while_gucci_active':r'''
+    Hub.sourceGucci={state={GucciAntiGrab=true}}
+    Hub.gucciVerifiedRun={Confirmed=true,Char=char}
+    spawnRemote.InvokeServer=function()
+        spawned+=1;local toy=makeToy();toy:FindFirstChild("StickyPart").Position=Vector3.new(200,4,0);return toy
+    end
+    controls.WhitelistAssistVisits:SetValue(true);controls.WhitelistAssistKick:SetValue(true)
+    Hub.sampleWhitelistAssistance();runWorker();Hub.sampleWhitelistAssistance();runWorker()
+    assert(requests[#requests].kind=="sticky" and not next(renderBindings) and not Hub.interactionVisitLock)
+''',
+'gucci_cannot_start_conflicting_distant_ownership_visit':r'''
+    Hub.sourceGucci={state={GucciAntiGrab=true}}
+    Hub.gucciVerifiedRun={Confirmed=true,Char=char}
+    spawnRemote.InvokeServer=function()
+        spawned+=1;local toy=makeToy();local part=toy:FindFirstChild("StickyPart")
+        part.Position=Vector3.new(200,4,0);part:FindFirstChild("PartOwner").Value="";return toy
+    end
+    controls.WhitelistAssistVisits:SetValue(true);controls.WhitelistAssistKick:SetValue(true)
+    Hub.sampleWhitelistAssistance();runWorker();Hub.sampleWhitelistAssistance();runWorker()
+    assert(#requests==0 and not next(renderBindings) and not Hub.interactionVisitLock)
+    buttons["Whitelist assistance status"]()
+    assert(notices[#notices].Description:find("Gucci controls character movement",1,true))
+''',
+
 'seat_blocker_updates_to_flight_and_recovers_automatically':r'''
     controls.WhitelistAssistKick:SetValue(true)
     hum.SeatPart={};Hub.sampleWhitelistAssistance();buttons["Whitelist assistance status"]()
