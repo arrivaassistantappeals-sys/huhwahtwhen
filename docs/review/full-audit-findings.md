@@ -62,32 +62,7 @@ Copy [anti-banana-replacement.lua](anti-banana-replacement.lua). Replace startin
 
 ### E. Fix the seven Gucci callback pairs
 
-In each `table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)` handler, replace the three synchronous lines `child.Enabled = false`, `child:Destroy()`, `flag14 = true` with:
-
-```lua
-task.defer(function()
-    if tbl16 == v27 and tbl8.GucciAntiGrab
-        and localPlayer.Character == v24 and child.Parent == seat then
-        child.Enabled = false
-        child:Destroy()
-        flag14 = true
-    end
-end)
-```
-
-In each adjoining `table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)` handler, replace its two synchronous mutation lines with:
-
-```lua
-task.defer(function()
-    if tbl16 == v27 and tbl8.GucciAntiGrab
-        and localPlayer.Character == v24 and child.Parent == v24 then
-        child.Enabled = false
-        child:Destroy()
-    end
-end)
-```
-
-There are seven of each in this upload. Keep their existing outer conditions and closing `end))`. These instructions apply to those specific Gucci setup handlers, not every `ChildAdded` or `Destroy` elsewhere.
+Use the **complete handler pairs** and exact boundaries in [gucci-repair-install.md](gucci-repair-install.md). Do not replace whole handlers with standalone `task.defer` snippets: that removes the `function(child)` wrappers and causes a nil `child.Parent` error. If you already did that, the repair guide covers all seven orphaned pairs.
 
 ### F. Add useful live diagnostics
 
