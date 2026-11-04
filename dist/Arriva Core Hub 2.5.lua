@@ -3336,7 +3336,7 @@ do
 	local saved, character
 	local lastSample, lastRecovery = -math.huge, -math.huge
 	local recoveries = 0
-	local status = DefenseGroup:AddLabel("Anti Void uses the supplied height-threshold recovery method.")
+	local status = DefenseGroup:AddLabel("Anti Void returns you to safety below the configured height.")
 	local function finiteVector(value)
 		for _, number in ipairs({value.X, value.Y, value.Z}) do
 			if number ~= number or math.abs(number) == math.huge then return false end
@@ -3400,7 +3400,7 @@ do
 			status:SetText("Anti Void: waiting for grounded, stable movement.")
 			sample()
 			connection = Hub.connect(RunService.Heartbeat, sample)
-		else status:SetText("Anti Void uses the supplied height-threshold recovery method.") end
+		else status:SetText("Anti Void returns you to safety below the configured height.") end
 	end})
 	DefenseGroup:AddButton({Text = "Record safe ground here", Func = function()
 		if not record() then notify("Recovery", "Stand still on solid anchored ground outside seats and grabs first.", 5) end
@@ -3533,7 +3533,7 @@ do
 	(function()
 		local enabled=false
 		local saved,listeners,folders={},{},{}
-		local status=DefenseGroup:AddLabel("Anti Sticky uses the supplied connected-part method.")
+		local status=DefenseGroup:AddLabel("Anti Sticky removes unwanted sticky connections.")
 		local function connect(event,callback)
 			local connection=Hub.connect(event,callback)
 			table.insert(listeners,connection)
@@ -3562,7 +3562,7 @@ do
 				pcall(function() if object.Parent then object.Disabled=disabled end end)
 			end
 			table.clear(saved)
-			status:SetText("Anti Sticky uses the supplied connected-part method.")
+			status:SetText("Anti Sticky removes unwanted sticky connections.")
 		end
 		DefenseGroup:AddToggle("AntiStickyToggle",{Text="Anti Sticky",Default=false,Callback=function(on)
 			stop();enabled=on;Hub.requestSave()
@@ -3900,7 +3900,7 @@ DefenseExtra:AddToggle("PaintDeleteToggle", {
 do
 	local enabled=false
 	local monitorGeneration=0
-	local status=DefenseExtra:AddLabel("Gucci uses the supplied seat/weld controller.")
+	local status=DefenseExtra:AddLabel("Gucci status: off.")
 	Hub.updateGucciStatus=function() status:SetText("Gucci: " .. (Hub.gucciStage or "Disabled")) end
 	DefenseExtra:AddToggle("GucciAutoDeleteBlob",{
 		Text="Auto-delete Blobman after Gucci",Default=true,
@@ -9602,7 +9602,7 @@ do
 		local function diagnostic(remote,args,bytes,sender,truncated)
 			local lines={"[Arriva payload diagnostic]", "Remote: " .. safePath(remote),
 				string.format("Observed string/buffer bytes: %d%s",bytes,truncated and " (inspection limit reached)" or ""),
-				"Player value included: " .. (sender and sender.Name or "none or ambiguous")}
+				"Sender: " .. (sender and sender.Name or "N/A")}
 			-- Remote location can identify a character's remote without identifying
 			-- who originally caused the server to fire it.
 			local ancestor=remote.Parent
@@ -9651,9 +9651,11 @@ do
 				if not captureNext and os.clock()<nextAlert then return end
 				local args=table.pack(...)
 				local bytes,sender,truncated=inspect(args)
-				-- Captured FTAP ExtendGrabLine events put the relayed Player first.
-				if remote.Name=="ExtendGrabLine" and remote.Parent and remote.Parent.Name=="GrabEvents" then
-					sender=resolvePlayer(args[1]) or sender
+				-- ExtendGrabLine supplies the sender as its first server-provided argument.
+				-- Other Player values are not used as a fallback sender.
+				sender=nil
+				if remote.Name=="ExtendGrabLine" and remote.Parent==grabEventsFolder then
+					sender=resolvePlayer(args[1])
 				end
 				largest=math.max(largest,bytes)
 				if captureNext then
@@ -9663,14 +9665,14 @@ do
 					notify("Payload monitor","Captured one incoming event, details are in the F9 console.",5)
 				end
 				if bytes<threshold then return end
-				if Hub.reportIncomingSignalPayload then Hub.reportIncomingSignalPayload(bytes,remote.Name) end
+				if Hub.reportIncomingSignalPayload then Hub.reportIncomingSignalPayload(bytes,remote.Name,sender) end
 				if os.clock()<nextAlert then return end
 				nextAlert=os.clock()+cooldown
 				lastReport=diagnostic(remote,args,bytes,sender,truncated)
 				print(lastReport)
 				local name=remote.Name:sub(1,80)
 				local amount=string.format("%s%.2f MiB of string/buffer data",truncated and "at least " or "",bytes/1048576)
-				local message=name.." received "..amount..". Source unknown; included Player values do not prove a sender."
+				local message=(sender and sender.Name or "N/A")..", "..amount..", remote: "..name.."."
 				notify("Large incoming payload",message,6)
 				status:SetText(string.format("Watching %d remotes, last alert %.2f MiB of string/buffer data.",remoteCount,bytes/1048576))
 			end)
@@ -13672,7 +13674,7 @@ do
 			end
 			releaseBananaGucci(record)
 		end
-		add("SourceAntiBanana","Anti Banana (supplied leg method)","AntiBanana",0.03,function()
+		add("SourceAntiBanana","Anti Banana","AntiBanana",0.03,function()
 			local char,root,hum,alive=charAlive()
 			if not alive then restoreBanana();return end
 			local leg=char:FindFirstChild("Right Leg")
@@ -13697,9 +13699,9 @@ do
 			releaseBananaGucci(record)
 			if not ok then error(err,0) end
 		end,restoreBanana)
-		defenseGroup:AddLabel("Anti Banana uses the source's leg-breaking method, respawn restores missing limbs.")
+		defenseGroup:AddLabel("Anti Banana breaks character legs; respawn restores missing limbs.")
 
-		add("SourceAntiSnowball","Anti Snowball (supplied method)","AntiSnowball",0.03,function()
+		add("SourceAntiSnowball","Anti Snowball","AntiSnowball",0.03,function()
 			if tbl8.GucciAntiGrab then return end
 			local char,root,hum,alive=charAlive()
 			if not alive then return end
@@ -13753,7 +13755,7 @@ do
 				if toggle and not toggle.Value then toggle:SetValue(true);fn18("Anti Lag enabled, FPS below threshold.","Auto Anti Lag") end
 			end
 		end)
-		defenseGroup:AddToggle("SourceLowFpsAntiLag",{Text="Auto Anti Lag (supplied FPS method)",Default=false,Callback=function(on) lowFps=on;Hub.requestSave() end})
+		defenseGroup:AddToggle("SourceLowFpsAntiLag",{Text="Auto Anti Lag (low FPS)",Default=false,Callback=function(on) lowFps=on;Hub.requestSave() end})
 		settings:AddSlider("SourceLowFpsThreshold",{Text="Auto Anti Lag FPS threshold",Default=3,Min=1,Max=20,Rounding=0,Callback=function(value) fpsThreshold=value;Hub.requestSave() end})
 
 		-- Supplied anti-invisibility is included by the adjoining module.
@@ -13786,7 +13788,7 @@ do
 			loopSaved,loopCharacter=nil,nil
 		end)
 		local originalVoid
-		defenseGroup:AddToggle("SourceDisableVoid",{Text="Disable Void (supplied method)",Default=false,Callback=function(on)
+		defenseGroup:AddToggle("SourceDisableVoid",{Text="Disable Void",Default=false,Callback=function(on)
 			tbl8.DestroyVoid=on
 			if on then if originalVoid==nil then originalVoid=Workspace.FallenPartsDestroyHeight end;Workspace.FallenPartsDestroyHeight=0/0
 			elseif originalVoid~=nil then Workspace.FallenPartsDestroyHeight=originalVoid;originalVoid=nil end
@@ -14626,7 +14628,7 @@ do
 			end end
 		Hub.sourceGucci={remove=tbl12.RemoveGucci,set=tbl12.SetGucciAntiGrab,state=tbl8,settings=tbl9,helpers=tbl12}
 		DefenseExtra:AddToggle("SourceRagdollOnRemoveGucci",{Text="Ragdoll target during Remove Gucci",Default=false,Callback=function(on) tbl8.RagdollInRG=on;Hub.requestSave() end})
-		local status=DefenseExtra:AddLabel("Gucci: supplied seat/weld controller, off")
+		local status=DefenseExtra:AddLabel("Gucci: off")
 		-- GUCCI NOTIFICATION STATES BEGIN
 		local previousStatus=Hub.updateGucciStatus
 		local lastPhase
@@ -14686,7 +14688,7 @@ do
 			stopAntiGucciTrain=function() if tbl9.GucciType=="Train" then setGucci(false) end end
 		end
 		DefenseExtra:AddDropdown("SourceGucciVehicle",{Text="Gucci vehicle",Values={"CreatureBlobman","TractorGreen","SantaSleigh","Train"},Default=1,Callback=function(value) tbl9.GucciType=value;Hub.requestSave() end})
-		DefenseExtra:AddButton({Text="Stop supplied Gucci and clean its toy",Func=function() Toggles.AutoGucciBlobToggle:SetValue(false) end})
+		DefenseExtra:AddButton({Text="Stop Gucci and remove its toy",Func=function() Toggles.AutoGucciBlobToggle:SetValue(false) end})
 		Hub.cleanup(function()
 			flag11=true;tbl12.SetGucciAntiGrab(false)
 			for model in pairs(spawned) do tbl12.DestroyToy(model) end
@@ -14709,7 +14711,7 @@ do
 			for part,value in pairs(savedMass) do pcall(function() if part.Parent then part.Massless=value end end);savedMass[part]=nil end
 			for weld,value in pairs(savedWeld) do pcall(function() if weld.Parent then weld.Enabled=value end end);savedWeld[weld]=nil end
 		end
-		DefenseGroup:AddToggle("SourceAntiInvis",{Text="Anti Invis (supplied method)",Default=false,Callback=function(on) enabled=on;if not on then restore() end;Hub.requestSave() end})
+		DefenseGroup:AddToggle("SourceAntiInvis",{Text="Anti Invis",Default=false,Callback=function(on) enabled=on;if not on then restore() end;Hub.requestSave() end})
 		Hub.connect(RunService.Heartbeat,function(dt)
 			if not enabled then return end
 			elapsed+=dt;if elapsed<0.1 then return end;elapsed=0
@@ -16202,10 +16204,10 @@ do
 		local beamOn,movementOn=true,true
 		local beamLimit,speedLimit=40,160
 		local bursts,movement={},{}
-		local incident=group:AddLabel("Network observations: no large payload recorded. Source unknown unless the server proves it.")
-		Hub.reportIncomingSignalPayload=function(bytes,remote)
+		local incident=group:AddLabel("Network observations: no large payload recorded.")
+		Hub.reportIncomingSignalPayload=function(bytes,remote,sender)
 			if not monitor then return end
-			incident:SetText(string.format("Large incoming payload: %.2f MiB on %s. Source unknown.",bytes/1048576,tostring(remote)))
+			incident:SetText(string.format("Large incoming payload: %.2f MiB on %s. Sender: %s.",bytes/1048576,tostring(remote),sender and sender.Name or "N/A"))
 
 		end
 		local function beamObserved(object)
@@ -16267,7 +16269,7 @@ do
 		group:AddButton({Text="Enable incoming payload monitor",Func=function()
 			if Toggles.IncomingPayloadMonitor then Toggles.IncomingPayloadMonitor:SetValue(true) end
 		end})
-		group:AddLabel("Packet/payload incidents need Incoming Payload Monitor enabled under Performance. Ordinary lag does not identify a sender.")
+		group:AddLabel("Packet/payload incidents need Incoming Payload Monitor enabled under Performance. ExtendGrabLine alerts show the server-provided sender, or N/A when unavailable.")
 		Hub.connect(Players.PlayerRemoving,function(person) bursts[person.UserId]=nil;movement[person.UserId]=nil end)
 		Hub.cleanup(function() Hub.reportIncomingSignalPayload=nil;table.clear(bursts);table.clear(movement) end)
 		local function signals(person)
@@ -16909,14 +16911,14 @@ do
 			prefixes={{"SourceAntiKick","Anti Kick Appearance"}},
 			names={
 				["Release local grab freeze"]="Grab & Seat Settings",
-				["Anti Sticky uses the supplied connected-part method."]="Grab & Seat Settings",
+				["Anti Sticky removes unwanted sticky connections."]="Grab & Seat Settings",
 				["Last person who grabbed you: nobody"]="Grab & Seat Settings",
-				["Gucci uses the supplied seat/weld controller."]="Gucci Settings",
-				["Gucci: supplied seat/weld controller, off"]="Gucci Settings",
-				["Stop supplied Gucci and clean its toy"]="Gucci Settings",
-				["Anti Void uses the supplied height-threshold recovery method."]="Recovery Settings",
+				["Gucci status: off."]="Gucci Settings",
+				["Gucci: off"]="Gucci Settings",
+				["Stop Gucci and remove its toy"]="Gucci Settings",
+				["Anti Void returns you to safety below the configured height."]="Recovery Settings",
 				["Record safe ground here"]="Recovery Settings",["Return to last safe ground"]="Recovery Settings",["Motion recovery status"]="Recovery Settings",
-				["Anti Banana uses the source's leg-breaking method, respawn restores missing limbs."]="World Hazard Notes",
+				["Anti Banana breaks character legs; respawn restores missing limbs."]="World Hazard Notes",
 				["Movement warning count"]="Movement Warnings",["Clear observed warning count"]="Movement Warnings",
 			},
 			order={
