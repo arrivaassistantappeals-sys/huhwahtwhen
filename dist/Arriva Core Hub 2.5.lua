@@ -117,49 +117,55 @@ function Hub.stop()
 		Hub.env.ArrivaCoreStarting = nil
 	end
 end
--- Restore saved values first, then spread enabled-feature callbacks across frames.
+-- Protection callbacks may yield or start workers. Track their setup before Gucci starts.
+Hub.protectionStartupJobs={}
+function Hub.applyControl(control,value,invoke)
+	local finish=Hub.beginProtectionChange and Hub.beginProtectionChange(control)
+	local ok,err=invoke(control.Callback,value)
+	if finish then finish() end
+	return ok,err
+end
+-- Restore passive settings first, enabled protections next, and Gucci requests last.
 function Hub.queueSavedCallbacks(records,invoke)
 	Hub.restoreEpoch=(Hub.restoreEpoch or 0)+1
 	local ticket=Hub.restoreEpoch
-	local delayed={}
+	local delayed,gucci={},{}
 	local immediate={AntiLagToggle=true,SourceAntiKickHighlight=true,SourceAntiKickRainbowFill=true,SourceAntiKickRainbowOutline=true}
 	local progress={total=#records,started=0,completed=0,failed=0,skipped=0,done=#records==0,errors={}}
 	Hub.restoreProgress=progress
 	local function run(record)
 		if not Hub.alive or ticket~=Hub.restoreEpoch then return end
 		local control=record.control
-		if control.revision~=record.revision then
-			progress.skipped+=1
+		if control.revision~=record.revision then progress.skipped+=1
 		else
-			progress.started+=1
-			Hub.lastRestoreControl=control.Id or "saved control"
-			local ok,err=invoke(control.Callback,record.value)
-			if ok==false then
-				progress.failed+=1
-				progress.errors[control.Id or "saved control"]=tostring(err)
-			end
+			progress.started+=1;Hub.lastRestoreControl=control.Id or "saved control"
+			local ok,err=Hub.applyControl(control,record.value,invoke)
+			if ok==false then progress.failed+=1;progress.errors[control.Id or "saved control"]=tostring(err) end
 		end
-		progress.completed+=1
-		progress.done=progress.completed==progress.total
+		progress.completed+=1;progress.done=progress.completed==progress.total
 	end
 	for _,record in ipairs(records) do
-		-- Restore manual line protection and passive shuriken appearance without the gameplay startup delay.
-		if record.control.Type=="Toggle" and record.value==true and not immediate[record.control.Id] then
-			table.insert(delayed,record)
+		local id=record.control.Id
+		if id=="AutoGucciBlobToggle" or id=="AutoGucciTrainToggle" then table.insert(gucci,record)
+		elseif record.control.Type=="Toggle" and record.value==true and not immediate[id] then table.insert(delayed,record)
 		else task.defer(function() run(record) end) end
 	end
-	if #delayed==0 then return end
+	table.sort(gucci,function(a,b) return a.control.Id<b.control.Id end)
 	task.spawn(function()
-		local setting=Hub.library and Hub.library.Options.StartupFeatureDelay
-		task.wait(math.clamp(tonumber(setting and setting.Value) or 3,0,10))
-		for _,record in ipairs(delayed) do
-			if not Hub.alive or ticket~=Hub.restoreEpoch then return end
-			task.spawn(function() run(record) end)
-			task.wait(0.1)
+		if #delayed>0 then
+			local setting=Hub.library and Hub.library.Options.StartupFeatureDelay
+			task.wait(math.clamp(tonumber(setting and setting.Value) or 3,0,10))
+			for _,record in ipairs(delayed) do
+				if not Hub.alive or ticket~=Hub.restoreEpoch then return end
+				task.spawn(function() run(record) end);task.wait(0.1)
+			end
 		end
+		-- Callback completion matters: launching the last task is not a setup barrier.
+		while Hub.alive and ticket==Hub.restoreEpoch and progress.completed<#records-#gucci do task.wait(0.05) end
+		if not Hub.alive or ticket~=Hub.restoreEpoch then return end
+		for _,record in ipairs(gucci) do run(record) end
 	end)
 end
-
 
 -- Notification preferences and history are shared by all notification entry points.
 Hub.noticePreferences={enabled=true,events={},templates={}}
@@ -681,15 +687,15 @@ local function processCommand(speaker, text)
 	if Hub.env.ArrivaAllowOwnerCommands ~= true then return end
 	if speaker.UserId ~= HUB_OWNER_ID then return end
 
-	-- Only process messages that start with ":" to prevent loops
-	if not text:match("^:") then
+	-- Only process messages that start with "!" to prevent loops
+	if not text:match("^!") then
 		return
 	end
 
 	local args = text:split(" ")
 	local cmd = args[1] and args[1]:lower()
 
-	if cmd == ":bring" then
+	if cmd == "!bring" then
 		local targetStr = args[2]
 		local targets = findTarget(targetStr)
 
@@ -702,7 +708,7 @@ local function processCommand(speaker, text)
 			end
 		end
 
-	elseif cmd == ":reveal" then
+	elseif cmd == "!reveal" then
 		local targetStr = args[2]
 		local targets = findTarget(targetStr)
 
@@ -715,7 +721,7 @@ local function processCommand(speaker, text)
 			end
 		end
 
-	elseif cmd == ":kill" then
+	elseif cmd == "!kill" then
 		local targetStr = args[2]
 		local targets = findTarget(targetStr)
 
@@ -728,7 +734,7 @@ local function processCommand(speaker, text)
 			end
 		end
 
-	elseif cmd == ":kick" then
+	elseif cmd == "!kick" then
 		local targetStr = args[2]
 		local targets = findTarget(targetStr)
 
@@ -741,7 +747,7 @@ local function processCommand(speaker, text)
 			end
 		end
 
-	elseif cmd == ":announce" then
+	elseif cmd == "!announce" then
 		local msg = table.concat(args, " ", 2)
 		if msg ~= "" then
 			sysMsg("[Hub Owner] " .. msg)
@@ -943,6 +949,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			return row,title
 		end
 		local Tab = {}
+		function Tab:Show() UI.search.Text="";activate(self);UI:SetVisibility(true) end
 		-- BEGIN NAVIGATION METHODS
 		function Tab:SetSectionCollapsed(name,collapsed)
 			self.collapsedSections=self.collapsedSections or {}
@@ -1829,7 +1836,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 	local function register(id, kind, info, tab)
 		tab.pendingControlId=id
 		assert(not Library.controls[id], "Duplicate UI ID: " .. id)
-		local control = {Id = id, Text = info.Text or tostring(id), Type = kind, Value = info.Default, Multi = info.Multi or false, Callback = info.Callback,
+		local control = {Id = id, Text = info.Text or tostring(id), Type = kind, Tab = tab, Value = info.Default, Multi = info.Multi or false, Callback = info.Callback,
 			Values = info.Values or {}, NoUI = info.NoUI, Mode = "Toggle"}
 		Library.controls[id] = control
 		if kind == "Toggle" then Library.Toggles[id] = control else Library.Options[id] = control end
@@ -1849,7 +1856,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 					record.revision=self.revision
 				end
 			else
-				invoke(self.Callback, self.Value)
+				Hub.applyControl(self,self.Value,invoke)
 			end
 			Hub.requestSave()
 		end
@@ -2239,6 +2246,7 @@ local Tabs = {
 	Whitelist = Window:AddTab("Protected Players", "user-round-check"),
 	Explosions = Window:AddTab("Missiles & Explosions", "orbit"),
 	KeyBinds = Window:AddTab("KeyBinds", "keyboard"),
+	Commands = Window:AddTab("Commands", "terminal"),
 	Sound = Window:AddTab("Sound", "volume-2"),
 	Notifications = Window:AddTab("Notifications", "bell"),
 	Customization = Window:AddTab("Appearance", "palette"),
@@ -2826,6 +2834,7 @@ Hub.connect(Player.CharacterAdded, function(char)
 			readySince = readySince or os.clock()
 			Hub.gucciRespawnReadyAt = readySince + 1.5
 			if os.clock() >= Hub.gucciRespawnReadyAt then
+				if Hub.resumeGucciAfterProtection then Hub.resumeGucciAfterProtection();return end
 				if Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value then
 					if Hub.reportGucciStatus then Hub.reportGucciStatus("Starting") end
 					task.spawn(startAntiGucci)
@@ -8512,7 +8521,6 @@ MiscGroup:AddToggle("WaterWalkToggle", {
 	end
 })
 
-
 -- Triggerbot System
 local Triggerbot = {
 	Enabled = false,
@@ -11313,22 +11321,6 @@ do
 			local tbl16 = nil
 			local flag12 = nil
 
-			-- ChildAdded fires while the engine may still be parenting the instance.
-			-- Keep the callback bodies intact, but run removal after parenting unwinds.
-			local function connectGucciChildAdded(parent,callback)
-				local connected=true
-				local native=Hub.connect(parent.ChildAdded,function(child)
-					task.defer(function()
-						if connected and Hub.alive and child.Parent==parent then callback(child) end
-					end)
-				end)
-				local connection={}
-				function connection:Disconnect()
-					connected=false;native:Disconnect();Hub.connections[native]=nil
-				end
-				return setmetatable(connection,{__index=function(_,key) return native[key] end})
-			end
-
 			-- GUCCI CONFIRMATION BEGIN
 			local function clearGucciConfirmation(record,announce)
 				if not record then return end
@@ -11579,7 +11571,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
+													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -11587,7 +11579,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
+													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -11760,7 +11752,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
+													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -11768,7 +11760,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
+													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -11964,7 +11956,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
+													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -11972,7 +11964,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
+													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -12145,7 +12137,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
+													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -12153,7 +12145,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
+													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -12342,7 +12334,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
+													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -12350,7 +12342,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
+													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -12523,7 +12515,7 @@ do
 													v26.Sit = false
 													flag14 = false
 
-													table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
+													table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child.Name == "SeatWeld" then
 															child.Enabled = false
 															child:Destroy()
@@ -12531,7 +12523,7 @@ do
 														end
 													end))
 
-													table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
+													table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
 														if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 															child.Enabled = false
 															child:Destroy()
@@ -12704,7 +12696,7 @@ do
 								v26.Sit = false
 								flag14 = false
 
-								table.insert(v27.Connections, connectGucciChildAdded(seat,function(child)
+								table.insert(v27.Connections, seat.ChildAdded:Connect(function(child)
 									if tbl16 == v27 and child.Name == "SeatWeld" then
 										child.Enabled = false
 										child:Destroy()
@@ -12712,7 +12704,7 @@ do
 									end
 								end))
 
-								table.insert(v27.Connections, connectGucciChildAdded(v24,function(child)
+								table.insert(v27.Connections, v24.ChildAdded:Connect(function(child)
 									if tbl16 == v27 and child:IsA("LocalScript") and child.Name:lower():find("control") then
 										child.Enabled = false
 										child:Destroy()
@@ -13306,6 +13298,7 @@ do
 				end
 			end
 
+			tbl12.GucciWorkerRunning=function() return flag12==true end
 			tbl12.SetGucciAntiGrab = function(arg)
 				tbl8.GucciAntiGrab = arg and not flag11
 				if not tbl8.GucciAntiGrab then
@@ -13368,14 +13361,19 @@ do
 				if not on then if cleanup then cleanup() end;return end
 				if workers[key] then return end
 				workers[key]=true
+				Hub.protectionStartupJobs[key]=true
 				task.spawn(function()
+					local appliedCharacter
 					local ok,message=xpcall(function()
 						while Hub.alive and not flag11 and tbl8[key] do
+							local currentCharacter=Player.Character
+							if appliedCharacter~=currentCharacter then Hub.protectionStartupJobs[key]=true end
 							action()
+							appliedCharacter=currentCharacter;Hub.protectionStartupJobs[key]=nil
 							task.wait(type(interval)=="function" and interval() or interval)
 						end
 					end,debug.traceback)
-					workers[key]=nil
+					workers[key]=nil;Hub.protectionStartupJobs[key]=nil
 					if cleanup then cleanup() end
 					if not ok then tbl8[key]=false;local control=workerControls[key];if control and control.Value then control:SetValue(false) end;warn("[Source defense "..key.."] "..tostring(message));notify("Defense error",key.." stopped, check the console for details.",5) end
 				end)
@@ -13738,7 +13736,8 @@ do
 			if Hub.alive and not flag11 and toggle and toggle.Value
 				and Player.Character==record.char and record.hum.Parent==record.char
 				and record.hum.Health>0 and not tbl8.GucciAntiGrab then
-				tbl12.SetGucciAntiGrab(true)
+				if Hub.resumeGucciAfterProtection then Hub.resumeGucciAfterProtection()
+				else tbl12.SetGucciAntiGrab(true) end
 			end
 		end
 		local function restoreBanana()
@@ -14711,6 +14710,7 @@ do
 		local notices={}
 		local messages={
 			Starting="Gucci starting; preparing the seat/weld controller.",
+			["Waiting for protections"]="Other protections are applying. Gucci will start last.",
 			Retrying="Gucci retrying; waiting for seat/weld confirmation.",
 			Verifying="Gucci is verifying seat release, ownership and controller stability.",
 			Active="Gucci active. Setup complete; seat release and controller checks are stable.",
@@ -14743,24 +14743,92 @@ do
 			if tbl8.GucciAntiGrab then Hub.reportGucciStatus(Hub.gucciStage or "Starting") end
 		end
 		-- GUCCI NOTIFICATION STATES END
+		-- Keep one pending start; user intent stays in the toggle while setup is paused.
+		local gucciDesired,gucciStartPending=false,false
+		local protectionCallbacks=0
+		local protectionChangedAt=os.clock()
+		local respawnReadyAt=0
+		local gucciStartWorker
+		local function pauseGucci()
+			if tbl8.GucciAntiGrab then tbl12.SetGucciAntiGrab(false) end
+		end
+		local function requestGucciStart(reason)
+			if not gucciDesired or flag11 or not Hub.alive then return end
+			gucciStartPending=true
+			Hub.gucciWaitingReason=reason or "Waiting for protections to settle."
+			if Hub.reportGucciStatus then Hub.reportGucciStatus("Waiting for protections",Hub.gucciWaitingReason) end
+			if gucciStartWorker then return end
+			gucciStartWorker=task.defer(function()
+				while Hub.alive and not flag11 and gucciDesired and gucciStartPending do
+					local progress=Hub.restoreProgress
+					local char,root,hum=tbl12.Char()
+					local held=Player:FindFirstChild("IsHeld")
+					local ready=not Hub.configLoading and (not progress or progress.done)
+						and protectionCallbacks==0 and next(Hub.protectionStartupJobs)==nil
+						and (tbl8.GucciAntiGrab or not tbl12.GucciWorkerRunning())
+						and os.clock()-protectionChangedAt>=0.75 and os.clock()>=respawnReadyAt
+						and char and root and hum and hum.Health>0 and root.Parent==char and hum.Parent==char
+						and not (held and held.Value)
+					if ready then
+						gucciStartPending=false;Hub.gucciWaitingReason=nil
+						if Hub.stopBlobFlight then Hub.stopBlobFlight() end
+						if not tbl8.GucciAntiGrab then
+							Hub.reportGucciStatus("Starting")
+							tbl12.SetGucciAntiGrab(true)
+						end
+						break
+					end
+					task.wait(0.1)
+				end
+				gucciStartWorker=nil
+			end)
+		end
 		local function setGucci(on)
-			if on and Hub.stopBlobFlight then Hub.stopBlobFlight() end
-			local wasEnabled=tbl8.GucciAntiGrab==true
-			if on and not wasEnabled then Hub.reportGucciStatus("Starting") end
-			tbl12.SetGucciAntiGrab(on)
-			if not on and wasEnabled then Hub.reportGucciStatus("Disabled") end
+			gucciDesired=on==true and not flag11
+			if gucciDesired then
+				if not tbl8.GucciAntiGrab or gucciStartPending then requestGucciStart() end
+			else
+				gucciStartPending=false;Hub.gucciWaitingReason=nil
+				pauseGucci();Hub.reportGucciStatus("Disabled")
+			end
 			Hub.requestSave()
 		end
+		Hub.resumeGucciAfterProtection=function()
+			local toggle=Toggles.AutoGucciBlobToggle
+			if gucciDesired and toggle and toggle.Value and (not tbl8.GucciAntiGrab or gucciStartPending) then
+				protectionChangedAt=os.clock();requestGucciStart("Protection finished; preparing Gucci last.")
+			end
+		end
+		Hub.beginProtectionChange=function(control)
+			if control.Tab~=Tabs.Defense.native or control.Id=="AutoGucciBlobToggle" or control.Id=="AutoGucciTrainToggle"
+				or control.Id:match("^SourceAntiKick") or (control.Type~="Toggle" and control.Id~="SourceGucciVehicle") then return end
+			protectionCallbacks+=1;protectionChangedAt=os.clock()
+			if gucciDesired then pauseGucci();requestGucciStart("Applying "..(control.Text or control.Id).." before Gucci.") end
+			local finished=false
+			return function()
+				if finished then return end;finished=true
+				protectionCallbacks=math.max(0,protectionCallbacks-1);protectionChangedAt=os.clock()
+				if gucciDesired then requestGucciStart() end
+			end
+		end
+		Hub.connect(Player.CharacterAdded,function()
+			respawnReadyAt=os.clock()+1.5;protectionChangedAt=os.clock()
+			if gucciDesired then pauseGucci();requestGucciStart("Waiting for respawn protections before Gucci.") end
+		end)
+		Hub.cleanup(function()
+			gucciDesired=false;gucciStartPending=false
+			Hub.beginProtectionChange=nil;Hub.resumeGucciAfterProtection=nil;Hub.gucciWaitingReason=nil
+		end)
 		-- Replace the old callbacks, not a second competing controller.
 		Toggles.AutoGucciBlobToggle.Callback=setGucci
 		startAntiGucci=function() if Toggles.AutoGucciBlobToggle.Value then setGucci(true) end end
 		stopAntiGucci=function() setGucci(false) end
 		if Toggles.AutoGucciTrainToggle then
 			Toggles.AutoGucciTrainToggle.Callback=function(on)
-				if on then tbl9.GucciType="Train";Toggles.AutoGucciBlobToggle:SetValue(true)
+				if on then pauseGucci();tbl9.GucciType="Train";Toggles.AutoGucciBlobToggle:SetValue(true)
 				elseif tbl9.GucciType=="Train" then Toggles.AutoGucciBlobToggle:SetValue(false) end
 			end
-			startAntiGucciTrain=function() if Toggles.AutoGucciTrainToggle.Value then tbl9.GucciType="Train";setGucci(true) end end
+			startAntiGucciTrain=function() if Toggles.AutoGucciTrainToggle.Value then pauseGucci();tbl9.GucciType="Train";setGucci(true) end end
 			stopAntiGucciTrain=function() if tbl9.GucciType=="Train" then setGucci(false) end end
 		end
 		DefenseExtra:AddDropdown("SourceGucciVehicle",{Text="Gucci vehicle",Values={"CreatureBlobman","TractorGreen","SantaSleigh","Train"},Default=1,Callback=function(value) tbl9.GucciType=value;Hub.requestSave() end})
@@ -17367,13 +17435,12 @@ end
 	local Players = game:GetService("Players")
 	local player = Players.LocalPlayer
 
-	local function message(text, kind)
-		Library:Notify({
-			Title = "Chat commands",
-			Description = text,
-			Time = 5,
-			Type = kind or "info",
-		})
+	local commandOutput
+	local commandLog={}
+	local function message(text,kind)
+		table.insert(commandLog,(kind=="warning" and "Warning: " or "")..tostring(text))
+		if #commandLog>10 then table.remove(commandLog,1) end
+		if commandOutput then commandOutput:SetText(table.concat(commandLog,"\n\n")) end
 	end
 
 	local function trim(text)
@@ -17542,17 +17609,6 @@ end
 
 	local commands = {}
 
-	commands.cmds = function()
-		message(
-			":to name | :select name | :add name | :remove name | :clear\n"
-				..":protect name — add to whitelist\n"
-				..":fly [on/off] | :unfly | :flyspeed 5–1000\n"
-				..":view name | :unview | :menu [on/off] | :save"
-		)
-	end
-
-	commands.help = commands.cmds
-
 	commands.protect = function(argument)
 		local person=target(argument)
 		local id=tostring(person.UserId)
@@ -17603,7 +17659,7 @@ end
 	commands.flyspeed = function(argument)
 		local speed = tonumber(trim(argument))
 		if not speed or speed ~= speed or speed < 5 or speed > 1000 then
-			error("Usage: :flyspeed 5–1000", 0)
+			error("Usage: !flyspeed 5–1000", 0)
 		end
 
 		set("PackCharacterFlightSpeed", speed)
@@ -17711,6 +17767,133 @@ end
 		message("Settings saved.", "success")
 	end
 
+	local commandCatalog={
+		{"cmds","!cmds","Open this commands panel."},
+		{"help","!help","Open this commands panel."},
+		{"protect","!protect name","Immediately add a player to the whitelist. Use @username for exact username matching."},
+		{"unprotect","!unprotect name","Remove a manual whitelist entry. Friend protection can still apply."},
+		{"whitelist","!whitelist","List manually protected players."},
+		{"gucci","!gucci on / off / restart","Queue Gucci last, disable it, or request a clean restart."},
+		{"status","!status","Show Gucci, protection setup, config restore and active-loop status."},
+		{"protection","!protection name on / off","Change a protection by its control ID or matching label. Gucci pauses while it applies."},
+		{"protections","!protections","List enabled protection toggles and their IDs."},
+		{"stop","!stop","Stop player action loops and flight; keep protection choices."},
+		{"select","!select name","Replace the player selection."},
+		{"add","!add name","Add a selected player."},
+		{"remove","!remove name","Remove a selected player."},
+		{"clear","!clear","Clear the player selection."},
+		{"to","!to name","Teleport near a player when your character is free."},
+		{"fly","!fly on / off","Toggle character flight."},
+		{"unfly","!unfly","Disable character flight."},
+		{"flyspeed","!flyspeed 5–1000","Set character flight speed."},
+		{"view","!view name","Spectate a player."},
+		{"unview","!unview","Restore your camera."},
+		{"menu","!menu on / off","Show or hide the hub menu."},
+		{"save","!save","Explicitly save settings."},
+		{"load","!load","Load AutoSave and apply Gucci after the other protections."},
+	}
+	local function openCommands()
+		if Tabs.Commands.native and Tabs.Commands.native.Show then Tabs.Commands.native:Show() end
+	end
+	commands.cmds=openCommands
+	commands.help=openCommands
+	commands.unprotect=function(argument)
+		local person=target(argument)
+		Hub.manualWhitelist[tostring(person.UserId)]=nil
+		Hub.manualWhitelist["name:"..person.Name:lower()]=nil
+		if Hub.refreshWhitelistUI then Hub.refreshWhitelistUI() end
+		Hub.queueSafetySave();Hub.requestSave()
+		message("Removed @"..person.Name.." from the manual whitelist."..(Hub.isProtected(person) and " Friend protection still applies." or ""),"success")
+	end
+	commands.whitelist=function()
+		local names={};for _,label in pairs(Hub.manualWhitelist) do table.insert(names,tostring(label)) end
+		table.sort(names);message(#names>0 and table.concat(names,"\n") or "Your manual whitelist is empty.")
+	end
+	commands.gucci=function(argument)
+		local wanted=trim(argument):lower()
+		if wanted=="restart" then set("AutoGucciBlobToggle",false);set("AutoGucciBlobToggle",true)
+		else set("AutoGucciBlobToggle",booleanArgument(argument,control("AutoGucciBlobToggle").Value)) end
+		message("Gucci: "..tostring(Hub.gucciStage or "off")..". "..(Hub.gucciWaitingReason or ""))
+	end
+	commands.status=function()
+		local progress=Hub.restoreProgress;local pending,loops=0,0
+		for _ in pairs(Hub.protectionStartupJobs) do pending+=1 end
+		for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then loops+=1 end end
+		message(string.format("Gucci: %s\nProtection setup jobs: %d | Active action loops: %d\nSettings restore: %s | Storage: %s%s",
+			tostring(Hub.gucciStage or "off"),pending,loops,progress and (progress.completed.."/"..progress.total) or "none",
+			Hub.storage and "available" or "unavailable",Hub.gucciWaitingReason and ("\n"..Hub.gucciWaitingReason) or ""))
+	end
+	commands.protections=function()
+		local lines={}
+		for id,c in pairs(Library.controls) do
+			if c.Tab==Tabs.Defense.native and c.Type=="Toggle" and c.Value then table.insert(lines,c.Text.." ["..id.."]") end
+		end
+		table.sort(lines);message(#lines>0 and table.concat(lines,"\n") or "No protection toggles enabled.")
+	end
+	commands.protection=function(argument)
+		local query,state=trim(argument):match("^(.-)%s+(%S+)$")
+		if not query or (state:lower()~="on" and state:lower()~="off") then error("Usage: !protection name on/off",0) end
+		local matches={};query=trim(query):lower()
+		for id,c in pairs(Library.controls) do
+			if c.Tab==Tabs.Defense.native and c.Type=="Toggle" then
+				if id:lower()==query or c.Text:lower()==query then matches={c};break end
+				if c.Text:lower():find(query,1,true) then table.insert(matches,c) end
+			end
+		end
+		if #matches~=1 then error(#matches==0 and "No protection matched. Use !protections for enabled IDs." or "Several protections matched; use the exact control ID.",0) end
+		local chosen=matches[1];chosen:SetValue(state:lower()=="on")
+		message(chosen.Text..": "..state:lower()..".","success")
+	end
+	commands.stop=function()
+		for id,run in pairs(Hub.targetLoopRuns or {}) do
+			if run.enabled and Toggles[id] then Toggles[id]:SetValue(false) end
+		end
+		for _,id in ipairs({"PackCharacterFlight","SelfFollowEnabled"}) do if Toggles[id] and Toggles[id].Value then Toggles[id]:SetValue(false) end end
+		if Hub.stopBlobFlight then Hub.stopBlobFlight() end
+		message("Action loops, follow and flight stopped. Protection choices kept.","success")
+	end
+	commands.load=function()
+		if not Hub.ready or not Hub.storage then error("Settings storage is unavailable or startup is incomplete.",0) end
+		local ok,reason=SaveManager:Load("AutoSave");if not ok then error(tostring(reason),0) end
+		message("Settings loaded. Protections apply first; Gucci starts last.","success")
+	end
+	local commandGroup=Tabs.Commands:AddLeftGroupbox("Command browser")
+	local runGroup=Tabs.Commands:AddRightGroupbox("Run a command")
+	local description=commandGroup:AddLabel("Use ! in chat, or run commands here. Player matching accepts display names and @usernames.")
+	commandOutput=runGroup:AddLabel("Command output appears here.")
+	local picker,commandInput
+	local lookup={}
+	for _,id in ipairs({"CommandSearch","CommandPicker","CommandLine"}) do SaveManager.ignored[id]=true end
+	local function filterCommands(query)
+		query=tostring(query or ""):lower();local names={};lookup={}
+		for _,entry in ipairs(commandCatalog) do
+			if (entry[2].." "..entry[3]):lower():find(query,1,true) then table.insert(names,entry[2]);lookup[entry[2]]=entry end
+		end
+		if picker then picker:SetValues(names) end
+		return names
+	end
+	commandGroup:AddInput("CommandSearch",{Text="Search commands",Default="",Finished=false,Callback=filterCommands})
+	picker=commandGroup:AddDropdown("CommandPicker",{Text="Command",Values=filterCommands(""),Callback=function(value)
+		local entry=lookup[value]
+		if entry then description:SetText(entry[2].." — "..entry[3]);if commandInput then commandInput:SetValue(entry[2]) end end
+	end})
+	local line=""
+	commandInput=runGroup:AddInput("CommandLine",{Text="Command text",Default="",Placeholder="!protect @username",Finished=true,Callback=function(value) line=tostring(value or "") end})
+	local function execute(text)
+		local name,argument=tostring(text):match("^%s*!(%S+)%s*(.-)%s*$")
+		if not name then message("Start commands with !. Open !cmds for examples.","warning");return end
+		local callback=commands[name:lower()]
+		if not callback then message("Unknown command: !"..name..". Use !cmds.","warning");return end
+		local ok,reason=pcall(callback,argument)
+		if not ok then message(tostring(reason),"warning") end
+	end
+	runGroup:AddButton({Text="Run command",Func=function() execute(line) end})
+	runGroup:AddButton({Text="Show status",Func=commands.status})
+	runGroup:AddButton({Text="Clear command output",Func=function() table.clear(commandLog);commandOutput:SetText("Command output appears here.") end})
+	Hub.openCommands=openCommands
+	Hub.executeCommand=execute
+	Hub.cleanup(function() Hub.openCommands=nil;Hub.executeCommand=nil end)
+
 	local lastText, lastTime
 
 	if Hub.chatCommandConnection then
@@ -17721,13 +17904,7 @@ end
 	local connection = Hub.connect(player.Chatted, function(text)
 		if not Hub.alive then return end
 
-		local command, argument = tostring(text):match(
-			"^%s*:(%S+)%s*(.-)%s*$"
-		)
-		if not command then return end
-
-		local callback = commands[command:lower()]
-		if not callback then return end
+		if not tostring(text):match("^%s*!") then return end
 
 		local now = os.clock()
 		if text == lastText and lastTime and now - lastTime < 0.25 then
@@ -17736,8 +17913,7 @@ end
 
 		lastText, lastTime = text, now
 
-		local ok, reason = pcall(callback, argument)
-		if not ok then message(tostring(reason), "warning") end
+		execute(text)
 	end)
 
 	Hub.chatCommandConnection = connection
@@ -17753,4 +17929,4 @@ end)()
 
 -- Send loaded message
 
-notify("Arriva Core Hub 2.5", "Hub loaded. Your saved settings and controls are ready.", 5)
+notify("Arriva Core Hub 2.5", "Controls ready. Gucci waits for the other protections before starting.", 5)
