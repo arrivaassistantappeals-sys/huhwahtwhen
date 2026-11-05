@@ -14463,7 +14463,8 @@ do
 		local sourceRespawnEpoch=0
 		Hub.connect(Player.CharacterRemoving,function()
 			sourceRespawnEpoch+=1
-			for key in pairs(workers) do stopWorker(key) end
+			-- Break PCLD owns a two-respawn transaction; restarting it here loops reset one forever.
+			for key in pairs(workers) do if key~="AntiKick2" then stopWorker(key) end end
 			Hub.protectionStartupJobs.SourceRespawn=nil
 			tbl7.States["Anti Grab"]=false
 			restoreCollision();restoreProperties();restoreBlob();clearInput();restoreBanana()

@@ -223,3 +223,9 @@ This is a lifecycle-aware adaptation, not a verbatim replacement of the entire R
 The adjacent Anti Blobman, Network Ownership, Sticky, Void, Explosion, Burn, Paint, Banana and Snowball protections were already present and are retained. No additional copy of those controllers is started. Gucci, its spawner/event handlers and Auto Reset remain unchanged.
 
 Validation: full compilation; mocked all four modes, exact ragdoll arguments, extra-escape retry interval, intentional teleport forwarding, zero-facing fallback and release/respawn/error cleanup; existing shared teleport and Gucci controller parity/ownership tests. Live escape acceptance, movement feel and protection effectiveness require Roblox testing.
+
+### Break PCLD respawn lifecycle correction
+
+The general protection respawn handler was cancelling AntiKick2 on every CharacterRemoving and reapplying its checked toggle after spawn. That discarded the in-progress two-respawn transaction, causing it to restart instead of completing. AntiKick2 is now excluded from that respawn cancellation; its single worker retains progress across both respawns, marks the final humanoid, and idles while the checkbox stays checked. Toggle-off and hub unload still use the normal cancellation path. Other protection respawn behavior is unchanged.
+
+The lifecycle regression exercises the actual runWorker wrapper plus CharacterRemoving/CharacterAdded handlers. It fails with the previous cancellation rule and passes with the exemption, including one completion, a living final character, checked idle state and explicit off cancellation. Full compilation and isolated reset checks pass. Live Roblox verification remains outstanding.
