@@ -360,10 +360,10 @@ do
   RunService:UnbindFromRenderStep(renderName)
   if not old then return end
   if old.physics then old.physics:Disconnect();Hub.connections[old.physics]=nil end
-  if current(old) then old.root.CFrame=commit and old.frame or old.origin end
+  if current(old) then old.root.CFrame=commit and old.destination or old.origin end
  end
  function Hub.teleportFrame(part)
-  if state and state.root==part then return state.frame end
+  if state and state.root==part then return state.destination end
   return part.CFrame
  end
  function Hub.visibleCharacterTransparency(part) return part.LocalTransparencyModifier end
@@ -378,7 +378,7 @@ do
   if state and (frame.Position-state.origin.Position).Magnitude<0.05 then Hub.clearTeleportMask(true);part.CFrame=frame;return end
   if not enabled or not hum or hum.Health<=0 then part.CFrame=frame;return end
   if not state and (frame.Position-root.Position).Magnitude>=0.05 then
-   local record={char=char,root=root,hum=hum,origin=root.CFrame,frame=root.CFrame}
+   local record={char=char,root=root,hum=hum,origin=root.CFrame,frame=root.CFrame,destination=frame}
    state=record;Hub.teleportMaskState=record
    RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value-1,function()
     if state~=record then return end
@@ -389,11 +389,10 @@ do
     if state~=record then return end
     if not current(record) then Hub.clearTeleportMask(true);return end
     record.frame=record.root.CFrame
-    record.root.CFrame=record.origin
+    record.root.CFrame=record.destination
    end)
   end
-  if state then state.frame=frame end
-  part.CFrame=frame
+  if state then state.destination=frame else part.CFrame=frame end
  end
  function Hub.teleportModel(model,frame)
   if model~=LocalPlayer.Character then model:PivotTo(frame);return end
