@@ -113,3 +113,14 @@ Loop Players now has one **Loop type** dropdown and **Enable loop** switch. Type
 The master switch reflects legacy shortcuts, target rejection and emergency stops. Loading an older config with multiple enabled modes reconciles to one mode after restore finishes. Loop type is saved; enabled state continues through the original IDs. No loop algorithm changed.
 
 Validation: full Luau compilation and mocked selector transitions, stop-before-switch, rejected starts, emergency stops, legacy controls/configs and hidden-row checks passed. Existing command UI checks also pass. Layout has not been viewed in a live Roblox session.
+
+
+### Resonance-style Loop Kill
+
+Compared the newly supplied Resonance `Kill` and `DestroyObject` helpers. The old Arriva selected/all kill loops could create a persistent SkyVelocity BodyVelocity pointing upward at 100,000,000,000,000 studs/sec. That path is removed from both kill loop modes. High velocity no longer substitutes for confirmed ownership.
+
+After bounded ownership acquisition and a current-target/whitelist check, the replacement follows Resonance's death/below-map approach: BreakJointsOnDeath false, Dead state, and (if still alive) a whole-character pivot to Y=-11111. It retains the original 15,000-stud spawn-distance limit and one-second per-character cooldown. The local destruction threshold is temporarily -10000 during the ping-sized attempt window and restored if unchanged. This is an adaptation of the reference's mechanism inside Arriva's existing selected/all lifecycle, not a verbatim import of all object-management dependencies.
+
+Cleanup restores local collisions/position and the shared destruction threshold. A surviving target is returned to its saved character pivot with its original BreakJointsOnDeath value, and grab ownership is released. Stopping or switching loops runs cleanup immediately; stale characters are not moved. No new sky force is created. Other action/aura methods are unchanged.
+
+Automated checks reproduce the old sky-force path and verify the replacement's ownership checks, protected-target exclusion, cancellation/survivor/threshold/collision cleanup and immediate-death handling. Full Luau compilation, selector UI, Gucci recovery and paint-coverage checks pass. Live server-side death and avoidance of movement-related kicks remain unverified in Roblox.
