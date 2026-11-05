@@ -5237,7 +5237,7 @@ function Hub.beginTargetLoop(key, enabled)
 	if previous then cleanupActionRun(previous) end
 	local run=enabled and {enabled=true,cleanups={}} or previous or {enabled=false,cleanups={}}
 	Hub.targetLoopRuns[key]=run
-	run.assist=key=="DestroyAntiKickToggle" or key=="AntiAntiInputLag"
+	run.assist=key=="DestroyAntiKickToggle" or key=="AntiAntiInputLag" or key=="DestroyTargetGucci"
 	run.resumeAfterRespawn=nil
 	if Hub.loopNotice and not run.assist then
 		local control=Toggles[key] or Options[key];local label=control and control.Text or "Selected loop"
@@ -6343,7 +6343,7 @@ end
 -- Destroy Target Gucci
 local DestroyTargetGucciActive = false
 TargetGroup:AddToggle("DestroyTargetGucci", {
-	Text = "Destroy Gucci (sit)",
+	Text = "Remove Gucci",
 	Default = false,
 	Callback = function(Value)
 		local running, ownsRun = Hub.beginTargetLoop("DestroyTargetGucci", Value)
@@ -6368,6 +6368,7 @@ TargetGroup:AddToggle("DestroyTargetGucci", {
 
 			task.spawn(function()
 				while running() do
+					if not Hub.playerActionLoopActive() then task.wait(0.2);continue end
 					local target = Hub.nextLoopTarget("destroyGucci")
 					if not target then task.wait(0.2); continue end
 					local folderName = target.Name .. "SpawnedInToys"
@@ -15344,12 +15345,16 @@ do
 
 		local remover=Toggles.DestroyTargetGucci
 		if remover then remover.Callback=function(on)
-				local running,ownsRun=Hub.beginTargetLoop("DestroyTargetGucci",on)
+				local running,ownsRun,onCleanup,bindWorker=Hub.beginTargetLoop("DestroyTargetGucci",on)
 				Hub.requestSave()
 				if not on or not ownsRun then return end
-				task.spawn(function()
-					local _,root=tbl12.Char();local saved=root and root.CFrame
+				local char,root=tbl12.Char();local saved=root and Hub.teleportFrame(root)
+				onCleanup(function()
+					if saved and Player.Character==char and root.Parent==char then Hub.teleportPart(root,saved);root.AssemblyLinearVelocity=Vector3.zero end
+				end)
+				local worker=task.spawn(function()
 					while running() and not flag11 do
+						if not Hub.playerActionLoopActive() then task.wait(0.2);continue end
 						local target=Hub.nextLoopTarget("destroyGucci")
 						if target and Hub.canHarm(target) then
 							local ok,message=pcall(tbl12.RemoveGucci,target)
@@ -15357,8 +15362,8 @@ do
 						end
 						task.wait(0.2)
 					end
-					if saved and root and root.Parent then Hub.teleportPart(root, saved);root.AssemblyLinearVelocity=Vector3.zero end
 				end)
+				bindWorker(worker)
 			end end
 		Hub.sourceGucci={remove=tbl12.RemoveGucci,set=tbl12.SetGucciAntiGrab,state=tbl8,settings=tbl9,helpers=tbl12}
 		DefenseExtra:AddToggle("SourceRagdollOnRemoveGucci",{Text="Ragdoll target during Remove Gucci",Default=false,Callback=function(on) tbl8.RagdollInRG=on;Hub.requestSave() end})
@@ -18324,7 +18329,7 @@ do
 			{"Kill","LoopKillToggle"}, {"Kill all","LoopKillToggleAll"},
 			{"Kick (spam grab)","LoopKickToggle"}, {"Blob kick (grab + blob)","LoopKickToggle2"},
 			{"Blob kick (dual hand)","DualHandLoopKick"}, {"Fling","PlayerFlingBtn"},
-			{"Remove Gucci","DestroyTargetGucci"}, {"Bring selected","LoopBringSelected"}, {"Bring all","BringAllGrab"},
+			{"Bring selected","LoopBringSelected"}, {"Bring all","BringAllGrab"},
 			{"Own toy ownership recovery","LoopOwnToyRecovery"},
 		}
 		local names,byName,hidden={},{},{}
@@ -18442,7 +18447,7 @@ do
 				["Gucci Settings"]={"AutoGucciBlobToggle","SourceGucciVehicle","GucciAutoDeleteBlob","AutoGucciTrainToggle","SourceRagdollOnRemoveGucci"},
 				["Recovery Settings"]={"AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","LocalMotionLinearLimit","LocalMotionAngularLimit","LoopTP"},
 			}},
-		Target={sections={"Target Interaction","Loop Controls","Loop assistance","Aim Assist"},controls={TargetLoopType="Loop Controls",TargetLoopEnabled="Loop Controls",DestroyAntiKickToggle="Loop assistance",AntiAntiInputLag="Loop assistance"}},
+		Target={sections={"Target Interaction","Loop Controls","Loop assistance","Aim Assist"},controls={TargetLoopType="Loop Controls",TargetLoopEnabled="Loop Controls",DestroyAntiKickToggle="Loop assistance",AntiAntiInputLag="Loop assistance",DestroyTargetGucci="Loop assistance"}},
 		AntiLag={sections={"Manual Line Protection","Automatic Line Protection","Low FPS Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
 		Blob={sections={"Controls","Seating","Flight"},
 			controls={AutoReseatBlobLoops="Seating",BlobReseatInterval="Seating",AutoSitZ="Seating",BlobFlySpeed="Flight"}},
