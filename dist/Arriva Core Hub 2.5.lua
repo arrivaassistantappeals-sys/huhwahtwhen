@@ -4925,51 +4925,80 @@ Hub.connect(UserInputService.JumpRequest, function()
 	end
 end)
 
--- ESP System
-local espEnabled = false
-local espBoxes = {}
-local targetNames = {"partesp", "playercharacterlocationdetector"}
-local function IsTarget(obj)
-	if not obj:IsA("BasePart") then return false end
-	for _, name in ipairs(targetNames) do if string.lower(obj.Name) == string.lower(name) then return true end end
-	return false
+-- BEGIN PCLD ESP
+-- Visual-only adornments; never modify the detector or its assignment.
+do
+ (function()
+  local enabled,showLabels=false,true
+  local accent=Color3.fromRGB(184,145,255)
+  local fillAlpha=0.92
+  local entries={}
+  local scanRevision=0
+  local function target(part)
+   if not part:IsA("BasePart") then return false end
+   local name=part.Name:lower()
+   return name=="partesp" or name=="playercharacterlocationdetector"
+  end
+  local function remove(part)
+   local entry=entries[part];if not entry then return end
+   entries[part]=nil
+   for _,object in ipairs(entry.gui:GetDescendants()) do Hub.instances[object]=nil end
+   for _,object in ipairs({entry.fill,entry.outline,entry.gui}) do Hub.instances[object]=nil;object:Destroy() end
+  end
+  local function update(part,entry)
+   local waiting=part.Position==Vector3.zero
+   entry.fill.Visible=not waiting;entry.outline.Visible=not waiting
+   entry.fill.Size=part.Size;entry.fill.Color3=accent;entry.fill.Transparency=fillAlpha
+   entry.outline.Color3=accent
+   entry.gui.Enabled=showLabels and not waiting
+   entry.gui.StudsOffsetWorldSpace=Vector3.new(0,part.Size.Y/2+0.6,0)
+   entry.stroke.Color=accent;entry.icon.TextColor3=accent
+   local char=Player.Character
+   local root=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+   local distance=root and math.floor((part.Position-root.Position).Magnitude+0.5)
+   entry.text.Text=distance and ("PCLD  ·  "..distance.." studs") or "PCLD"
+  end
+  local function add(part)
+   if entries[part] or not part.Parent or not target(part) then return end
+   local fill=Hub.new("BoxHandleAdornment",game.CoreGui)
+   fill.Name="ArrivaPCLDFill";fill.Adornee=part;fill.AlwaysOnTop=true;fill.ZIndex=4
+   local outline=Hub.new("SelectionBox",game.CoreGui)
+   outline.Name="ArrivaPCLDOutline";outline.Adornee=part;outline.LineThickness=0.025;outline.SurfaceTransparency=1;outline.Transparency=0.12
+   local gui=Hub.new("BillboardGui",game.CoreGui)
+   gui.Name="ArrivaPCLDLabel";gui.Adornee=part;gui.AlwaysOnTop=true;gui.MaxDistance=1200
+   gui.Size=UDim2.fromOffset(156,28);gui.StudsOffsetWorldSpace=Vector3.new(0,part.Size.Y/2+0.6,0)
+   local plate=Hub.new("Frame",gui);plate.Size=UDim2.fromScale(1,1);plate.BackgroundColor3=Color3.fromRGB(25,21,34);plate.BackgroundTransparency=0.16;plate.BorderSizePixel=0
+   local corner=Hub.new("UICorner",plate);corner.CornerRadius=UDim.new(0,8)
+   local stroke=Hub.new("UIStroke",plate);stroke.Transparency=0.4;stroke.Thickness=1
+   local icon=Hub.new("TextLabel",plate);icon.BackgroundTransparency=1;icon.Size=UDim2.fromOffset(26,28);icon.Text="◇";icon.TextSize=19;icon.Font=Enum.Font.GothamBold
+   local text=Hub.new("TextLabel",plate);text.BackgroundTransparency=1;text.Position=UDim2.fromOffset(26,0);text.Size=UDim2.new(1,-30,1,0)
+   text.Font=Enum.Font.GothamMedium;text.TextSize=12;text.TextColor3=Color3.fromRGB(239,232,255);text.TextXAlignment=Enum.TextXAlignment.Left
+   local entry={fill=fill,outline=outline,gui=gui,stroke=stroke,icon=icon,text=text};entries[part]=entry;update(part,entry)
+  end
+  local function clear() for part in pairs(entries) do remove(part) end end
+  Hub.connect(Workspace.DescendantAdded,function(part) if enabled and target(part) then add(part) end end)
+  Hub.connect(Workspace.DescendantRemoving,function(part) if entries[part] then remove(part) end end)
+  local elapsed=0
+  Hub.connect(RunService.Heartbeat,function(dt)
+   if not enabled then return end;elapsed+=dt;if elapsed<0.2 then return end;elapsed=0
+   for part,entry in pairs(entries) do if part.Parent then update(part,entry) else remove(part) end end
+  end)
+  PlayerESP:AddToggle("BoxESPWhite",{Text="PCLD ESP",Default=false,Callback=function(on)
+   enabled=on;scanRevision+=1;local ticket=scanRevision
+   if on then Hub.scanDescendants(Workspace,add,function() return enabled and scanRevision==ticket end) else clear() end
+   Hub.requestSave()
+  end})
+  PlayerESP:AddToggle("PCLDESPLabels",{Text="PCLD labels",Default=true,Callback=function(on) showLabels=on;Hub.requestSave() end})
+  PlayerESP:AddSlider("PCLDESPFillTransparency",{Text="PCLD fill transparency",Default=92,Min=0,Max=100,Rounding=0,Callback=function(value) fillAlpha=value/100;Hub.requestSave() end})
+  PlayerESP:AddInput("PCLDESPAccent",{Text="PCLD colour hex",Default="B891FF",Finished=true,Callback=function(value)
+   local hex=tostring(value):gsub("#",""):gsub("%s","")
+   if #hex~=6 or not hex:match("^%x+$") then return end
+   accent=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16));Hub.requestSave()
+  end})
+  Hub.cleanup(function() enabled=false;scanRevision+=1;clear() end)
+ end)()
 end
-
-local function AddBoxESP(obj)
-	if espBoxes[obj] then return end
-	local box = Hub.new("BoxHandleAdornment")
-	box.Adornee = obj
-	box.AlwaysOnTop = true
-	box.ZIndex = 5
-	box.Color3 = Color3.fromRGB(255, 255, 255)
-	box.Transparency = 0.5
-	box.Size = obj.Size
-	box.Parent = game.CoreGui
-	espBoxes[obj] = box
-	Hub.connect(obj.AncestryChanged, function(_, parent)
-		if not parent and espBoxes[obj] then espBoxes[obj]:Destroy() espBoxes[obj] = nil end
-	end)
-end
-
-local function RemoveAllBoxes()
-	for obj, box in pairs(espBoxes) do if box then box:Destroy() end end
-	espBoxes = {}
-end
-
-local function Scan()
-	for _, obj in ipairs(workspace:GetDescendants()) do if espEnabled and IsTarget(obj) then AddBoxESP(obj) end end
-end
-
-Hub.connect(workspace.DescendantAdded, function(obj) if espEnabled and IsTarget(obj) then AddBoxESP(obj) end end)
-
-PlayerESP:AddToggle("BoxESPWhite", {
-	Text = "PCLD View",
-	Default = false,
-	Callback = function(Value)
-		espEnabled = Value
-		if espEnabled then Scan() else RemoveAllBoxes() end
-	end
-})
+-- END PCLD ESP
 
 -- Main player ESP, including appearance controls.
 do
@@ -14269,29 +14298,32 @@ do
 		end,restoreCollision)
 
 
+		-- BEGIN BREAK PCLD
 		add("SourceBreakPCLD","[Break PCLD] Anti Kick (two resets)","AntiKick2",0.2,function()
-			local char,root,hum,alive=charAlive()
-			if not hum or (alive and hum:GetAttribute("BrokenPCLD")) then return end
+			local _,_,hum=charAlive()
+			if not hum or (hum.Health>0 and hum:GetAttribute("BrokenPCLD")) then return end
+			notify("PCLD Breaker",hum.Health>0 and "Starting PCLD Break…" or "Detected death, breaking PCLD again…",4,"info")
+			local finalCharacter,finalHumanoid
 			for _=1,2 do
-				if not tbl8.AntiKick2 or flag11 then return end
+				if not tbl8.AntiKick2 or flag11 or not Hub.alive then return end
 				local original=Player.Character
 				repeat
-					if not tbl8.AntiKick2 or flag11 then return end
+					if not tbl8.AntiKick2 or flag11 or not Hub.alive then return end
 					local _,_,current=tbl12.Char()
-					if current and current.Health>0 then current.Health=0;current:ChangeState(Enum.HumanoidStateType.Dead) end
+					if Player.Character==original and current and current.Health>0 then current.Health=0;current:ChangeState(Enum.HumanoidStateType.Dead) end
 					task.wait()
-				until Player.Character~=original
+				until Player.Character and Player.Character~=original
 				local nextChar=Player.Character
-				if not nextChar then
-					repeat task.wait() until not tbl8.AntiKick2 or flag11 or Player.Character
-					nextChar=Player.Character
-				end
-				if not nextChar then return end
-				nextChar:WaitForChild("Humanoid",5)
+				local nextHum=nextChar:WaitForChild("Humanoid",5)
+				if not tbl8.AntiKick2 or flag11 or not Hub.alive or Player.Character~=nextChar or not nextHum or nextHum.Parent~=nextChar then return end
+				finalCharacter,finalHumanoid=nextChar,nextHum
 			end
-			local _,_,current=tbl12.Char()
-			if current and tbl8.AntiKick2 then current:SetAttribute("BrokenPCLD",true) end
+			if tbl8.AntiKick2 and not flag11 and Hub.alive and Player.Character==finalCharacter and finalHumanoid.Parent==finalCharacter then
+				finalHumanoid:SetAttribute("BrokenPCLD",true)
+				notify("PCLD Breaker","Done!",4,"success")
+			end
 		end)
+		-- END BREAK PCLD
 
 		-- Supplied low-FPS auto anti-lag supplements the existing line-burst detector.
 		local lowFps=false
