@@ -5240,19 +5240,40 @@ Hub.targetIdentities = {}
 Hub.targetCursors = {}
 -- A stopped worker must not resume when the same toggle is enabled again.
 Hub.targetLoopRuns = {}
-function Hub.beginTargetLoop(key, enabled)
-	local previous = Hub.targetLoopRuns[key]
-	if previous then previous.enabled = false end
-	local run = enabled and {enabled = true} or previous or {enabled = false}
-	Hub.targetLoopRuns[key] = run
-	if Hub.loopNotice then
-		local control=Toggles[key] or Options[key]
-		local label=control and control.Text or "Selected loop"
-		Hub.loopNotice("loops", enabled and "Loop enabled" or "Loop disabled", label, key .. tostring(enabled))
-	end
-	return function() return Hub.alive and run.enabled and Hub.targetLoopRuns[key] == run end,
-		function() return Hub.targetLoopRuns[key] == run end
+local function cleanupActionRun(run)
+	if not run or run.cleaned then return end
+	run.cleaned=true;run.enabled=false
+	for _,callback in ipairs(run.cleanups or {}) do local ok,message=pcall(callback);if not ok then warn("[Loop cleanup] "..tostring(message)) end end
+	if run.worker and run.worker~=coroutine.running() and coroutine.status(run.worker)~="dead" then pcall(Hub.nativeTask.cancel,run.worker);Hub.threads[run.worker]=nil end
 end
+function Hub.beginTargetLoop(key, enabled)
+	local previous=Hub.targetLoopRuns[key]
+	if previous then cleanupActionRun(previous) end
+	local run=enabled and {enabled=true,cleanups={}} or previous or {enabled=false,cleanups={}}
+	Hub.targetLoopRuns[key]=run
+	if Hub.loopNotice then
+		local control=Toggles[key] or Options[key];local label=control and control.Text or "Selected loop"
+		Hub.loopNotice("loops",enabled and "Loop enabled" or "Loop disabled",label,key..tostring(enabled))
+	end
+	return function() return Hub.alive and run.enabled and Hub.targetLoopRuns[key]==run end,
+		function() return Hub.targetLoopRuns[key]==run end,
+		function(callback) if run.cleaned then pcall(callback) else table.insert(run.cleanups,callback) end end,
+		function(thread) run.worker=thread end
+end
+Hub.connect(RunService.Heartbeat,function()
+	for key,run in pairs(Hub.targetLoopRuns) do
+		if not run.enabled or (run.worker and coroutine.status(run.worker)=="dead") then
+			cleanupActionRun(run)
+			if run.worker and Toggles[key] and Toggles[key].Value then Toggles[key]:SetValue(false) end
+		end
+	end
+end)
+Hub.connect(Player.CharacterRemoving,function()
+	for key,run in pairs(Hub.targetLoopRuns) do if run.enabled and (#run.cleanups>0 or run.worker) then
+		cleanupActionRun(run);if Toggles[key] and Toggles[key].Value then Toggles[key]:SetValue(false) end
+	end end
+end)
+Hub.cleanup(function() for _,run in pairs(Hub.targetLoopRuns) do cleanupActionRun(run) end end)
 function Hub.loopTargetReady(player, character)
 	if not player or player.Parent ~= Players or not Hub.canHarm(player) then return false end
 	local char = player.Character
@@ -5671,7 +5692,7 @@ TargetGroup:AddToggle("LoopKickToggle", {
 	Text = "Kick (spam grab)",
 	Default = false,
 	Callback = function(on)
-		local running, ownsRun = Hub.beginTargetLoop("LoopKickToggle", on)
+		local running, ownsRun, onCleanup, bindWorker = Hub.beginTargetLoop("LoopKickToggle", on)
 		kickLoopEnabled = on
 
 		local target = SelectedPlayer
@@ -5681,7 +5702,9 @@ TargetGroup:AddToggle("LoopKickToggle", {
 			return
 		end
 
-		task.spawn(function()
+		local bound=Player.Character;local returnRoot=bound and bound:FindFirstChild("HumanoidRootPart");local saved=returnRoot and Hub.teleportFrame(returnRoot)
+		onCleanup(function() if Player.Character==bound and returnRoot and returnRoot.Parent==bound and saved then Hub.teleportPart(returnRoot,saved);returnRoot.AssemblyLinearVelocity=Vector3.zero end end)
+		local worker=task.spawn(function()
 			local RS = ReplicatedStorage
 			local RunService = game:GetService("RunService")
 			local GE = RS:WaitForChild("GrabEvents")
@@ -5766,6 +5789,7 @@ TargetGroup:AddToggle("LoopKickToggle", {
 				myRoot.Velocity = Vector3.zero
 			end
 		end)
+		bindWorker(worker)
 	end
 })
 
@@ -5920,15 +5944,23 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 	Text = "Loop Kick (grab + blob)",
 	Default = false,
 	Callback = function(on)
-		local running, ownsRun = Hub.beginTargetLoop("LoopKickToggle2", on)
+		local running, ownsRun, onCleanup, bindWorker = Hub.beginTargetLoop("LoopKickToggle2", on)
 		grabBlobLoopEnabled = on
 		Hub.requestSave()
 
 		if not on then return end
+		local changed={}
+		local blobReturn
+		onCleanup(function()
+			if blobReturn and blobReturn.root.Parent then blobReturn.root.CFrame=blobReturn.frame;blobReturn.root.AssemblyLinearVelocity=Vector3.zero end
+			for hum,saved in pairs(changed) do
+				if hum.Parent==saved.char and hum.Health>0 then hum.PlatformStand=saved.platform;hum.Sit=saved.sit end
+			end
+		end)
 		autoblob(running)
 		if not running() then return end
 
-		task.spawn(function()
+		local worker=task.spawn(function()
 			while running() do
 				local seat = Hub.getLoopBlobSeat()
 				if not seat then task.wait(0.2); continue end
@@ -5954,7 +5986,8 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 					continue
 				end
 
-				local SavedPos = blobRoot.CFrame 
+				local SavedPos = blobRoot.CFrame
+				blobReturn={root=blobRoot,frame=SavedPos}
 
 				local tChar = Hub.canHarm(target) and target.Character or nil
 				local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
@@ -6008,7 +6041,10 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 						if tick() - packetTimer > 0.05 then
 							packetTimer = tick()
 							pcall(function()
-								if Hub.canAffect(tHum) then tHum.PlatformStand = true end
+								if Hub.canAffect(tHum) then
+									if not changed[tHum] then changed[tHum]={char=tChar,platform=tHum.PlatformStand,sit=tHum.Sit} end
+									tHum.PlatformStand = true
+								end
 								if Hub.canAffect(tHum) then tHum.Sit = true end
 
 								Hub.fire(GE.SetNetworkOwner, tRoot, lockPos)
@@ -6039,6 +6075,7 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 				end
 			end
 		end)
+		bindWorker(worker)
 	end
 })
 
@@ -6049,10 +6086,21 @@ TargetGroup:AddToggle("DualHandLoopKick", {
 	Text = "Loop Kick",
 	Default = false,
 	Callback = function(on)
-		local running, ownsRun = Hub.beginTargetLoop("DualHandLoopKick", on)
+		local running, ownsRun, onCleanup, bindWorker = Hub.beginTargetLoop("DualHandLoopKick", on)
 		Hub.requestSave()
 		loopKickDualActive = on
 		if on then
+			local bp
+			local boundChar=Player.Character
+			local boundRoot=boundChar and boundChar:FindFirstChild("HumanoidRootPart")
+			local saved=boundRoot and Hub.teleportFrame(boundRoot)
+			local function clearBP()
+				if bp then Hub.instances[bp]=nil;Hub.assetTargets[bp]=nil;bp:Destroy();bp=nil end
+			end
+			onCleanup(function()
+				clearBP()
+				if Player.Character==boundChar and boundRoot and boundRoot.Parent==boundChar and saved then Hub.teleportPart(boundRoot,saved);boundRoot.AssemblyLinearVelocity=Vector3.zero end
+			end)
 			if not Hub.nextLoopTarget("dualKick") then
 				notify("Error", "Select target first", 3)
 				Toggles.DualHandLoopKick:SetValue(false)
@@ -6060,14 +6108,13 @@ TargetGroup:AddToggle("DualHandLoopKick", {
 			end
 			autoblob(running)
 			if not running() then return end
-			task.spawn(function()
+			local worker=task.spawn(function()
 				local lastTargetCharDual = nil
-				local bp = nil
 
 				while running() do
 					local target = Hub.nextLoopTarget("dualKick", 1)
 					if not target then
-						if bp then bp:Destroy(); bp = nil end
+						clearBP()
 						lastTargetCharDual = nil
 						task.wait(0.2); continue
 					end
@@ -6076,7 +6123,7 @@ TargetGroup:AddToggle("DualHandLoopKick", {
 					local seat = Hub.getBlobSeat()
 
 					if not seat or not target or not target.Parent then
-						if bp then bp:Destroy(); bp = nil end
+						clearBP()
 						lastTargetCharDual = nil
 						task.wait(0.5)
 						continue
@@ -6106,7 +6153,7 @@ TargetGroup:AddToggle("DualHandLoopKick", {
 						repeat -- Abandon only this target's handshake if it changes during a yield.
 							if targetChar ~= lastTargetCharDual then
 								lastTargetCharDual = targetChar
-								if bp then bp:Destroy() bp = nil end
+								clearBP()
 								if hrp then Hub.teleportPart(hrp, targetHRP.CFrame * CFrame.new(0, 25, 0)) end
 								task.wait(0.2)
 								if not running() or not Hub.isSelectedTarget(target) or not Hub.loopTargetReady(target, targetChar) or Hub.getBlobSeat() ~= seat then break end
@@ -6120,6 +6167,7 @@ TargetGroup:AddToggle("DualHandLoopKick", {
 								bp.Position = Vector3.new(0, 999999, 0)
 								bp.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
 								bp.Parent = targetHRP
+								Hub.assetTargets[bp]=targetHRP
 								Hub.fire(grab, leftDet, targetHRP, leftWeld)
 								task.wait(0.2)
 								if not running() or not Hub.isSelectedTarget(target) or not Hub.loopTargetReady(target, targetChar) or Hub.getBlobSeat() ~= seat then break end
@@ -6150,8 +6198,9 @@ TargetGroup:AddToggle("DualHandLoopKick", {
 						task.wait(0.1)
 					end
 				end
-				if bp then bp:Destroy() end
+				clearBP()
 			end)
+			bindWorker(worker)
 		else
 			loopKickDualActive = false
 		end
@@ -6160,126 +6209,40 @@ TargetGroup:AddToggle("DualHandLoopKick", {
 
 
 
--- Player Fling
-local playerFlingActive = false
-local flingBAV = nil
-local originalPos = nil
-
-TargetGroup:AddToggle("PlayerFlingBtn", {
-	Text = "Fling",
-	Default = false,
-	Callback = function(on)
-		local running, ownsRun = Hub.beginTargetLoop("PlayerFlingBtn", on)
-		Hub.requestSave()
-		playerFlingActive = on
-
-		if on then
-			if not SelectedPlayer then
-				notify("System", "Select target first!", 3)
-				Toggles.PlayerFlingBtn:SetValue(false)
-				return
-			end
-
-			local RunService = game:GetService("RunService")
-			local MyChar = Player.Character
-			local MyRoot = MyChar and MyChar:FindFirstChild("HumanoidRootPart")
-
-			if MyRoot then originalPos = MyRoot.CFrame end
-
-			notify("Maestro", "Fling Mode Activated. DO NOT MOVE.", 3)
-
-			task.spawn(function()
-				while running() do
-					local target = Hub.nextLoopTarget("fling")
-					if not target then task.wait(0.2); continue end
-
-					local char = Player.Character
-					local hrp = char and char:FindFirstChild("HumanoidRootPart")
-					local hum = char and char:FindFirstChild("Humanoid")
-
-					if not hrp or not hum then
-						task.wait(0.5)
-						continue
-					end
-
-					if target and target.Parent then
-						local tChar = Hub.canHarm(target) and target.Character or nil
-						local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
-						local tHum = tChar and tChar:FindFirstChild("Humanoid")
-
-						if tRoot and tHum and tHum.Health > 0 then
-							if not flingBAV or flingBAV.Parent ~= hrp then
-								if flingBAV then flingBAV:Destroy() end
-								flingBAV = Hub.new("BodyAngularVelocity")
-								flingBAV.Name = "MaestroSpin"
-								flingBAV.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-								flingBAV.AngularVelocity = Vector3.new(0, 10000, 0)
-								flingBAV.P = 10000
-								flingBAV.Parent = hrp
-							end
-							Hub.assetTargets[flingBAV] = tRoot
-
-							for _, part in pairs(char:GetDescendants()) do
-								if part:IsA("BasePart") then
-									if Hub.canAffect(part) then part.CanCollide = false end
-								end
-							end
-
-							local loop = Hub.connect(RunService.Heartbeat, function()
-								if not running() or not Hub.isSelectedTarget(target) or not Hub.loopTargetReady(target, tChar) or not tRoot or not tRoot.Parent then return end
-								if Hub.canAffect(tRoot) then Hub.teleportPart(hrp, tRoot.CFrame) end
-								hrp.Velocity = Vector3.zero
-							end)
-
-							local startTime = tick()
-							while tick() - startTime < 1.5 do
-								if not running() or not Hub.isSelectedTarget(target) or not Hub.loopTargetReady(target, tChar) or not tRoot.Parent then break end
-								task.wait(0.1)
-							end
-
-							if loop then loop:Disconnect() end
-						else
-							task.wait(0.2)
-						end
-					else
-						playerFlingActive = false
-						Toggles.PlayerFlingBtn:SetValue(false)
-					end
-
-					task.wait(0.1)
-				end
-
-				if not ownsRun() then return end
-				if flingBAV then flingBAV:Destroy() flingBAV = nil end
-
-				local char = Player.Character
-				if char then
-					for _, part in pairs(char:GetDescendants()) do
-						if part:IsA("BasePart") then
-							if Hub.canAffect(part) then part.CanCollide = true end
-						end
-					end
-					local hrp = char:FindFirstChild("HumanoidRootPart")
-					if hrp then
-						hrp.RotVelocity = Vector3.zero
-						hrp.Velocity = Vector3.zero
-						if originalPos then Hub.teleportPart(hrp, originalPos) end
-					end
-				end
-			end)
-		else
-			playerFlingActive = false
-			if flingBAV then flingBAV:Destroy() flingBAV = nil end
-
-			local char = Player.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				hrp.RotVelocity = Vector3.zero
-				hrp.Velocity = Vector3.zero
-			end
-		end
+-- Player Fling: preserve exact collision state and bind every resource to its run.
+TargetGroup:AddToggle("PlayerFlingBtn",{Text="Fling",Default=false,Callback=function(on)
+	local running,_,onCleanup,bindWorker=Hub.beginTargetLoop("PlayerFlingBtn",on);Hub.requestSave()
+	if not on then return end
+	local char=Player.Character;local root=char and char:FindFirstChild("HumanoidRootPart")
+	local hum=char and char:FindFirstChildOfClass("Humanoid")
+	if not root or not hum or hum.Health<=0 then Toggles.PlayerFlingBtn:SetValue(false);return end
+	local saved=Hub.teleportFrame(root);local collisions={};local force
+	local function release()
+		if force then Hub.instances[force]=nil;Hub.assetTargets[force]=nil;force:Destroy();force=nil end
+		for part,value in pairs(collisions) do if part.Parent then if noclipEnabled then part.CanCollide=false else part.CanCollide=value end end;collisions[part]=nil end
+		if Player.Character==char and root.Parent==char then Hub.teleportPart(root,saved);root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero end
 	end
-})
+	onCleanup(release)
+	local worker=task.spawn(function()
+		local ok,message=xpcall(function()
+			while running() and Player.Character==char and root.Parent==char and hum.Health>0 do
+				local target=Hub.nextLoopTarget("fling");local targetChar=target and target.Character
+				local targetRoot=targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+				if not targetRoot or not Hub.isSelectedTarget(target) or not Hub.loopTargetReady(target,targetChar) then release();task.wait(0.2);continue end
+				if not force then
+					force=Hub.new("BodyAngularVelocity",root);force.Name="MaestroSpin";force.MaxTorque=Vector3.new(math.huge,math.huge,math.huge)
+					force.AngularVelocity=Vector3.new(0,10000,0);force.P=10000
+				end
+				Hub.assetTargets[force]=targetRoot
+				for _,part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") then if collisions[part]==nil then collisions[part]=part.CanCollide end;part.CanCollide=false end end
+				Hub.teleportPart(root,targetRoot.CFrame);root.AssemblyLinearVelocity=Vector3.zero
+				RunService.Heartbeat:Wait()
+			end
+		end,debug.traceback)
+		release();if not ok then warn("[Fling loop] "..tostring(message)) end
+	end)
+	bindWorker(worker)
+end})
 
 -- Blobman Controls
 _G.AutoSitBlobZ = true
@@ -6587,17 +6550,17 @@ function unFreezeCam()
 	workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
 end
 
-function CreateBringBody(targetPart, destinationPart)
-	if targetPart:FindFirstChild("BringBody") then
-		targetPart:FindFirstChild("BringBody").Position = destinationPart.Position
-	else
-		local bringBodyPosition = Instance.new("BodyPosition", targetPart)
-		bringBodyPosition.Name = "BringBody"
-		bringBodyPosition.Position = destinationPart.Position
-		bringBodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-		bringBodyPosition.D = 5000
-		bringBodyPosition.P = 1500000
-	end
+function CreateBringBody(targetPart,destination)
+	if not targetPart or not targetPart.Parent or not Hub.canAffect(targetPart) then return end
+	local force=Hub.new("BodyPosition",targetPart);force.Name="ArrivaBringBody"
+	force.Position=destination.Position;force.MaxForce=Vector3.new(math.huge,math.huge,math.huge);force.D=5000;force.P=1500000
+	Hub.assetTargets[force]=targetPart
+	task.delay(0.35,function()
+		Hub.instances[force]=nil;Hub.assetTargets[force]=nil;force:Destroy()
+		local events=ReplicatedStorage:FindFirstChild("GrabEvents");local drop=events and events:FindFirstChild("DestroyGrabLine")
+		if drop and targetPart.Parent then Hub.fire(drop,targetPart) end
+	end)
+	return force
 end
 
 function TeleportPlayer(cframeOffset,teleportPriority)
@@ -6638,102 +6601,64 @@ function CheckNetworkOwnerShipOnPart(potentialPart, condition)
 		return not condition and true or potentialPart.PartOwner
 	end
 end
-function SNOWshipOnce(targetPart2)
-	local distanceFromCharacter = LocalPlayer:DistanceFromCharacter(targetPart2.Position)
-	if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-		if CheckNetworkOwnerShipOnPart(targetPart2) then
-			return true
-		end
-		if distanceFromCharacter <= 30 then
-			setNetworkOwnerEvent:FireServer(targetPart2, lookAt(LocalPlayer.Character.HumanoidRootPart.Position, targetPart2.Position))
-		end
+function SNOWshipOnce(part)
+	local char=LocalPlayer.Character;local root=char and char:FindFirstChild("HumanoidRootPart")
+	if not root or not part or not part.Parent or not Hub.canAffect(part) then return false end
+	if CheckNetworkOwnerShipOnPart(part) then return true end
+	local origin=Hub.teleportFrame(root).Position
+	if (origin-part.Position).Magnitude<=30 then
+		local aim=Hub.lookAt(origin+Vector3.new(0,1.593,0),part.Position)
+		if aim then Hub.fire(setNetworkOwnerEvent,part,aim) end
 	end
+	return false
 end
 
--- Anti Anti-Kick
-local BringAll = false
-TargetGroup:AddToggle("BringAllGrab", {
-	Text = "Bring All",
-	Default = false,
-	Callback = function(Value)
-		BringAll = Value
-		Hub.bringAllEpoch=(Hub.bringAllEpoch or 0)+1
-		local ticket=Hub.bringAllEpoch
-		local skipped={}
-		task.spawn(function()
-			if BringAll and ticket==Hub.bringAllEpoch then
-				local playerCFrame = GetPlayerCFrame()
-				if not playerCFrame or not workspaceService.CurrentCamera then return end
-				local cameraCFrame = CFrame.lookAt(workspaceService.CurrentCamera.CFrame.Position + Vector3.new(- 15, 15, 0), playerCFrame.Position)
-				workspace.CurrentCamera.CFrame = cameraCFrame
-				while BringAll and Hub.alive and ticket==Hub.bringAllEpoch do
-					FreezeCam(cameraCFrame)
-					local playersService = game:GetService("Players")
-					local playerIterator, playerIterator5, playerIndex = pairs(playersService:GetPlayers())
-					while true do
-						local player
-						playerIndex, player = playerIterator(playerIterator5, playerIndex)
-						if playerIndex == nil then
-							break
-						end
-						local previous=skipped[player]
-						if not previous or previous.character~=player.Character or os.clock()>=previous.untilTime then
-							local ok,playerError=xpcall(function()
-								if CheckPlayerBring(player) then
-									local boundCharacter=player.Character
-									local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
-									local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-									local isRagdolled
-									if humanoid and humanoid:FindFirstChild("Ragdolled") then
-										isRagdolled = humanoid.Ragdolled
-									else
-										isRagdolled = nil
-									end
-									if player and (humanoidRootPart and (humanoid and isRagdolled)) then
-										for _ = 0, 50 do
-											if not BringAll or not Hub.alive or ticket~=Hub.bringAllEpoch or player.Character~=boundCharacter
-												or not CheckPlayer(player) or humanoidRootPart.Parent~=boundCharacter or humanoid.Parent~=boundCharacter then
-												break
-											end
-
-											SNOWshipOnce(humanoidRootPart)
-											if CheckNetworkOwnerShipOnPlayer(player) then
-												if not isRagdolled.Value and player:DistanceFromCharacter(playerCFrame.Position) > 10 then
-													Hub.teleportPart(humanoidRootPart, playerCFrame)
-												end
-												CreateBringBody(humanoidRootPart, playerCFrame)
-												break
-											end
-											task.wait()
-											if not BringAll or ticket~=Hub.bringAllEpoch or player.Character~=boundCharacter or not humanoidRootPart.Parent then break end
-											if humanoidRootPart.Position.Y <= - 12 then
-												TeleportPlayer(CFrame.new(humanoidRootPart.Position + Vector3.new(0, 5, - 15)))
-											else
-												TeleportPlayer(CFrame.new(humanoidRootPart.Position + Vector3.new(0, - 10, - 10)))
-											end
-										end
-									end
+-- Bring All: Resonance-style confirmed ownership, three-frame pivot and release.
+local BringAll=false
+TargetGroup:AddToggle("BringAllGrab",{Text="Bring All",Default=false,Callback=function(on)
+	local running,_,onCleanup,bindWorker=Hub.beginTargetLoop("BringAllGrab",on);BringAll=on;Hub.requestSave()
+	if not on then return end
+	local char=Player.Character;local root=char and char:FindFirstChild("HumanoidRootPart")
+	if not root then Toggles.BringAllGrab:SetValue(false);return end
+	local saved=Hub.teleportFrame(root)
+	local function restore() if Player.Character==char and root.Parent==char then Hub.teleportPart(root,saved);root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero end end
+	onCleanup(restore)
+	local worker=task.spawn(function()
+		while running() and Player.Character==char do
+			for _,target in ipairs(Players:GetPlayers()) do
+				if not running() or Player.Character~=char then break end
+				if CheckPlayerBring(target) then
+					local targetChar=target.Character;local targetRoot=targetChar:FindFirstChild("HumanoidRootPart")
+					local function valid() return running() and Player.Character==char and target.Character==targetChar and targetRoot.Parent==targetChar and CheckPlayer(target) end
+					local ok,message=xpcall(function()
+						for _=1,51 do
+							if not valid() then break end
+							SNOWshipOnce(targetRoot)
+							if CheckNetworkOwnerShipOnPlayer(target) then
+								for _=1,3 do
+									if not valid() then break end
+									targetChar:PivotTo(saved*CFrame.new(0,0,-5)*targetRoot.CFrame:Inverse()*targetChar:GetPivot())
+									for _,part in ipairs(targetChar:GetDescendants()) do if part:IsA("BasePart") then part.AssemblyLinearVelocity=Vector3.zero;part.AssemblyAngularVelocity=Vector3.zero end end
+									RunService.Heartbeat:Wait()
 								end
-							end,debug.traceback)
-							if not ok then
-								skipped[player]={character=player.Character,untilTime=os.clock()+10}
-								warn("[Arriva Bring All] Skipping " .. player.Name .. " for 10 seconds: " .. tostring(playerError))
+								local events=ReplicatedStorage:FindFirstChild("GrabEvents");local drop=events and events:FindFirstChild("DestroyGrabLine")
+								if drop and targetRoot.Parent then Hub.fire(drop,targetRoot) end
+								break
 							end
+							local offset=targetRoot.Position.Y<=-12 and Vector3.new(0,5,-15) or Vector3.new(0,-10,-10)
+							Hub.teleportPart(root,CFrame.new(targetRoot.Position+offset));RunService.Heartbeat:Wait()
 						end
-					end
-					TeleportPlayer(CFrame.new(527, 123, - 376))
-					task.wait()
+					end,debug.traceback)
+					restore();if not ok then warn("[Bring All] "..tostring(message)) end
 				end
-				if ticket==Hub.bringAllEpoch then unFreezeCam();TeleportPlayer(playerCFrame) end
-			elseif ticket==Hub.bringAllEpoch then
-				unFreezeCam()
 			end
-		end)
-	end
+			if running() then task.wait(0.2) end
+		end
+		restore()
+	end)
+	bindWorker(worker)
+end})
 
-})
-
--- Selected-player version of Bring All, with bounded retries and cleanup.
 do
 	(function()
 		TargetGroup:AddButton({Text="Bring (grab)",Func=function()
@@ -6797,19 +6722,19 @@ TargetGroup:AddToggle("DestroyAntiKickToggle", {
 	Text = "Grab Anti Kick",
 	Default = false,
 	Callback = function(Value)
-		local running, ownsRun = Hub.beginTargetLoop("DestroyAntiKickToggle", Value)
+		local running, ownsRun, _, bindWorker = Hub.beginTargetLoop("DestroyAntiKickToggle", Value)
 		antiAntiKickActive = Value
 
 		if Value then
-			task.spawn(function()
-				local SetNetOwner = ReplicatedStorage.GrabEvents.SetNetworkOwner
+			local worker=task.spawn(function()
+				local function ownerRemote() local events=ReplicatedStorage:FindFirstChild("GrabEvents");return events and events:FindFirstChild("SetNetworkOwner") end
 
 				local function invis_touch(part, cf)
-					Hub.fire(SetNetOwner, part, cf)
+					local event=ownerRemote();if running() and event and part.Parent then Hub.fire(event,part,cf) end
 				end
 
 				local function CheckAndYeet(toy)
-					if not Hub.canAffect(toy) then return end
+					if not running() or not Hub.canAffect(toy) then return end
 					local part = toy:FindFirstChild("SoundPart")
 					if part then
 						invis_touch(part, part.CFrame)
@@ -6848,77 +6773,55 @@ TargetGroup:AddToggle("DestroyAntiKickToggle", {
 					task.wait(0.1)
 				end
 			end)
+			bindWorker(worker)
 		else
 			antiAntiKickActive = false
 		end
 	end
 })
 
--- Anti Anti Input Lag
-local antiAntiLagEnabled = false
-TargetGroup:AddToggle("AntiAntiInputLag", {
-	Text = "Anti Anti Input Lag",
-	Default = false,
-	Callback = function(on)
-		Hub.requestSave()
-		antiAntiLagEnabled = on
-
-		if not on then
-			antiAntiLagEnabled = false
-			return
-		end
-
-		task.spawn(function()
-			local plr = Player
-			local char = plr.Character
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if not hrp then return end
-
-			local burgers = {}
-
-			for _, v in ipairs(workspace:GetDescendants()) do
-				if v.Name == "FoodHamburger" and v:IsA("Model") and v:FindFirstChild("HoldPart") then
-					burgers[#burgers+1] = v
-				end
-			end
-
-			Hub.connect(workspace.DescendantAdded, function(obj)
-				if obj.Name == "FoodHamburger" and obj:IsA("Model") then
-					task.spawn(function()
-						local hp = obj:WaitForChild("HoldPart", 3)
-						if hp then
-							burgers[#burgers+1] = obj
+-- Anti Anti Input Lag: only holdables attached to the current selected character.
+TargetGroup:AddToggle("AntiAntiInputLag",{Text="Anti Anti Input Lag",Default=false,Callback=function(on)
+	local running,_,onCleanup,bindWorker=Hub.beginTargetLoop("AntiAntiInputLag",on);Hub.requestSave()
+	if not on then return end
+	local char=Player.Character;local root=char and char:FindFirstChild("HumanoidRootPart")
+	if not root then Toggles.AntiAntiInputLag:SetValue(false);return end
+	local pending
+	onCleanup(function() if pending and pending~=coroutine.running() and coroutine.status(pending)~="dead" then pcall(Hub.nativeTask.cancel,pending);Hub.threads[pending]=nil end end)
+	local worker=task.spawn(function()
+		while running() and Player.Character==char and root.Parent==char do
+			local target=Hub.nextLoopTarget("antiInputItem");local targetChar=target and target.Character
+			if not targetChar or not Hub.loopTargetReady(target,targetChar) then task.wait(0.2);continue end
+			local seen={};local own=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
+			for _,name in ipairs({"Left Arm","Right Arm","LeftHand","RightHand"}) do
+				local arm=targetChar:FindFirstChild(name)
+				if arm then for _,part in ipairs(arm:GetConnectedParts(true)) do
+					if not running() or target.Character~=targetChar or not Hub.loopTargetReady(target,targetChar) then break end
+					local model=part.Parent
+					if part.Name=="HoldPart" and model and not seen[model] and not (own and part:IsDescendantOf(own)) and Hub.canAffect(model) then
+						seen[model]=true
+						local hold=part:FindFirstChild("HoldItemRemoteFunction");local drop=part:FindFirstChild("DropItemRemoteFunction")
+						if hold and drop then
+							local done=false
+							pending=task.spawn(function()
+								if not running() or target.Character~=targetChar or not Hub.isSelectedTarget(target) or not Hub.canAffect(model) then done=true;return end
+								pcall(Hub.invoke,hold,model,char)
+								if running() and Player.Character==char and target.Character==targetChar and Hub.isSelectedTarget(target) and Hub.loopTargetReady(target,targetChar) and Hub.canAffect(model) then pcall(Hub.invoke,drop,model,CFrame.new(Hub.teleportFrame(root).Position+Vector3.new(0,-2000,0)),Vector3.zero) end
+								done=true
+							end)
+							local deadline=os.clock()+0.75
+							repeat task.wait() until done or not running() or os.clock()>=deadline
+							if not done and coroutine.status(pending)~="dead" then pcall(Hub.nativeTask.cancel,pending);Hub.threads[pending]=nil end
+							pending=nil
 						end
-					end)
-				end
-			end)
-
-			while antiAntiLagEnabled do
-				for i = #burgers, 1, -1 do
-					local b = burgers[i]
-					if not b or not b.Parent or not b:FindFirstChild("HoldPart") then
-						table.remove(burgers, i)
-					else
-						if not Hub.canAffect(b) then continue end
-						local hp = b.HoldPart
-
-						pcall(function()
-							Hub.invoke(hp.HoldItemRemoteFunction, b, char)
-						end)
-
-						task.wait()
-
-						pcall(function()
-							Hub.invoke(hp.DropItemRemoteFunction, b, CFrame.new(Hub.teleportFrame(hrp).Position + Vector3.new(0,-2000,0)), Vector3.new(0,0,0))
-						end)
 					end
-				end
-
-				task.wait()
+				end end
 			end
-		end)
-	end
-})
+			if running() then task.wait(0.1) end
+		end
+	end)
+	bindWorker(worker)
+end})
 
 -- Whitelist System: selected players are protected, never automatically targeted.
 do
