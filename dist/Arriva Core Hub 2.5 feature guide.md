@@ -104,3 +104,12 @@ Arriva previously used an incremental initial scan. Changing the poison toggle i
 Protection settings show the number of effect parts currently blocked and include Refresh touch protection. This confirms detected parts, not proof of immunity to server-triggered effects or effects already applied.
 
 Automated validation reproduces the cancelled-scan bug and verifies immediate coverage, overlapping toggle changes, external CanTouch re-enable, late names, query fallback, exact baseline restoration and untouched ordinary interactions. Full script compiles; Gucci recovery and train/spawn regressions pass. Radioactive/toilet/sickness effects have not been verified in a live game.
+
+
+### Cleaner Loop Players controls
+
+Loop Players now has one **Loop type** dropdown and **Enable loop** switch. Types cover the existing kill, kill all, spam-grab kick, grab/blob kick, dual-hand blob kick, fling, Remove Gucci, bring all, Grab Anti Kick and Anti Anti Input Lag actions. Changing type while enabled stops other selected action modes before starting the chosen one. Individual legacy toggle rows are hidden, including from search. Their existing implementations, IDs, saved enabled values, targeting and protection checks remain in use.
+
+The master switch reflects legacy shortcuts, target rejection and emergency stops. Loading an older config with multiple enabled modes reconciles to one mode after restore finishes. Loop type is saved; enabled state continues through the original IDs. No loop algorithm changed.
+
+Validation: full Luau compilation and mocked selector transitions, stop-before-switch, rejected starts, emergency stops, legacy controls/configs and hidden-row checks passed. Existing command UI checks also pass. Layout has not been viewed in a live Roblox session.

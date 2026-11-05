@@ -929,7 +929,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				local sectionMatches = {}
 				for _, entry in ipairs(tab.entries) do
 					if not entry.section then
-						local match = query == "" or (tab.name .. " " .. (entry.group or "") .. " " .. entry.name):lower():find(query,1,true) ~= nil
+						local match = not entry.hidden and (query == "" or (tab.name .. " " .. (entry.group or "") .. " " .. entry.name):lower():find(query,1,true) ~= nil)
 						entry.frame.Visible = match and (query~="" or not (tab.collapsedSections and tab.collapsedSections[entry.group]))
 						if match then any = true; sectionMatches[entry.group or ""] = true end
 					end
@@ -18051,6 +18051,79 @@ end)
 
 
 
+-- BEGIN LOOP SELECTOR UI
+-- Existing callbacks/IDs remain the action implementations and saved enabled state.
+do
+	(function()
+		local choices={
+			{"Kill","LoopKillToggle"}, {"Kill all","LoopKillToggleAll"},
+			{"Kick (spam grab)","LoopKickToggle"}, {"Blob kick (grab + blob)","LoopKickToggle2"},
+			{"Blob kick (dual hand)","DualHandLoopKick"}, {"Fling","PlayerFlingBtn"},
+			{"Remove Gucci","DestroyTargetGucci"}, {"Bring all","BringAllGrab"},
+			{"Grab Anti Kick","DestroyAntiKickToggle"}, {"Anti Anti Input Lag","AntiAntiInputLag"},
+		}
+		local names,byName,hidden={},{},{}
+		for _,choice in ipairs(choices) do
+			if Toggles[choice[2]] then table.insert(names,choice[1]);byName[choice[1]]=choice[2];hidden[choice[2]]=true end
+		end
+		local selected=names[1]
+		local syncing=false
+		local picker,master
+		local group=Tabs.Target:AddLeftGroupbox("Loop Controls")
+		local function restoring() return Hub.configLoading or (Hub.restoreProgress and not Hub.restoreProgress.done) end
+		local function stopOthers(keep)
+			for _,choice in ipairs(choices) do
+				local control=Toggles[choice[2]]
+				if control and control.Value and choice[2]~=keep then control:SetValue(false) end
+			end
+		end
+		local function reflect(on)
+			if not master or master.Value==on then return end
+			syncing=true;master:SetValue(on);syncing=false
+		end
+		local function apply()
+			local id=byName[selected];stopOthers(id)
+			local control=id and Toggles[id]
+			if control and not control.Value then control:SetValue(true) end
+			reflect(control~=nil and control.Value==true)
+		end
+		picker=group:AddDropdown("TargetLoopType",{Text="Loop type",Values=names,Default=1,Callback=function(value)
+			if not byName[value] then return end
+			selected=value
+			if not syncing and not restoring() and master and master.Value then apply() end
+		end})
+		-- Enabled state continues to be saved through the legacy backend IDs.
+		SaveManager.ignored.TargetLoopEnabled=true
+		master=group:AddToggle("TargetLoopEnabled",{Text="Enable loop",Default=false,Callback=function(on)
+			if syncing then return end
+			if on then apply() else stopOthers(nil) end
+		end})
+		if Tabs.Target.native then
+			for _,entry in ipairs(Tabs.Target.native.entries) do
+				if hidden[entry.controlId] then entry.hidden=true;entry.frame.Visible=false end
+			end
+		end
+		-- Reflect commands, emergency stops, target rejection and older saved configs.
+		local elapsed=0
+		Hub.connect(RunService.Heartbeat,function(dt)
+			elapsed+=dt;if elapsed<0.1 or restoring() then return end;elapsed=0
+			local active
+			for _,choice in ipairs(choices) do
+				local control=Toggles[choice[2]]
+				if control and control.Value then
+					if not active or choice[1]==selected then active=choice end
+				end
+			end
+			if active then
+				stopOthers(active[2])
+				if selected~=active[1] then syncing=true;picker:SetValue(active[1]);syncing=false end
+				reflect(true)
+			else reflect(false) end
+		end)
+	end)()
+end
+-- END LOOP SELECTOR UI
+
 -- Keep sidebar order fixed; arrange existing rows by purpose after construction.
 do
 	-- Move existing rows; keep the original handles, callbacks, and saved IDs.
@@ -18104,7 +18177,7 @@ do
 				["Gucci Settings"]={"AutoGucciBlobToggle","SourceGucciVehicle","GucciAutoDeleteBlob","AutoGucciTrainToggle","SourceRagdollOnRemoveGucci"},
 				["Recovery Settings"]={"AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","LocalMotionLinearLimit","LocalMotionAngularLimit","LoopTP"},
 			}},
-		Target={sections={"Target Interaction","Aim Assist"}},
+		Target={sections={"Target Interaction","Loop Controls","Aim Assist"},controls={TargetLoopType="Loop Controls",TargetLoopEnabled="Loop Controls"}},
 		AntiLag={sections={"Manual Line Protection","Automatic Line Protection","Low FPS Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
 		Blob={sections={"Controls","Seating","Flight"},
 			controls={AutoReseatBlobLoops="Seating",BlobReseatInterval="Seating",AutoSitZ="Seating",BlobFlySpeed="Flight"}},
