@@ -128,10 +128,10 @@ This is not a complete one-to-one port of Resonance. Nonported items are listed 
 | FOV Circle (`FovCircle`) | 42062 | Existing/adapted counterpart | `PackAimCircle` |
 | Toggle (`TriggerToggle`) | 42119 | Existing/adapted counterpart | `TriggerbotToggle` |
 | Camera Tricks (`TriggerTricks`) | 42186 | Not imported: camera manipulation modifier for the trigger controller. |  |
-| Silent Aim (`SilentAim`) | 42224 | Not imported: silent aim/hitbox override controller; visible aim assist is separate. |  |
+| Silent Aim (`SilentAim`) | 42224 | Blitz-derived native grab-raycast counterpart | `SilentAimEnabled` |
 | Ignore Whitelisted (`SilentAimIgnoreWhitelist`) | 42237 | Not imported: would bypass the current safety whitelist. |  |
-| Selected Targets Only (`SilentAimTargetsOnly`) | 42246 | Not imported: depends on the separate silent-aim controller. |  |
-| Show FOV Circle (`SilentAimFOV`) | 42259 | Not imported: depends on the separate silent-aim controller. |  |
+| Selected Targets Only (`SilentAimTargetsOnly`) | 42246 | Existing/adapted counterpart | `SilentAimSelected` |
+| Show FOV Circle (`SilentAimFOV`) | 42259 | Existing/adapted counterpart | `SilentAimCircle` |
 | Auto-Claim Plot (`AutoClaimPlot`) | 42323 | Existing/adapted counterpart | `PackAutoClaimPlot` |
 | Auto Whitelist Friends (`AutoWhitelistFriends`) | 42535 | Existing/adapted counterpart | `WhitelistFriends` |
 | Toggle Whitelist (`WhitelistToggle`) | 42569 | Adapted: Arriva whitelist remains always enforced; no bypass master added. |  |

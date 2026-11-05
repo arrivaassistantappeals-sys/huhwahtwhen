@@ -1042,8 +1042,10 @@
     "reference_id": "SilentAim",
     "reference_label": "Silent Aim",
     "reference_line": 42224,
-    "status": "Not imported: silent aim/hitbox override controller; visible aim assist is separate.",
-    "arriva_controls": []
+    "status": "Blitz-derived native grab-raycast counterpart",
+    "arriva_controls": [
+      "SilentAimEnabled"
+    ]
   },
   {
     "reference_id": "SilentAimIgnoreWhitelist",
@@ -1056,15 +1058,19 @@
     "reference_id": "SilentAimTargetsOnly",
     "reference_label": "Selected Targets Only",
     "reference_line": 42246,
-    "status": "Not imported: depends on the separate silent-aim controller.",
-    "arriva_controls": []
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SilentAimSelected"
+    ]
   },
   {
     "reference_id": "SilentAimFOV",
     "reference_label": "Show FOV Circle",
     "reference_line": 42259,
-    "status": "Not imported: depends on the separate silent-aim controller.",
-    "arriva_controls": []
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SilentAimCircle"
+    ]
   },
   {
     "reference_id": "AutoClaimPlot",

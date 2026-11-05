@@ -125,6 +125,14 @@ function Hub.applyControl(control,value,invoke)
 	if finish then finish() end
 	return ok,err
 end
+-- Unassigned keys must never match mouse/touch events (KeyCode.Unknown).
+function Hub.keybindAssigned(value)
+ local key=tostring(value or ""):lower()
+ return key~="" and key~="none" and key~="unknown" and key~="nil" and key~="enum.keycode.unknown"
+end
+function Hub.keybindInputMatches(value,input)
+ return Hub.keybindAssigned(value) and input and input.KeyCode and input.KeyCode~=Enum.KeyCode.Unknown and input.KeyCode.Name==value or false
+end
 -- Restore passive settings first; Gucci requests are independent of unrelated setup.
 function Hub.queueSavedCallbacks(records,invoke)
 	Hub.restoreEpoch=(Hub.restoreEpoch or 0)+1
@@ -1527,13 +1535,15 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				if self.capture then
 					if event.KeyCode==Enum.KeyCode.Unknown then return end
 					local capture=self.capture;self.capture=nil;Hub.keybindCaptureActive=false;Hub.keybindCaptureBlockUntil=os.clock()+0.15
-					if event.KeyCode==Enum.KeyCode.Escape then capture.label.Text=capture.CurrentKeybind else capture:Set(event.KeyCode.Name) end
+					if event.KeyCode==Enum.KeyCode.Escape then capture.label.Text=capture.CurrentKeybind
+					elseif event.KeyCode==Enum.KeyCode.Backspace or event.KeyCode==Enum.KeyCode.Delete then capture:Set("None")
+					else capture:Set(event.KeyCode.Name) end
 					return
 				end
 				if processed or input:GetFocusedTextBox() or os.clock()<(Hub.keybindCaptureBlockUntil or 0) then return end
 				local matched=false
 				for _,handle in ipairs(self.keybinds) do
-					if event.KeyCode.Name==handle.CurrentKeybind then matched=true;emit(handle.info.Callback) end
+					if Hub.keybindInputMatches(handle.CurrentKeybind,event) then matched=true;emit(handle.info.Callback) end
 				end
 				if not matched and event.KeyCode==Enum.KeyCode.RightShift then self:SetVisibility(not self.visible) end
 			end)
@@ -2037,11 +2047,12 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 		control.Callback = nil -- Settings changes must not execute the bound action.
 		function control:normalize(value)
 			if type(value) == "table" then value = value[1] end
-			return tostring(value or info.Default)
+			local key=tostring(value or info.Default or "None")
+			return Hub.keybindAssigned(key) and key or "None"
 		end
-		control.Value = info.Default
+		control.Value = control:normalize(info.Default)
 		function control:GetState() return self.Toggled == true end
-		control.handle = self.tab:CreateKeybind({Name = info.Text or id, CurrentKeybind = info.Default,
+		control.handle = self.tab:CreateKeybind({Name = info.Text or id, CurrentKeybind = control.Value,
 			HoldToInteract = false, CallOnChange = true,
 			Callback = function(value)
 				if type(value) == "string" then
@@ -2351,7 +2362,7 @@ function Hub.matchesKeybind(id, input, fallback)
 	if Hub.keybindCaptureActive or os.clock() < (Hub.keybindCaptureBlockUntil or 0) then return false end
 	local option = Options[id]
 	local value = option and option.Value or fallback
-	return input and input.KeyCode and input.KeyCode.Name == value
+	return Hub.keybindInputMatches(value,input)
 end
 function Hub.keybindConflictReport()
 	local used, conflicts = {}, {}
@@ -16147,6 +16158,174 @@ do
 end
 -- End aim feature pack
 
+-- BEGIN SILENT AIM
+-- Redirect only native grab raycasts; never write camera/character/target transforms.
+do
+ (function()
+  local group=Tabs.Target:AddRightGroupbox("Silent Aim")
+  local enabled,selectedOnly,visibleOnly,showCircle=false,false,true,false
+  local partName,radius,maxDistance="HumanoidRootPart",150,50
+  local cached
+  local gui,circle
+  local elapsed=0
+  local status=group:AddLabel("Silent aim: off.")
+  local lastStatus
+  local bridge
+  local function message(text) if text~=lastStatus then lastStatus=text;status:SetText(text) end end
+  local function clearCircle()
+   if gui then
+    for _,object in ipairs(gui:GetDescendants()) do Hub.instances[object]=nil end
+    Hub.instances[gui]=nil;gui:Destroy();gui,circle=nil,nil
+   end
+  end
+  local function localRoot()
+   local char=Player.Character
+   local root=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+   local hum=char and char:FindFirstChildOfClass("Humanoid")
+   if root and hum and hum.Health>0 and root.Parent==char then return root,char end
+  end
+  local function eligible(target,char,part,root)
+   return target~=Player and part and part:IsA("BasePart") and part.Parent==char
+    and Hub.loopTargetReady(target,char) and (not selectedOnly or Hub.isSelectedTarget(target))
+    and (part.Position-Hub.teleportFrame(root).Position).Magnitude<=maxDistance
+  end
+  local function pick(camera,point)
+   local root,char=localRoot();if not root then return end
+   local best,bestDistance=nil,radius
+   local params
+   if visibleOnly then
+    params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances={char};params.IgnoreWater=true
+   end
+   for _,target in ipairs(Players:GetPlayers()) do
+    local targetChar=target.Character;local part=targetChar and targetChar:FindFirstChild(partName)
+    if eligible(target,targetChar,part,root) then
+     local projected,onScreen=camera:WorldToViewportPoint(part.Position)
+     if onScreen and projected.Z>0 then
+      local distance=(Vector2.new(projected.X,projected.Y)-point).Magnitude
+      if distance<bestDistance then
+       local hit=params and Workspace:Raycast(camera.CFrame.Position,part.Position-camera.CFrame.Position,params)
+       if not hit or hit.Instance:IsDescendantOf(targetChar) then
+        bestDistance=distance;best={player=target,char=targetChar,part=part,selfChar=char}
+       end
+      end
+     end
+    end
+   end
+   return best
+  end
+  local function callerAllowed(caller)
+   if not caller then return false end
+   local scripts=Player:FindFirstChild("PlayerScripts")
+   if not scripts or not caller:IsDescendantOf(scripts) then return false end
+   -- The native grab controller in this game also owns its beam raycasts.
+   return caller.Name=="CharacterAndBeamMove" or caller.Name=="GrabScript" or caller.Name=="GrabController"
+  end
+  local function rewrite(caller,...)
+   if not enabled or not Hub.alive or not cached or not callerAllowed(caller)
+    or UserInputService:GetFocusedTextBox() or Hub.keybindCaptureActive
+    or not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+    or Workspace:FindFirstChild("GrabParts") then return end
+   local root,char=localRoot()
+   if not root or char~=cached.selfChar or not eligible(cached.player,cached.char,cached.part,root) then return end
+   local args=table.pack(...)
+   local origin,direction=args[1],args[2]
+   if typeof(origin)~="Vector3" or typeof(direction)~="Vector3" or not Hub.finiteVector(origin)
+    or not Hub.finiteVector(direction) or direction.Magnitude<0.000001 then return end
+   local camera=Workspace.CurrentCamera
+   if not camera or ((origin-camera.CFrame.Position).Magnitude>12 and (origin-Hub.teleportFrame(root).Position).Magnitude>12) then return end
+   local inset=game:GetService("GuiService"):GetGuiInset()
+   local point=UserInputService:GetMouseLocation()-inset
+   local projected,onScreen=camera:WorldToViewportPoint(cached.part.Position)
+   if not onScreen or projected.Z<=0 or (Vector2.new(projected.X,projected.Y)-point).Magnitude>radius then return end
+   local cursorRay=mouse.UnitRay
+   if not cursorRay or direction.Unit:Dot(cursorRay.Direction.Unit)<0.98 then return end
+   local offset=cached.part.Position-origin
+   if not Hub.finiteVector(offset) or offset.Magnitude<0.000001 then return end
+   local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Include
+   params.FilterDescendantsInstances={cached.part};params.IgnoreWater=true;params.RespectCanCollide=false
+   args[2]=offset.Unit*1000;args[3]=params;args.n=math.max(args.n,3)
+   return args
+  end
+  local function install()
+   if type(hookmetamethod)~="function" or type(getnamecallmethod)~="function" or type(checkcaller)~="function" or type(getcallingscript)~="function" then
+    return false,"This executor lacks the grab-raycast hook APIs."
+   end
+   bridge=Hub.env.ArrivaGrabRaycastBridge
+   if type(bridge)~="table" or not bridge.installed or bridge.version~=1 or bridge.workspace~=Workspace then
+    bridge={version=1,workspace=Workspace}
+    local old
+    local callback=function(object,...)
+     if bridge.handler and object==Workspace and getnamecallmethod()=="Raycast" and not checkcaller() then
+      local found,caller=pcall(getcallingscript)
+      if found then
+       local ok,args=pcall(bridge.handler,caller,...)
+       if ok and args then return old(object,table.unpack(args,1,args.n)) end
+      end
+     end
+     return old(object,...)
+    end
+    local ok,result=pcall(function() return hookmetamethod(game,"__namecall",type(newcclosure)=="function" and newcclosure(callback) or callback) end)
+    if not ok or type(result)~="function" then return false,"Could not install the grab-raycast hook." end
+    old=result;bridge.installed=true;Hub.env.ArrivaGrabRaycastBridge=bridge
+   end
+   bridge.owner=Hub;bridge.handler=rewrite;return true
+  end
+  local function detach()
+   if bridge and bridge.owner==Hub then bridge.handler=nil;bridge.owner=nil end
+   cached=nil;clearCircle()
+  end
+  local function draw(point)
+   if not enabled or not showCircle then clearCircle();return end
+   if not gui or not gui.Parent then
+    clearCircle()
+    local parent=Player:FindFirstChildOfClass("PlayerGui");if not parent then return end
+    gui=Hub.new("ScreenGui",parent);gui.Name="ArrivaSilentAimRadius";gui.IgnoreGuiInset=true;gui.ResetOnSpawn=false
+    circle=Hub.new("Frame",gui);circle.BackgroundTransparency=1;circle.AnchorPoint=Vector2.new(0.5,0.5)
+    local corner=Hub.new("UICorner",circle);corner.CornerRadius=UDim.new(1,0)
+    local stroke=Hub.new("UIStroke",circle);stroke.Color=Color3.fromRGB(184,145,255);stroke.Thickness=1.5;stroke.Transparency=0.15
+   end
+   circle.Position=UDim2.fromOffset(point.X,point.Y);circle.Size=UDim2.fromOffset(radius*2,radius*2)
+  end
+  group:AddToggle("SilentAimEnabled",{Text="Silent aim",Default=false,Callback=function(on)
+   enabled=on;elapsed=1
+   if on then
+    local ok,reason=install()
+    if not ok then enabled=false;detach()
+     notify("Silent aim",reason,6,"warning")
+     if Toggles.SilentAimEnabled and Toggles.SilentAimEnabled.Value then Toggles.SilentAimEnabled:SetValue(false) end
+     message("Silent aim: unavailable.")
+     return
+    end
+    message("Silent aim: ready.")
+   else detach();message("Silent aim: off.") end
+   Hub.requestSave()
+  end})
+  group:AddDropdown("SilentAimPart",{Text="Silent aim target part",Values={"HumanoidRootPart","Head","Torso","UpperTorso"},Default=1,Callback=function(value) partName=value;cached=nil;elapsed=1;Hub.requestSave() end})
+  group:AddSlider("SilentAimRange",{Text="Silent aim range",Default=50,Min=1,Max=50,Rounding=0,Callback=function(value) maxDistance=value;cached=nil;elapsed=1;Hub.requestSave() end})
+  group:AddSlider("SilentAimRadius",{Text="Silent aim FOV radius",Default=150,Min=20,Max=600,Rounding=0,Callback=function(value) radius=value;cached=nil;elapsed=1;Hub.requestSave() end})
+  group:AddToggle("SilentAimSelected",{Text="Silent aim at selected players only",Default=false,Callback=function(on) selectedOnly=on;cached=nil;elapsed=1;Hub.requestSave() end})
+  group:AddToggle("SilentAimVisible",{Text="Silent aim visible targets only",Default=true,Callback=function(on) visibleOnly=on;cached=nil;elapsed=1;Hub.requestSave() end})
+  group:AddToggle("SilentAimCircle",{Text="Silent aim FOV circle",Default=false,Callback=function(on) showCircle=on;if not on then clearCircle() end;Hub.requestSave() end})
+  Hub.connect(RunService.RenderStepped,function(dt)
+   if not enabled then return end
+   local camera=Workspace.CurrentCamera
+   if not camera then cached=nil;return end
+   local point=UserInputService:GetMouseLocation();draw(point)
+   elapsed+=dt;if elapsed<0.05 then return end;elapsed=0
+   if UserInputService:GetFocusedTextBox() or Hub.keybindCaptureActive then cached=nil;return end
+   local inset=game:GetService("GuiService"):GetGuiInset()
+   cached=pick(camera,point-inset)
+   message(cached and ("Silent aim: @"..cached.player.Name) or "Silent aim: no eligible target.")
+  end)
+  Hub.connect(Player.CharacterRemoving,function() cached=nil;elapsed=1 end)
+  Hub.connect(Players.PlayerRemoving,function(target) if cached and cached.player==target then cached=nil end end)
+  Hub.cleanup(function() enabled=false;detach() end)
+ end)()
+end
+-- END SILENT AIM
+
+
 -- Feature pack: reversible local part editing and smooth click teleport.
 do
 	(function()
@@ -18662,7 +18841,7 @@ do
   group:AddSlider("ResonanceZoomFOV",{Text="Zoom FOV",Default=25,Min=1,Max=90,Rounding=0,Callback=function(v) zoomFOV=v;if zoomOn then setFOV(Workspace.CurrentCamera,v) end;Hub.requestSave() end})
   group:AddSlider("ResonanceZoomSmoothing",{Text="Zoom camera smoothness",Default=14,Min=1,Max=40,Rounding=1,Callback=function(v) smoothness=v;Hub.requestSave() end})
   Hub.keybindGroups.actions:AddLabel("Camera zoom"):AddKeyPicker("ResonanceZoomKey",{Text="Camera zoom",Default="None",Callback=function(value)
-   if type(value)~="string" and Toggles.ResonanceZoom then Toggles.ResonanceZoom:SetValue(not Toggles.ResonanceZoom.Value) end
+   if type(value)~="string" and Options.ResonanceZoomKey and Hub.keybindAssigned(Options.ResonanceZoomKey.Value) and Toggles.ResonanceZoom then Toggles.ResonanceZoom:SetValue(not Toggles.ResonanceZoom.Value) end
   end})
   group:AddToggle("ResonanceCameraStretch",{Text="Camera stretch",Default=false,Callback=function(on) restoreStretch();stretchOn=on;bind();Hub.requestSave() end})
   group:AddSlider("ResonanceAspectRatio",{Text="Camera stretch ratio",Default=1,Min=0.5,Max=2,Rounding=2,Callback=function(v) restoreStretch();stretch=v;Hub.requestSave() end})
@@ -19100,7 +19279,7 @@ do
 				["Gucci Settings"]={"AutoGucciBlobToggle","SourceGucciVehicle","GucciAutoDeleteBlob","AutoGucciTrainToggle","SourceRagdollOnRemoveGucci"},
 				["Recovery Settings"]={"AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","LocalMotionLinearLimit","LocalMotionAngularLimit","LoopTP"},
 			}},
-		Target={sections={"Target Interaction","Loop Controls","Loop assistance","Aim Assist"},controls={TargetLoopType="Loop Controls",TargetLoopEnabled="Loop Controls",DestroyAntiKickToggle="Loop assistance",AntiAntiInputLag="Loop assistance",DestroyTargetGucci="Loop assistance"}},
+		Target={sections={"Target Interaction","Loop Controls","Loop assistance","Aim Assist","Silent Aim"},controls={TargetLoopType="Loop Controls",TargetLoopEnabled="Loop Controls",DestroyAntiKickToggle="Loop assistance",AntiAntiInputLag="Loop assistance",DestroyTargetGucci="Loop assistance"}},
 		AntiLag={sections={"Manual Line Protection","Automatic Line Protection","Low FPS Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
 		Blob={sections={"Controls","Seating","Flight"},
 			controls={AutoReseatBlobLoops="Seating",BlobReseatInterval="Seating",AutoSitZ="Seating",BlobFlySpeed="Flight"}},
