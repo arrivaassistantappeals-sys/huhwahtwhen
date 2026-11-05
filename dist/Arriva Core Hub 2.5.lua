@@ -4632,7 +4632,10 @@ function CreateSkyVelocity(skyObject)
 		skyVelocityBodyVelocity.Name = "SkyVelocity"
 		skyVelocityBodyVelocity.Velocity = Vector3.new(0, 100000000000000, 0)
 		skyVelocityBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+		Hub.assetTargets[skyVelocityBodyVelocity]=skyObject
+		return skyVelocityBodyVelocity,true
 	end
+	return skyObject:FindFirstChild("SkyVelocity"),false
 end
 
 local heldObjectName = nil
@@ -5772,6 +5775,19 @@ TargetGroup:AddToggle("LoopKickToggle", {
 -- Shared lifecycle for selected/all kill modes: bounded attempts and immediate cleanup.
 do
 	local activeRun
+	local forces={}
+	local function clearForce(force)
+		forces[force]=nil;Hub.instances[force]=nil;Hub.assetTargets[force]=nil
+		pcall(function() force:Destroy() end)
+	end
+	local forceElapsed=0
+	Hub.connect(RunService.Heartbeat,function(dt)
+		forceElapsed+=dt;if forceElapsed<0.1 then return end;forceElapsed=0
+		for force,record in pairs(forces) do
+			if not force.Parent or not record.run.enabled or record.target.Character~=record.char
+				or record.hum.Health<=0 or not Hub.canAffect(record.root) or os.clock()>=record.expires then clearForce(force) end
+		end
+	end)
 	local function cleanupAttempt(run)
 		if not run or not run.attempt then return end
 		local attempt = run.attempt
@@ -5792,6 +5808,7 @@ do
 	local function stopRun(run)
 		if not run then return end
 		run.enabled = false
+		for force,record in pairs(forces) do if record.run==run then clearForce(force) end end
 		cleanupAttempt(run)
 	end
 	local function nextAll(run)
@@ -5833,18 +5850,19 @@ do
 				local targetChar = target and target.Character
 				local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
 				local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+				local targetHead=targetChar and targetChar:FindFirstChild("Head")
 				local function valid()
 					return live() and Player.Character == char and root and root.Parent == char
 						and hum and hum.Health > 0 and not Hub.blobFlightActive and not Hub.safeZoneLoopActive
 						and targetRoot and targetRoot.Parent == targetChar and Hub.loopTargetReady(target, targetChar)
-						and (all or Hub.isSelectedTarget(target))
+						and (all or (targetHead and targetHead.Parent==targetChar and Hub.isSelectedTarget(target)))
 				end
 				if not valid() then task.wait(0.2); continue end
 				local attempt = {character = char, root = root, position = Hub.teleportFrame(root), collisions = {}}
 				run.attempt = attempt
 				local ok, err = xpcall(function()
-					local deadline = os.clock() + 0.75
-					for _ = 1, 15 do
+					local deadline = os.clock() + 2
+					for _ = 0, 50 do
 						if not valid() or os.clock() >= deadline then break end
 						for _, part in ipairs(char:GetDescendants()) do
 							if part:IsA("BasePart") then
@@ -5852,10 +5870,6 @@ do
 								part.CanCollide = false
 							end
 						end
-						-- Move into ownership range before requesting it, rather than wasting the first pass.
-						local offset = targetRoot.Position.Y <= -12 and Vector3.new(0, 5, -15) or Vector3.new(0, -10, -10)
-						Hub.teleportPart(root, CFrame.new(targetRoot.Position + offset))
-						root.AssemblyLinearVelocity = Vector3.zero
 						SNOWship(targetRoot)
 						if not valid() then break end
 						if (CheckNetworkOwnerShipOnPlayer and CheckNetworkOwnerShipOnPlayer(target))
@@ -5864,15 +5878,22 @@ do
 							local events = ReplicatedStorage:FindFirstChild("GrabEvents")
 							local drop = events and events:FindFirstChild("DestroyGrabLine")
 							if drop then Hub.fire(drop, targetRoot) end
-							if valid() then CreateSkyVelocity(targetRoot) end
+							if valid() then
+								local force,created=CreateSkyVelocity(targetRoot)
+								if created then forces[force]={run=run,target=target,char=targetChar,root=targetRoot,hum=targetHum,expires=os.clock()+2} end
+							end
 							break
 						end
+						RunService.Heartbeat:Wait()
 						if not valid() then break end
+						local offset=targetRoot.Position.Y<=-12 and Vector3.new(0,5,-15) or Vector3.new(0,-10,-10)
+						Hub.teleportPart(root,CFrame.new(targetRoot.Position+offset))
+						root.AssemblyLinearVelocity=Vector3.zero
 						if Hub.canAffect(targetHum) then
+							targetHum.BreakJointsOnDeath=false
 							targetHum:ChangeState(Enum.HumanoidStateType.Dead)
 							targetHum.Jump, targetHum.Sit = true, false
 						end
-						task.wait(0.05)
 					end
 				end, debug.traceback)
 				cleanupAttempt(run)
@@ -5880,7 +5901,7 @@ do
 					Hub.lastKillLoopError = tostring(err)
 					warn("[Arriva kill loop] " .. tostring(err))
 				end
-				if live() then task.wait(0.1) end
+				if live() then task.wait(0.2) end
 			end
 			cleanupAttempt(run)
 		end)
@@ -5890,7 +5911,7 @@ do
 	-- Loop Kill All
 	TargetGroup:AddToggle("LoopKillToggleAll", {Text = "Loop kill All", Default = false,
 		Callback = function(on) start("LoopKillToggleAll", on, true) end})
-	Hub.cleanup(function() stopRun(activeRun); activeRun = nil end)
+	Hub.cleanup(function() stopRun(activeRun);activeRun=nil;for force in pairs(forces) do clearForce(force) end end)
 end
 -- End kill loop lifecycle
 
@@ -7919,68 +7940,71 @@ do
 
 end
 
--- Kill Grab
-local killGrabEnabled = false
+-- Kill Grab: Blitz Death_Grab ownership gate/state/release, with cancellable hub workers.
+local killGrabEnabled=false
 local grabConnection
-
-local function startKillGrab()
-	if grabConnection then return end
-
-	grabConnection = Hub.connect(workspace.ChildAdded, function(v)
-		if not killGrabEnabled then return end
-		if not (v:IsA("Model") and v.Name == "GrabParts") then return end
-
-		task.spawn(function()
-			task.wait(0.05)
-
-			local grabPart = v:FindFirstChild("GrabPart")
-			local weld = grabPart and grabPart:FindFirstChild("WeldConstraint")
-			local targetChar = weld and weld.Part1 and weld.Part1.Parent
-
-			if not (grabPart and targetChar and targetChar ~= Player.Character) or not Hub.canAffect(targetChar) then
-				return
-			end
-
-			local hum = targetChar:FindFirstChildOfClass("Humanoid")
-			local root = targetChar:FindFirstChild("HumanoidRootPart")
-			local myRoot = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-
-			if not (hum and root and myRoot) then return end
-
-			while killGrabEnabled and Hub.canAffect(targetChar) and grabPart.Parent and hum.Health > 0 do
-				pcall(function()
-					Hub.fire(ReplicatedStorage.GrabEvents.SetNetworkOwner, root, Hub.teleportFrame(myRoot))
-					hum.BreakJointsOnDeath = false
+local killGrabWorkers={}
+local killGrabEpoch=0
+local function stopKillGrabWorkers()
+	killGrabEpoch+=1
+	for model,record in pairs(killGrabWorkers) do
+		killGrabWorkers[model]=nil
+		if record.thread and record.thread~=coroutine.running() and coroutine.status(record.thread)~="dead" then pcall(Hub.nativeTask.cancel,record.thread);Hub.threads[record.thread]=nil end
+	end
+end
+local function processKillGrab(model)
+	if not killGrabEnabled or not model:IsA("Model") or model.Name~="GrabParts" or model:GetAttribute("Fake") or killGrabWorkers[model] then return end
+	local record={epoch=killGrabEpoch,char=Player.Character};killGrabWorkers[model]=record
+	record.thread=task.defer(function()
+		local function live()
+			local ownHum=record.char and record.char:FindFirstChildOfClass("Humanoid")
+			return ownHum and ownHum.Health>0 and Hub.alive and killGrabEnabled and record.epoch==killGrabEpoch and killGrabWorkers[model]==record
+				and model.Parent==Workspace and Player.Character==record.char
+		end
+		local ok,message=xpcall(function()
+			local grab=model:WaitForChild("GrabPart",0.5)
+			local weld=grab and grab:WaitForChild("WeldConstraint",0.5)
+			if not live() or not weld or not weld.Part1 then return end
+			local grabbed=weld.Part1
+			local targetChar=grabbed.Parent
+			while targetChar and targetChar~=Workspace and not targetChar:FindFirstChildOfClass("Humanoid") do targetChar=targetChar.Parent end
+			local target=targetChar and Players:GetPlayerFromCharacter(targetChar)
+			local hum=targetChar and targetChar:FindFirstChildOfClass("Humanoid")
+			if not target or target==Player or not hum or not Hub.canAffect(targetChar) then return end
+			while live() and target.Character==targetChar and grab.Parent==model and weld.Parent==grab
+				and weld.Part1==grabbed and grabbed:IsDescendantOf(targetChar) and hum.Parent==targetChar and hum.Health>0 and Hub.canAffect(targetChar) do
+				if CheckNetworkOwnerShipOnPlayer(target) then
+					hum.BreakJointsOnDeath=false
 					hum:ChangeState(Enum.HumanoidStateType.Dead)
-					hum.Health = 0
-					targetChar:BreakJoints()
-				end)
+					hum.Jump=true;hum.Sit=false
+					if hum:GetStateEnabled(Enum.HumanoidStateType.Dead) then
+						local events=ReplicatedStorage:FindFirstChild("GrabEvents")
+						local drop=events and events:FindFirstChild("DestroyGrabLine")
+						if drop then Hub.fire(drop,grabbed) end
+					end
+				end
 				RunService.Heartbeat:Wait()
 			end
-		end)
+		end,debug.traceback)
+		if killGrabWorkers[model]==record then killGrabWorkers[model]=nil end
+		if not ok then warn("[Kill Grab] "..tostring(message)) end
 	end)
 end
-
-local function stopKillGrab()
-	if grabConnection then
-		grabConnection:Disconnect()
-		grabConnection = nil
-	end
+local function startKillGrab()
+	if not grabConnection then grabConnection=Hub.connect(Workspace.ChildAdded,processKillGrab) end
+	for _,model in ipairs(Workspace:GetChildren()) do if model.Name=="GrabParts" then processKillGrab(model) end end
 end
-
-GrabOptions:AddToggle("KillGrabToggle", {
-	Text = "Kill Grab",
-	Default = false,
-	Callback = function(on)
-		Hub.requestSave()
-		killGrabEnabled = on
-		if on then
-			startKillGrab()
-		else
-			stopKillGrab()
-		end
-	end
-})
+local function stopKillGrab()
+	stopKillGrabWorkers()
+	if grabConnection then grabConnection:Disconnect();Hub.connections[grabConnection]=nil;grabConnection=nil end
+end
+GrabOptions:AddToggle("KillGrabToggle",{Text="Kill Grab",Default=false,Callback=function(on)
+	Hub.requestSave();killGrabEnabled=on
+	if on then startKillGrab() else stopKillGrab() end
+end})
+Hub.connect(Player.CharacterRemoving,stopKillGrabWorkers)
+Hub.cleanup(function() killGrabEnabled=false;stopKillGrab() end)
+-- End Blitz Kill Grab
 
 -- Misc Tab
 local MiscGroup = Tabs.Misc:AddLeftGroupbox("Miscellaneous")
