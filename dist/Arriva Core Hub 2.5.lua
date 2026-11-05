@@ -10986,7 +10986,7 @@ do
 						local low=region.CFrame.Position-region.Size/2;local high=region.CFrame.Position+region.Size/2
 						for x=low.X,high.X-1,128 do for y=low.Y,high.Y-1,128 do for z=low.Z,high.Z-1,128 do
 							if revision~=ticket or not enabled or not Hub.alive then return end
-							count+=1;if count>4096 then error("Ocean conversion exceeds the region limit.",0) end
+							count+=1
 							local upper=Vector3.new(math.min(x+128,high.X),math.min(y+128,high.Y),math.min(z+128,high.Z))
 							if math.min(x/4,y/4,z/4)<-32768 or math.max(upper.X/4-1,upper.Y/4-1,upper.Z/4-1)>32767 then error("Ocean extends outside Terrain backup bounds.",0) end
 							local corner=Vector3int16.new(x/4,y/4,z/4)
