@@ -113,14 +113,3 @@ Loop Players now has one **Loop type** dropdown and **Enable loop** switch. Type
 The master switch reflects legacy shortcuts, target rejection and emergency stops. Loading an older config with multiple enabled modes reconciles to one mode after restore finishes. Loop type is saved; enabled state continues through the original IDs. No loop algorithm changed.
 
 Validation: full Luau compilation and mocked selector transitions, stop-before-switch, rejected starts, emergency stops, legacy controls/configs and hidden-row checks passed. Existing command UI checks also pass. Layout has not been viewed in a live Roblox session.
-
-
-### Original Resonance kill path, including hidden ownership movement
-
-The previous approximate kill port was reverted at the user's request. This version imports the supplied function bodies for Kill, DestroyObject, ClearDestroyObjects, SNO, Grab, RNO, IsPartOwner, PredictCFrame, PivotTo, WhichPlot and BreakPlot. Their bodies are checked against the uploaded source with whitespace ignored. Prediction retains the source default of off.
-
-Distant ownership uses Resonance's paired Heartbeat/render-step mechanism: approach the target on the simulation side, restore visible root/head before rendering, then restore the view on exit. The kill loop no longer adds its own visible root teleport/collision cycle or SkyVelocity force. Both selected/all modes schedule this original path. The original plot handling is included and uses the hub's tracked temporary-toy spawner.
-
-Integration adapters resolve hub characters/remotes, respect whitelist/selection changes, namespace the render binding, clear hub-owned movers and unwind on stop/respawn. The source object manager has no player-character entries here, so its ReleaseObject hook is empty. These adapters and the loop scheduler are hub-specific; this is not a claim that the entire surrounding Resonance application was copied unchanged. In-flight operations remain exclusive until the original ownership helper unwinds, preventing old cleanup from clearing a newly started binding.
-
-Automated validation: all 11 imported function bodies match the attachment; full script compiles; mocked original ownership retry/render masking, root/head restoration, actual part-pivot removal, delayed release and stop cleanup pass. Existing selector, Gucci, respawn and cancelled-spawn-lock regressions pass. Roblox rendering, server ownership acceptance and actual kills are unverified in-game. Render masking hides local movement; it does not mean the server-side character never moves.
