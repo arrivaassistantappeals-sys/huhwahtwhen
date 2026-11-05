@@ -84,3 +84,12 @@ Validation: full-script Luau compilation and mocked ownership/cooldown/protectio
 - Active **Destroy Gucci (sit)** now checks nested Seat/VehicleSeat instances throughout the target's toy and plot inventories, covering Blobman, tractors, sleighs and toy trains. It also checks the target's existing SeatPart, including the shared train when attributable that way. Protected targets are excluded; it does not scan unrelated shared train seats. Your own Gucci still must be disabled for the original removal interaction to run.
 
 Validation: full Luau compilation, mocked owner-command opt-in/identity/prefix/parser and recursive/plot-only/protected-seat checks passed. Train cleanup and tab wiring were checked statically; server-side train removal, swimming and vehicle interactions still need in-game verification. Existing Gucci confirmation and leg-only startup regression checks pass.
+
+
+### Destroy Train readiness and spawn-lock correction
+
+Compared the train sequence and spawn helper against Resonance. Omitted spawn frames now receive a valid position 15 studs above and 20 studs forward on the world Z axis from the character, matching the original default placement. Explicit frames, including Gucci's, are unchanged. Spawn InvokeServer requests run inside a bounded worker; the timeout starts before invocation and cancels the waiting worker, allowing the shared spawn lock to release. Cancellation of the caller also leaves a scheduled deadline to reap the invocation worker. This cannot force the server's CanSpawnToy flag or reverse a request already processed by the server.
+
+Destroy Train waits for HoldItemRemoteFunction, DropItemRemoteFunction and RigidConstraint instead of requiring them to exist immediately. Hold requests retry every 0.15 seconds for at most one second until the left grip attachment confirms. All outstanding hold workers are cleaned by the train interaction's existing cleanup. Missing toy and missing component errors are reported separately.
+
+Automated validation reproduced the old nil-frame and indefinite-remote lock failures, then verified default placement, unchanged explicit frames, timeout cancellation, later successful spawning, remote errors, delayed component replication and repeated grip acquisition. Full Luau compilation and existing Gucci, respawn, Anti Banana and plot-visit regressions pass. Actual train destruction remains unverified in Roblox.

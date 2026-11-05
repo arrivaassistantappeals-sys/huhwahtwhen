@@ -11258,19 +11258,39 @@ do
 			local remote=menu and menu:FindFirstChild("SpawnToyRemoteFunction")
 			if not remote then return end
 			local allowed=Player:FindFirstChild("CanSpawnToy");if allowed and not allowed.Value then return end
+			-- Resonance supplies a position above/in front of the character when omitted.
+			-- Explicit Gucci spawn frames retain their existing game-facing values.
+			frame=frame or CFrame.new(root.Position+Vector3.new(0,15,20))
 			local folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
 			local before={};if folder then for _,model in ipairs(folder:GetChildren()) do before[model]=true end end
-			local result=Hub.invoke(remote,name,frame,Vector3.new(0,97.69000244140625,0))
-			local deadline=os.clock()+(timeout or 2)
+			local duration=math.clamp(tonumber(timeout) or 2,0.25,5)
+			local deadline=os.clock()+duration
+			local done,result,invokeError=false,nil,nil
+			local request=task.spawn(function()
+				local ok,value=pcall(Hub.invoke,remote,name,frame,Vector3.new(0,97.69000244140625,0))
+				if ok then result=value else invokeError=value end;done=true
+			end)
+			local function cancelRequest()
+				if coroutine.status(request)~="dead" then pcall(Hub.nativeTask.cancel,request);Hub.threads[request]=nil end
+			end
+			-- Also bounds the request when its caller is cancelled before reaching cleanup.
+			task.delay(duration,cancelRequest)
+			local found
 			repeat
-				if flag11 or Player.Character~=char then return end
+				if flag11 or Player.Character~=char then break end
 				folder=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
 				if folder then
-					if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder and not before[result] then spawned[result]=true;return result end
-					for _,model in ipairs(folder:GetChildren()) do if not before[model] and model:IsA("Model") and model.Name==name then spawned[model]=true;return model end end
+					if typeof(result)=="Instance" and result:IsA("Model") and result.Parent==folder and not before[result] then found=result end
+					if not found then for _,model in ipairs(folder:GetChildren()) do
+						if not before[model] and model:IsA("Model") and model.Name==name then found=model;break end
+					end end
 				end
+				if found or (done and invokeError) then break end
 				task.wait()
 			until os.clock()>=deadline
+			cancelRequest()
+			if invokeError then warn("[Source defense spawn] "..tostring(invokeError)) end
+			if found and Player.Character==char and not flag11 then spawned[found]=true;return found end
 		end
 		tbl12.SpawnToy=function(...)
 			if spawnBusy and spawnBusy.char==Player.Character and coroutine.status(spawnBusy.owner)~="dead" then return nil end
@@ -15021,12 +15041,22 @@ do
 						waitFor(function() return seat.Parent and seat.Occupant==hum end,1.5)
 						burger=tbl12.SpawnToy("FoodHamburger")
 						local hold=burger and burger:WaitForChild("HoldPart",1)
-						local holdRemote=hold and hold:FindFirstChild("HoldItemRemoteFunction")
-						local dropRemote=hold and hold:FindFirstChild("DropItemRemoteFunction")
-						local constraint=hold and hold:FindFirstChild("RigidConstraint")
-						if not holdRemote or not dropRemote or not constraint then error("Hamburger is not ready.") end
-						invoke(holdRemote,burger,char)
-						waitFor(function() return constraint.Parent and constraint.Attachment1==grip end,1)
+						local holdRemote=hold and hold:WaitForChild("HoldItemRemoteFunction",0.45)
+						local dropRemote=hold and hold:WaitForChild("DropItemRemoteFunction",0.45)
+						local constraint=hold and hold:WaitForChild("RigidConstraint",0.45)
+						if not burger then error("Hamburger did not spawn; server may be busy or spawning is unavailable.") end
+						if not holdRemote or not dropRemote or not constraint then error("Hamburger hold/drop components did not replicate in time.") end
+						-- Like Resonance, hold requests must be retried until the grip confirms.
+						local nextHold=0
+						waitFor(function()
+							if constraint.Parent and constraint.Attachment1==grip then return true end
+							if os.clock()>=nextHold then
+								nextHold=os.clock()+0.15
+								local worker=task.spawn(function() pcall(Hub.invoke,holdRemote,burger,char) end)
+								table.insert(workers,worker)
+							end
+							return false
+						end,1)
 						invoke(dropRemote,burger,CFrame.new(0,-150,0),Vector3.zero)
 						task.wait(0.5);if not current() or seat.Occupant~=hum then error("Train seat was lost.") end
 						Workspace.FallenPartsDestroyHeight=-100
