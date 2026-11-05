@@ -382,26 +382,22 @@ do
 		local displayRoot=display:FindFirstChild(root.Name)
 		local displayHum=display:FindFirstChildOfClass("Humanoid")
 		if not displayRoot or not displayHum then display:Destroy();return nil end
-		-- Anchor the actual cloned body joint, including realHrp-based characters.
-		for _,joint in ipairs(display:GetDescendants()) do
-			if joint:IsA("Motor6D") and (joint.Name=="RootJoint" or joint.Name=="Root") and joint.Part0 and joint.Part0:IsDescendantOf(display) then displayRoot=joint.Part0;break end
-		end
-		local joints={};local sourceJoints={}
+		local poses={};local sourceParts={}
 		local function path(object,model)
 			local names={}
 			while object and object~=model do table.insert(names,1,object.Name);object=object.Parent end
 			return table.concat(names,"/")
 		end
-		for _,object in ipairs(char:GetDescendants()) do if object:IsA("Motor6D") then sourceJoints[path(object,char)]=object end end
+		for _,object in ipairs(char:GetDescendants()) do if object:IsA("BasePart") then sourceParts[path(object,char)]=object end end
 		for _,object in ipairs(display:GetDescendants()) do
 			if object:IsA("LuaSourceContainer") or object:IsA("BodyMover") or object:IsA("AlignPosition") or object:IsA("AlignOrientation")
 				or object:IsA("LinearVelocity") or object:IsA("AngularVelocity") or object:IsA("VectorForce") or object:IsA("Torque") then object:Destroy()
 			elseif object:IsA("BasePart") then
-				object.Anchored=object==displayRoot;object.CanCollide=false;object.CanTouch=false;object.CanQuery=false;object.LocalTransparencyModifier=0
+				object.Anchored=true;object.CanCollide=false;object.CanTouch=false;object.CanQuery=false;object.LocalTransparencyModifier=0
+				local source=sourceParts[path(object,display)];if source then table.insert(poses,{copy=object,source=source}) else object.Transparency=1 end
 			elseif object:IsA("Weld") or object:IsA("WeldConstraint") then
 				if (object.Part0 and not object.Part0:IsDescendantOf(display)) or (object.Part1 and not object.Part1:IsDescendantOf(display)) then object:Destroy() end
-			elseif object:IsA("Motor6D") then
-				local source=sourceJoints[path(object,display)];if source then table.insert(joints,{copy=object,source=source}) end
+			elseif object:IsA("Motor6D") then object:Destroy()
 			end
 		end
 		display.Name="ArrivaTeleportDisplay";displayHum.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
@@ -410,7 +406,7 @@ do
 		display:PivotTo(root.CFrame*pivotOffset);display.Parent=Workspace;Hub.instances[display]=true
 		local camera=Workspace.CurrentCamera
 		local record={char=char,root=root,hum=hum,origin=root.CFrame,visualRoot=root.CFrame,lastPhysical=frame,destination=frame,
-			display=display,displayHum=displayHum,displaySubject=displayRoot.Name=="HumanoidRootPart" and displayHum or displayRoot,pivotOffset=pivotOffset,joints=joints,transparency={},cameraSubject=camera and camera.CameraSubject}
+			display=display,displayHum=displayHum,displaySubject=displayRoot.Name=="HumanoidRootPart" and displayHum or displayRoot,pivotOffset=pivotOffset,poses=poses,transparency={},cameraSubject=camera and camera.CameraSubject}
 		pendingDisplay=record
 		local function hide(part)
 			if part:IsA("BasePart") then if record.transparency[part]==nil then record.transparency[part]=part.LocalTransparencyModifier end;part.LocalTransparencyModifier=1 end
@@ -449,7 +445,10 @@ do
 				if (actual.Position-record.lastPhysical.Position).Magnitude<10 then record.visualRoot=record.visualRoot*delta end
 				record.lastPhysical=actual;record.destination=actual
 				record.display:PivotTo(record.visualRoot*record.pivotOffset)
-				for _,joint in ipairs(record.joints) do if joint.copy.Parent and joint.source.Parent then joint.copy.Transform=joint.source.Transform end end
+				for _,pose in ipairs(record.poses) do
+					if pose.copy.Parent and pose.source:IsDescendantOf(record.char) then pose.copy.CFrame=record.visualRoot*actual:ToObjectSpace(pose.source.CFrame)
+					else pose.copy.Transparency=1 end
+				end
 				for real in pairs(record.transparency) do if real.Parent then real.LocalTransparencyModifier=1 end end
 			end)
 		end
@@ -11011,6 +11010,8 @@ do
 			local worker
 			local observedModel
 			local regions,surfaces={},{}
+			local chunkCache={}
+			local resetRequested,additionsPending=false,false
 			local originalTerrainTransparency
 			local function waterVisibility()
 				if enabled and terrain and not waterOn then
@@ -11041,8 +11042,9 @@ do
 					if record.empty then terrain:FillRegion(record.region,4,Enum.Material.Air)
 					else terrain:WriteVoxels(record.region,4,record.materials,record.occupancy) end
 					regions[i]=nil
-					if yielding and i%8==0 then task.wait() end
+					if yielding and i%2==0 then task.wait() end
 				end
+				table.clear(chunkCache)
 			end
 			local function build(ticket)
 				local model=oceanModel()
@@ -11051,10 +11053,27 @@ do
 				if not enabled or revision~=ticket or not Hub.alive then return end
 				if not terrain or not model then error("Ocean surface has not loaded.",0) end
 				observedModel=model
-				local count=0;local lastYield=os.clock()
+				local camera=Workspace.CurrentCamera
+				local focus=camera and camera.CFrame.Position or Vector3.zero
+				local function nearFirst(low,high,position)
+					local first,last=math.floor(low/128),math.floor((high-1)/128)
+					local middle=math.clamp(math.floor(position/128),first,last)
+					local nextIndex,distance,side=middle,0,-1
+					return function()
+						while nextIndex do
+							local value=nextIndex
+							if distance==0 then distance=1;nextIndex=middle-distance
+							elseif side==-1 then side=1;nextIndex=middle+distance
+							else side=-1;distance+=1;nextIndex=middle-distance end
+							if distance>last-first+1 then nextIndex=nil end
+							if value>=first and value<=last then return value*128 end
+						end
+					end
+				end
 				for _,part in ipairs(model:GetDescendants()) do
 					local originalOpacity=waterObjects[part] and waterObjects[part].Transparency
-					if part:IsA("BasePart") and (originalOpacity or part.Transparency)<1 then
+					local savedSurface=surfaces[part]
+					if part:IsA("BasePart") and not (savedSurface and savedSurface.complete) and (originalOpacity or (savedSurface and savedSurface.baseOpacity) or part.Transparency)<1 then
 						if not surfaces[part] then
 							local saved={baseOpacity=originalOpacity or part.Transparency};surfaces[part]=saved
 							saved.connection=Hub.connect(part:GetPropertyChangedSignal("Transparency"),function()
@@ -11065,36 +11084,46 @@ do
 						local shift=Vector3.new(0,offset,0)
 						local region=Region3.new(part.Position-part.Size/2+shift,part.Position+part.Size/2+shift):ExpandToGrid(4)
 						local low=region.CFrame.Position-region.Size/2;local high=region.CFrame.Position+region.Size/2
-						for x=low.X,high.X-1,128 do for y=low.Y,high.Y-1,128 do for z=low.Z,high.Z-1,128 do
+						for gx in nearFirst(low.X,high.X,focus.X) do for gy in nearFirst(low.Y,high.Y,focus.Y) do for gz in nearFirst(low.Z,high.Z,focus.Z) do
+							local x,y,z=math.max(gx,low.X),math.max(gy,low.Y),math.max(gz,low.Z)
 							if revision~=ticket or not enabled or not Hub.alive then return end
-							count+=1
-							local upper=Vector3.new(math.min(x+128,high.X),math.min(y+128,high.Y),math.min(z+128,high.Z))
-							local chunk=Region3.new(Vector3.new(x,y,z),upper)
-							local materials,occupancy=terrain:ReadVoxels(chunk,4)
-							local empty=true
-							for _,plane in ipairs(occupancy) do for _,row in ipairs(plane) do for _,value in ipairs(row) do if value>0 then empty=false;break end end;if not empty then break end end;if not empty then break end end
-							table.insert(regions,{region=chunk,empty=empty,materials=not empty and materials or nil,occupancy=not empty and occupancy or nil})
-							terrain:FillRegion(chunk,4,Enum.Material.Water)
-							if count%8==0 or os.clock()-lastYield>0.003 then task.wait();lastYield=os.clock() end
+							local upper=Vector3.new(math.min(gx+128,high.X),math.min(gy+128,high.Y),math.min(gz+128,high.Z))
+							local key=string.format("%d:%d:%d:%d:%d:%d",x,y,z,upper.X,upper.Y,upper.Z)
+							if not chunkCache[key] then
+								local chunk=Region3.new(Vector3.new(x,y,z),upper)
+								local materials,occupancy=terrain:ReadVoxels(chunk,4)
+								local empty=true
+								for _,plane in ipairs(occupancy) do for _,row in ipairs(plane) do for _,value in ipairs(row) do if value>0 then empty=false;break end end;if not empty then break end end;if not empty then break end end
+								table.insert(regions,{region=chunk,empty=empty,materials=not empty and materials or nil,occupancy=not empty and occupancy or nil})
+								terrain:FillRegion(chunk,4,Enum.Material.Water)
+								chunkCache[key]=true
+								-- One terrain mutation per frame; never queue a burst of eight.
+								task.wait()
+							end
 						end end end
+						if revision==ticket and enabled then surfaces[part].complete=true end
 
 					end
 				end
 				status:SetText("Realistic water: Terrain water active ("..#regions.." regions).")
 			end
-			local function request()
-				revision+=1
+			local function request(incremental)
+				if incremental then additionsPending=true
+				else revision+=1;resetRequested=true end
 				if worker then return end
 				worker=task.defer(function()
 					repeat
+						if resetRequested then resetRequested=false;restore(true) end
+						-- Consume setting changes that arrived during restoration once.
+						resetRequested=false
 						local ticket=revision
-						restore(true)
+						additionsPending=false
 						if enabled then
-							status:SetText("Realistic water: converting ocean surfaces.")
+							status:SetText("Realistic water: converting ocean surfaces gradually.")
 							local ok,message=pcall(build,ticket)
 							if not ok then restore(true);status:SetText("Realistic water: "..tostring(message));break end
 						else status:SetText("Realistic water: off.") end
-					until ticket==revision or not Hub.alive
+					until (ticket==revision and not resetRequested and not additionsPending) or not Hub.alive
 					worker=nil
 				end)
 			end
@@ -11102,7 +11131,7 @@ do
 			waterGroup:AddSlider("SourceRealisticWaterOffset",{Text="Water height offset",Default=-4,Min=-20,Max=20,Rounding=1,Callback=function(value) offset=value;if enabled then request() end;Hub.requestSave() end})
 			Hub.connect(Workspace.DescendantAdded,function(part)
 				local model=enabled and oceanModel()
-				if model and part:IsA("BasePart") and part:IsDescendantOf(model) then request() end
+				if model and part:IsA("BasePart") and part:IsDescendantOf(model) and not surfaces[part] then request(true) end
 			end)
 			local elapsed=0
 			Hub.connect(RunService.Heartbeat,function(dt)
