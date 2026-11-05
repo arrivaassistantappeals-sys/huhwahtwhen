@@ -342,6 +342,84 @@ local Workspace = workspace
 
 --// Player
 local LocalPlayer = Players.LocalPlayer
+
+-- BEGIN SHARED TELEPORT MASK
+-- Script-owned teleport writes go through here; ordinary movement and Z stay native.
+do
+	local state
+	local enabled=true
+	Hub.teleportMaskCancelers={}
+	function Hub.teleportMaskEnabled() return enabled end
+	function Hub.cancelNativeTeleportMasks() for _,cancel in pairs(Hub.teleportMaskCancelers) do pcall(cancel) end end
+	local renderName="ArrivaSharedTeleportMask"
+	local function current(record)
+		return record and LocalPlayer.Character==record.char and record.root.Parent==record.char
+			and record.head.Parent==record.char and record.hum.Parent==record.char and record.hum.Health>0
+	end
+	function Hub.clearTeleportMask(commit)
+		local old=state;state=nil;Hub.teleportMaskState=nil
+		RunService:UnbindFromRenderStep(renderName)
+		if old and old.physics then old.physics:Disconnect();Hub.connections[old.physics]=nil end
+		if current(old) then
+			local frame=commit and old.destination or old.visualRoot
+			old.root.CFrame=frame;old.head.CFrame=frame*old.headOffset
+		end
+	end
+	function Hub.teleportFrame(part)
+		if state and current(state) and part==state.root then return state.destination end
+		return part.CFrame
+	end
+	function Hub.teleportPart(part,frame)
+		if not part then return end
+		local char=LocalPlayer.Character
+		local root=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+		local head=char and char:FindFirstChild("Head")
+		local hum=char and char:FindFirstChildOfClass("Humanoid")
+		if not enabled or part~=root or not head or not hum or hum.Health<=0 then part.CFrame=frame;return end
+		if state and not current(state) then Hub.clearTeleportMask(false) end
+		if state and (frame.Position-state.origin.Position).Magnitude<0.05 then Hub.clearTeleportMask(false);part.CFrame=frame;return end
+		if not state and (frame.Position-root.Position).Magnitude<0.05 then part.CFrame=frame;return end
+		if not state then
+			local record={char=char,root=root,head=head,hum=hum,origin=root.CFrame,visualRoot=root.CFrame,
+				visualHead=head.CFrame,headOffset=root.CFrame:ToObjectSpace(head.CFrame),destination=frame}
+			state=record;Hub.teleportMaskState=record
+			RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value-1,function()
+				if state~=record then return end
+				if not current(record) then Hub.clearTeleportMask(false);return end
+				if Hub.gucciAcquiring==record.char then return end
+				record.root.CFrame=record.visualRoot;record.head.CFrame=record.visualHead
+			end)
+			record.physics=Hub.connect(RunService.Heartbeat,function()
+				if state~=record then return end
+				if not current(record) then Hub.clearTeleportMask(false);return end
+				if Hub.gucciAcquiring==record.char then return end
+				-- Preserve ordinary walking while separating it from explicit teleports.
+				if not record.pendingWrite and (record.root.Position-record.visualRoot.Position).Magnitude<10 then
+					local delta=record.visualRoot:ToObjectSpace(record.root.CFrame)
+					record.destination=record.destination*delta
+					record.visualRoot=record.root.CFrame;record.visualHead=record.head.CFrame
+				end
+				record.pendingWrite=false
+				-- Same heartbeat/render split as Resonance's ownership helper.
+				record.root.CFrame=record.destination;record.head.CFrame=record.destination*record.headOffset
+			end)
+		end
+		state.destination=frame;state.pendingWrite=true
+		part.CFrame=frame
+	end
+	function Hub.teleportModel(model,frame)
+		if model~=LocalPlayer.Character then model:PivotTo(frame);return end
+		local root=model:FindFirstChild("realHrp") or model:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+		local destination=frame*model:GetPivot():ToObjectSpace(root.CFrame)
+		Hub.teleportPart(root,destination);model:PivotTo(frame)
+	end
+	function Hub.setTeleportMaskEnabled(on) enabled=on==true;if not enabled then Hub.clearTeleportMask(true) end end
+	Hub.connect(LocalPlayer.CharacterRemoving,function() Hub.clearTeleportMask(false) end)
+	Hub.cleanup(function() Hub.clearTeleportMask(false);Hub.teleportPart=nil;Hub.teleportModel=nil;Hub.teleportFrame=nil end)
+end
+-- END SHARED TELEPORT MASK
+
 local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 Hub.characterGeneration = 0
 Hub.connect(LocalPlayer.CharacterRemoving, function(oldCharacter)
@@ -665,7 +743,7 @@ local function bringSelfToOwner()
 	local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
 
 	if myRoot and ownerRoot then
-		myRoot.CFrame = ownerRoot.CFrame * CFrame.new(0, 5, 0)
+		Hub.teleportPart(myRoot, ownerRoot.CFrame * CFrame.new(0, 5, 0))
 		sysMsg("Brought to hub owner")
 	end
 end
@@ -1435,7 +1513,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 			Hub.connect(close.Activated,function() if self.onClose then self.onClose() else self:Destroy() end end)
 			Hub.connect(header.InputBegan,function(event)
 				if event.UserInputType==Enum.UserInputType.MouseButton1 or event.UserInputType==Enum.UserInputType.Touch then
-					local start,position=event.Position,root.Position
+					local start,position=event.Position,Hub.teleportFrame(root).Position
 					self.pointerAction=function(point)
 						local delta=(point-start)/scale.Scale
 						root.Position=UDim2.new(position.X.Scale,position.X.Offset+delta.X,position.Y.Scale,position.Y.Offset+delta.Y)
@@ -2579,7 +2657,7 @@ local function startAntiGucci()
 			end
 			if not valid() then return end
 			-- Capture once before spawning or moving; jumps must not overwrite this.
-			local returnCFrame = root.CFrame
+			local returnCFrame = Hub.teleportFrame(root)
 			local function findBlob()
 				local folder = Workspace:FindFirstChild(Player.Name .. "SpawnedInToys")
 				return folder and folder:FindFirstChild("CreatureBlobman")
@@ -2624,7 +2702,7 @@ local function startAntiGucci()
 			head.Anchored = true
 			task.wait(0.2)
 			if not valid() or not seat:IsDescendantOf(Workspace) then return end
-			root.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
+			Hub.teleportPart(root, seat.CFrame + Vector3.new(0, 2, 0))
 			Hub.gucciStage="Activating"
 			if Hub.updateGucciStatus then Hub.updateGucciStatus() end
 			task.wait(0.25)
@@ -2723,7 +2801,7 @@ local function startAntiGucci()
 					task.wait(0.25)
 				end
 				if valid() then
-					root.CFrame = returnCFrame
+					Hub.teleportPart(root, returnCFrame)
 					root.AssemblyLinearVelocity = Vector3.zero
 					root.AssemblyAngularVelocity = Vector3.zero
 					run.ready=true
@@ -2775,7 +2853,7 @@ local function startAntiGucciTrain()
 			and root ~= nil and root.Parent ~= nil
 	end
 	if not valid() then return end
-	local returnCFrame = root.CFrame
+	local returnCFrame = Hub.teleportFrame(root)
 	local map = Workspace:FindFirstChild("Map")
 	local folder = map and map:FindFirstChild("AlwaysHereTweenedObjects")
 	local train = folder and folder:FindFirstChild("Train")
@@ -2787,7 +2865,7 @@ local function startAntiGucciTrain()
 			or train:FindFirstChildWhichIsA("Seat", true))
 	end
 	if not seat then notify("De-Sync", "Train seat not found.", 4); return end
-	root.CFrame = seat.CFrame + Vector3.new(0, 2, 0)
+	Hub.teleportPart(root, seat.CFrame + Vector3.new(0, 2, 0))
 	task.spawn(function()
 		for _ = 1, 30 do
 			if not valid() or not seat:IsDescendantOf(Workspace) then break end
@@ -2809,7 +2887,7 @@ local function startAntiGucciTrain()
 			hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 			task.wait(0.5)
 			if valid() then
-				root.CFrame = returnCFrame
+				Hub.teleportPart(root, returnCFrame)
 				root.AssemblyLinearVelocity = Vector3.zero
 				root.AssemblyAngularVelocity = Vector3.zero
 			end
@@ -3045,7 +3123,7 @@ do
 		freezeUsed = true
 		release()
 		frozenCharacter, frozenAt = char, os.clock()
-		local cframe = root.CFrame
+		local cframe = Hub.teleportFrame(root)
 		for _, part in ipairs(char:GetChildren()) do
 			if part:IsA("BasePart") then savedAnchors[part] = part.Anchored; part.Anchored = true end
 		end
@@ -3054,7 +3132,7 @@ do
 				or hum.SeatPart or Hub.safeZoneLoopActive or Hub.gucciCharacterBusy(char) or os.clock() - frozenAt >= 2 then release(); return end
 			root.AssemblyLinearVelocity = Vector3.zero
 			root.AssemblyAngularVelocity = Vector3.zero
-			root.CFrame = cframe
+			Hub.teleportPart(root, cframe)
 		end)
 	end
 
@@ -3223,7 +3301,7 @@ local function antiExplodeF()
 		if not antiExplodeT or not model:IsA("BasePart") or model.Name ~= "Part" then return end
 		local char = Player.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if not hrp or (model.Position - hrp.Position).Magnitude > 20 then return end
+		if not hrp or (model.Position - Hub.teleportFrame(hrp).Position).Magnitude > 20 then return end
 		local original = hrp.Anchored
 		hrp.Anchored = true
 		task.delay(0.15, function() if hrp.Parent then hrp.Anchored = original end end)
@@ -3415,10 +3493,10 @@ function Hub.captureSelfRecoveryGround(char, root)
 	params.FilterDescendantsInstances = {char}
 	params.RespectCanCollide = true
 	params.IgnoreWater = true
-	local hit = Workspace:Raycast(root.Position, Vector3.new(0, -8, 0), params)
+	local hit = Workspace:Raycast(Hub.teleportFrame(root).Position, Vector3.new(0, -8, 0), params)
 	if hit and hit.Normal.Y >= 0.6 and hit.Instance:IsA("BasePart") and hit.Instance.Anchored
 		and hit.Instance.CanCollide and not Hub.playerOf(hit.Instance) then
-		return {character = char, part = hit.Instance, groundPosition = hit.Instance.Position, groundCFrame = hit.Instance.CFrame, cframe = root.CFrame}
+		return {character = char, part = hit.Instance, groundPosition = hit.Instance.Position, groundCFrame = hit.Instance.CFrame, cframe = Hub.teleportFrame(root)}
 	end
 end
 
@@ -3446,7 +3524,7 @@ do
 	end
 	local function record()
 		local char, root = current()
-		if not root or not finiteVector(root.Position) or not finiteVector(root.AssemblyLinearVelocity)
+		if not root or not finiteVector(Hub.teleportFrame(root).Position) or not finiteVector(root.AssemblyLinearVelocity)
 			or not finiteVector(root.AssemblyAngularVelocity) or root.AssemblyLinearVelocity.Magnitude > 50
 			or root.AssemblyAngularVelocity.Magnitude > 20 then return false end
 		local candidate = Hub.captureSelfRecoveryGround(char, root)
@@ -3460,7 +3538,7 @@ do
 		if not root or os.clock() - lastRecovery < 1 or not Hub.validSelfRecoveryGround(saved, char) then return false end
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
-		root.CFrame = saved.cframe
+		Hub.teleportPart(root, saved.cframe)
 		lastRecovery = os.clock()
 		recoveries += 1
 		status:SetText(string.format("Returned to safe ground %d time(s).", recoveries))
@@ -3472,13 +3550,13 @@ do
 		if not root then return end
 		if saved and not Hub.validSelfRecoveryGround(saved, char) then saved = nil end
 		local threshold = math.max(-50, Workspace.FallenPartsDestroyHeight + 25)
-		if not finiteVector(root.Position) or root.Position.Y < threshold then
+		if not finiteVector(Hub.teleportFrame(root).Position) or Hub.teleportFrame(root).Position.Y < threshold then
 			if not recover() and not saved then status:SetText("No valid safe ground recorded; cannot recover yet.") end
 			return
 		end
 		if os.clock() - lastSample >= 0.2 then
 			lastSample = os.clock()
-			if root.Position.Y > threshold + 5 then record() end
+			if Hub.teleportFrame(root).Position.Y > threshold + 5 then record() end
 		end
 	end
 	Hub.sampleVoidProtection = sample
@@ -3529,19 +3607,19 @@ do
 			if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
 				or (held and held.Value) or Hub.safeZoneLoopActive or Hub.gucciCharacterBusy(char) then return end
 			local velocity,rotation=root.AssemblyLinearVelocity,root.AssemblyAngularVelocity
-			local unsafe=not vectorOK(root.Position) or not vectorOK(velocity) or not vectorOK(rotation)
+			local unsafe=not vectorOK(Hub.teleportFrame(root).Position) or not vectorOK(velocity) or not vectorOK(rotation)
 				or velocity.Magnitude>linearLimit or rotation.Magnitude>angularLimit
 			local now=os.clock()
 			if unsafe then
 				root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
 				if Hub.validSelfRecoveryGround(lastGround,char) and now-lastAction>=1 then
-					root.CFrame=lastGround.cframe;lastAction=now;recoveries+=1
+					Hub.teleportPart(root, lastGround.cframe);lastAction=now;recoveries+=1
 				end
 				return
 			end
-			if now-lastSample<0.25 or not vectorOK(root.Position) then return end
+			if now-lastSample<0.25 or not vectorOK(Hub.teleportFrame(root).Position) then return end
 			lastSample=now
-			if root.Position.Y<=Workspace.FallenPartsDestroyHeight+12 then return end
+			if Hub.teleportFrame(root).Position.Y<=Workspace.FallenPartsDestroyHeight+12 then return end
 			local candidate=velocity.Magnitude<=50 and rotation.Magnitude<=20 and Hub.captureSelfRecoveryGround(char,root)
 			if candidate then lastGround=candidate end
 		end
@@ -4130,7 +4208,7 @@ DefenseExtra:AddToggle("AntiInputLag", {
 						spawnPending, nextSpawn = true, os.clock() + 8
 						task.spawn(function()
 							pcall(function()
-								local spawnCF = hrp.CFrame * CFrame.new(0, 5, 0)
+								local spawnCF = Hub.teleportFrame(hrp) * CFrame.new(0, 5, 0)
 								Hub.invoke(SpawnRemote, ToyName, spawnCF, Vector3.new(0,0,0))
 							end)
 							spawnPending = false
@@ -4152,7 +4230,7 @@ DefenseExtra:AddToggle("AntiInputLag", {
 
 							if holdingPlayer and holdingPlayer ~= plr then
 								pcall(function()
-									Hub.invoke(holdPart.DropItemRemoteFunction, burger, hrp.CFrame * CFrame.new(0, 2000, 0), Vector3.new(0,0,0))
+									Hub.invoke(holdPart.DropItemRemoteFunction, burger, Hub.teleportFrame(hrp) * CFrame.new(0, 2000, 0), Vector3.new(0,0,0))
 								end)
 								if Hub.canAffect(burger) then burger:Destroy() end
 							else
@@ -4162,7 +4240,7 @@ DefenseExtra:AddToggle("AntiInputLag", {
 								task.wait()
 
 								pcall(function()
-									Hub.invoke(holdPart.DropItemRemoteFunction, burger, hrp.CFrame * CFrame.new(0, 2000, 0), Vector3.new(0,0,0))
+									Hub.invoke(holdPart.DropItemRemoteFunction, burger, Hub.teleportFrame(hrp) * CFrame.new(0, 2000, 0), Vector3.new(0,0,0))
 								end)
 								task.wait()
 							end
@@ -4328,7 +4406,7 @@ do
 				spawnPending, nextSpawn = true, os.clock() + 8
 				spawnJob = task.spawn(function()
 					local ok, err = pcall(function()
-						Hub.invoke(remote, "NinjaShuriken", root.CFrame * CFrame.new(0, 12, 20), Vector3.zero)
+						Hub.invoke(remote, "NinjaShuriken", Hub.teleportFrame(root) * CFrame.new(0, 12, 20), Vector3.zero)
 					end)
 					if ticket ~= generation then return end
 					spawnPending, spawnJob = false, nil
@@ -4434,7 +4512,7 @@ do
 						if root and hum and hum.Health > 0 then
 							if affectedHumanoids[hum] == nil then affectedHumanoids[hum] = hum.PlatformStand end
 							hum.PlatformStand = true
-							root.CFrame = CFrame.new(math.random(-500, 500), math.random(30, 480), math.random(-500, 500))
+							Hub.teleportPart(root, CFrame.new(math.random(-500, 500), math.random(30, 480), math.random(-500, 500)))
 						end
 						task.wait(0.03)
 					end
@@ -4538,9 +4616,10 @@ end
 function SNOWship(targetPart)
 	if not Hub.canAffect(targetPart) then return false end
 	if targetPart and typeof(targetPart) == "Instance" then
-		local distanceFromCharacter = Player:DistanceFromCharacter(targetPart.Position)
+		if not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then return end
+		local distanceFromCharacter = (Hub.teleportFrame(Player.Character.HumanoidRootPart).Position-targetPart.Position).Magnitude
 		if Player.Character and (Player.Character:FindFirstChild("HumanoidRootPart") and distanceFromCharacter <= 30) then
-			Hub.fire(setNetworkOwnerEvent, targetPart, lookAt(Player.Character.HumanoidRootPart.Position, targetPart.Position))
+			Hub.fire(setNetworkOwnerEvent, targetPart, lookAt(Hub.teleportFrame(Player.Character.HumanoidRootPart).Position, targetPart.Position))
 		end
 	end
 end
@@ -4949,7 +5028,7 @@ do
 						e.highlight.FillColor=rainbowFill and hue or color
 						e.highlight.OutlineColor=rainbowOutline and hue or outlineColor
 						local ownRoot=Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-						e.highlight.Enabled=showHighlight and ownRoot~=nil and (head.Position-ownRoot.Position).Magnitude<=maxDistance
+						e.highlight.Enabled=showHighlight and ownRoot~=nil and (head.Position-Hub.teleportFrame(ownRoot).Position).Magnitude<=maxDistance
 						e.highlight.FillTransparency=alpha;e.highlight.OutlineTransparency=outlineAlpha
 						e.highlight.DepthMode=through and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
 						local name=""
@@ -5314,7 +5393,7 @@ local function autoblob(active)
 					end
 					if not current() or seat.Parent ~= blob or blob.Parent ~= folder then return false end
 					if not hum.SeatPart then
-						root.CFrame = seat.CFrame + Vector3.new(0, 1, 0)
+						Hub.teleportPart(root, seat.CFrame + Vector3.new(0, 1, 0))
 						root.AssemblyLinearVelocity = Vector3.zero
 						root.AssemblyAngularVelocity = Vector3.zero
 						seat:Sit(hum)
@@ -5331,7 +5410,7 @@ local function autoblob(active)
 				Hub.blobSpawnPending = true
 				Hub.nextBlobSpawn = os.clock() + 10
 				task.spawn(function()
-					if current() then pcall(function() Hub.invoke(spawn, "CreatureBlobman", root.CFrame, Vector3.zero) end) end
+					if current() then pcall(function() Hub.invoke(spawn, "CreatureBlobman", Hub.teleportFrame(root), Vector3.zero) end) end
 					Hub.blobSpawnPending = false
 				end)
 			end
@@ -5410,7 +5489,7 @@ do
 			or Hub.blobFlightActive or Hub.characterFlightActive or (Hub.isBlobFlightActive and Hub.isBlobFlightActive()) then clearHeavy(); return end
 		if heldRoot ~= root or lastSeat ~= seat or not hold or not hold.Parent then
 			clearHeavy()
-			heldRoot, lastSeat, holdPosition = root, seat, root.Position
+			heldRoot, lastSeat, holdPosition = root, seat, Hub.teleportFrame(root).Position
 			attachment = Hub.new("Attachment", root)
 			attachment.Name = "ArrivaHeavyBlobAttachment"
 			hold = Hub.new("AlignPosition", root)
@@ -5424,7 +5503,7 @@ do
 		end
 		local moving = hum.MoveDirection.Magnitude > 0.05
 		-- Deliberate hub teleports establish a new idle position.
-		if moving or (root.Position - holdPosition).Magnitude > 8 then holdPosition = root.Position end
+		if moving or (Hub.teleportFrame(root).Position - holdPosition).Magnitude > 8 then holdPosition = Hub.teleportFrame(root).Position end
 		hold.Enabled = not moving
 		hold.Position = holdPosition
 	end
@@ -5608,7 +5687,7 @@ TargetGroup:AddToggle("LoopKickToggle", {
 			local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 			if not myRoot then return end
 
-			local savedPos = myRoot.CFrame
+			local savedPos = Hub.teleportFrame(myRoot)
 			local dragging = false
 			local grabStartTime = 0
 
@@ -5632,13 +5711,13 @@ TargetGroup:AddToggle("LoopKickToggle", {
 					if Hub.canAffect(tRoot) then tRoot.Velocity = Vector3.zero end
 
 					if not dragging then
-						if Hub.canAffect(tRoot) then myRoot.CFrame = tRoot.CFrame end
+						if Hub.canAffect(tRoot) then Hub.teleportPart(myRoot, tRoot.CFrame) end
 						myRoot.Velocity = Vector3.zero
 
 						pcall(function()
 							if Hub.canAffect(tHum) then tHum.PlatformStand = true end
 							if Hub.canAffect(tHum) then tHum.Sit = true end
-							Hub.fire(GE.SetNetworkOwner, tRoot, myRoot.CFrame)
+							Hub.fire(GE.SetNetworkOwner, tRoot, Hub.teleportFrame(myRoot))
 							Hub.fire(GE.CreateGrabLine, tRoot, Vector3.zero, tRoot.Position, false)
 						end)
 
@@ -5648,7 +5727,7 @@ TargetGroup:AddToggle("LoopKickToggle", {
 							grabStartTime = 0
 						end
 					else
-						myRoot.CFrame = savedPos
+						Hub.teleportPart(myRoot, savedPos)
 						myRoot.Velocity = Vector3.zero
 
 						local lockPos = savedPos * CFrame.new(0, 17, 0)
@@ -5670,7 +5749,7 @@ TargetGroup:AddToggle("LoopKickToggle", {
 					dragging = false
 					grabStartTime = 0
 					if myRoot then
-						myRoot.CFrame = savedPos
+						Hub.teleportPart(myRoot, savedPos)
 						myRoot.Velocity = Vector3.zero
 					end
 				end
@@ -5680,7 +5759,7 @@ TargetGroup:AddToggle("LoopKickToggle", {
 
 			if not ownsRun() then return end
 			if myRoot then
-				myRoot.CFrame = savedPos
+				Hub.teleportPart(myRoot, savedPos)
 				myRoot.Velocity = Vector3.zero
 			end
 		end)
@@ -5761,7 +5840,7 @@ do
 						and (all or Hub.isSelectedTarget(target))
 				end
 				if not valid() then task.wait(0.2); continue end
-				local attempt = {character = char, root = root, position = root.CFrame, collisions = {}}
+				local attempt = {character = char, root = root, position = Hub.teleportFrame(root), collisions = {}}
 				run.attempt = attempt
 				local ok, err = xpcall(function()
 					local deadline = os.clock() + 0.75
@@ -5775,7 +5854,7 @@ do
 						end
 						-- Move into ownership range before requesting it, rather than wasting the first pass.
 						local offset = targetRoot.Position.Y <= -12 and Vector3.new(0, 5, -15) or Vector3.new(0, -10, -10)
-						root.CFrame = CFrame.new(targetRoot.Position + offset)
+						Hub.teleportPart(root, CFrame.new(targetRoot.Position + offset))
 						root.AssemblyLinearVelocity = Vector3.zero
 						SNOWship(targetRoot)
 						if not valid() then break end
@@ -6007,7 +6086,7 @@ TargetGroup:AddToggle("DualHandLoopKick", {
 							if targetChar ~= lastTargetCharDual then
 								lastTargetCharDual = targetChar
 								if bp then bp:Destroy() bp = nil end
-								if hrp then hrp.CFrame = targetHRP.CFrame * CFrame.new(0, 25, 0) end
+								if hrp then Hub.teleportPart(hrp, targetHRP.CFrame * CFrame.new(0, 25, 0)) end
 								task.wait(0.2)
 								if not running() or not Hub.isSelectedTarget(target) or not Hub.loopTargetReady(target, targetChar) or Hub.getBlobSeat() ~= seat then break end
 								Hub.fire(grab, leftDet, targetHRP, leftWeld)
@@ -6127,7 +6206,7 @@ TargetGroup:AddToggle("PlayerFlingBtn", {
 
 							local loop = Hub.connect(RunService.Heartbeat, function()
 								if not running() or not Hub.isSelectedTarget(target) or not Hub.loopTargetReady(target, tChar) or not tRoot or not tRoot.Parent then return end
-								if Hub.canAffect(tRoot) then hrp.CFrame = tRoot.CFrame end
+								if Hub.canAffect(tRoot) then Hub.teleportPart(hrp, tRoot.CFrame) end
 								hrp.Velocity = Vector3.zero
 							end)
 
@@ -6163,7 +6242,7 @@ TargetGroup:AddToggle("PlayerFlingBtn", {
 					if hrp then
 						hrp.RotVelocity = Vector3.zero
 						hrp.Velocity = Vector3.zero
-						if originalPos then hrp.CFrame = originalPos end
+						if originalPos then Hub.teleportPart(hrp, originalPos) end
 					end
 				end
 			end)
@@ -6243,7 +6322,7 @@ do
 		gyro.Name = "BlobFlyGyro"
 		gyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
 		gyro.P, gyro.D = 9e4, 500
-		gyro.CFrame = root.CFrame
+		gyro.CFrame = Hub.teleportFrame(root)
 		Hub.blobFlightActive = true
 		if Hub.updateHeavyBlobman then Hub.updateHeavyBlobman() end
 		status:SetText("Vehicle Fly: W follows your view (look up/down to climb/dive), S reverses, A/D strafe, E/Q rise/descend. Release keys to hover.")
@@ -6314,7 +6393,7 @@ TargetGroup:AddToggle("DestroyTargetGucci", {
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			if not root then return end
 
-			local SafeSpot = root.CFrame
+			local SafeSpot = Hub.teleportFrame(root)
 			local RunService = game:GetService("RunService")
 
 			local folderName = SelectedPlayer.Name .. "SpawnedInToys"
@@ -6352,7 +6431,7 @@ TargetGroup:AddToggle("DestroyTargetGucci", {
 											local magnetConnection
 											magnetConnection = Hub.connect(RunService.Stepped, function()
 												if myRoot and seat and Hub.canAffect(seat) then
-													myRoot.CFrame = seat.CFrame
+													Hub.teleportPart(myRoot, seat.CFrame)
 													myRoot.Velocity = Vector3.zero
 													if obj.PrimaryPart then
 														obj.PrimaryPart.Velocity = Vector3.zero
@@ -6378,13 +6457,13 @@ TargetGroup:AddToggle("DestroyTargetGucci", {
 												myHum.Jump = true
 
 												task.wait(0.05)
-												myRoot.CFrame = SafeSpot
+												Hub.teleportPart(myRoot, SafeSpot)
 												myRoot.Velocity = Vector3.zero
 
 												notify("Success", "Removal complete", 1)
 												task.wait(0.5)
 											else
-												myRoot.CFrame = SafeSpot
+												Hub.teleportPart(myRoot, SafeSpot)
 											end
 										end
 									end
@@ -6508,7 +6587,7 @@ function TeleportPlayer(cframeOffset,teleportPriority)
 	local root=char and char:FindFirstChild("HumanoidRootPart")
 	local hum=char and char:FindFirstChildOfClass("Humanoid")
 	if not root or not hum or hum.Health<=0 or Hub.gucciCharacterBusy(char) then return false end
-	root.CFrame=root.CFrame.Rotation+cframeOffset.Position
+	Hub.teleportPart(root, Hub.teleportFrame(root).Rotation+cframeOffset.Position)
 	local run=Hub.gucciSeatRun
 	if not (run and run.Char==char and run.Seat==hum.SeatPart) and (not hum.SeatPart or not hum.SeatPart.Parent or hum.SeatPart.Parent.Name~="CreatureBlobman") then hum.Sit=false end
 	return true
@@ -6599,7 +6678,7 @@ TargetGroup:AddToggle("BringAllGrab", {
 											SNOWshipOnce(humanoidRootPart)
 											if CheckNetworkOwnerShipOnPlayer(player) then
 												if not isRagdolled.Value and player:DistanceFromCharacter(playerCFrame.Position) > 10 then
-													humanoidRootPart.CFrame = playerCFrame
+													Hub.teleportPart(humanoidRootPart, playerCFrame)
 												end
 												CreateBringBody(humanoidRootPart, playerCFrame)
 												break
@@ -6651,7 +6730,7 @@ do
 			if not myRoot or not myHum or myHum.Health<=0 or not root or not ragdolled then notify("Bring","Character parts or Ragdolled value are not ready.",4);return end
 			Hub.singleBringBusy=true
 			task.spawn(function()
-				local saved=myRoot.CFrame
+				local saved=Hub.teleportFrame(myRoot)
 				local camera=Workspace.CurrentCamera
 				local cameraState=camera and {kind=camera.CameraType,subject=camera.CameraSubject,cf=camera.CFrame}
 				local success=false
@@ -6667,17 +6746,17 @@ do
 						if plot and plot.Value then break end
 						SNOWshipOnce(root)
 						if CheckNetworkOwnerShipOnPlayer(target) then
-							if not ragdolled.Value and target:DistanceFromCharacter(saved.Position)>10 then root.CFrame=saved end
+							if not ragdolled.Value and target:DistanceFromCharacter(saved.Position)>10 then Hub.teleportPart(root, saved) end
 							CreateBringBody(root,saved)
 							success=true;break
 						end
 						task.wait()
 						if not current() then break end
-						TeleportPlayer(CFrame.new(root.Position+Vector3.new(0,root.Position.Y<=-12 and 5 or -10,root.Position.Y<=-12 and -15 or -10)))
+						TeleportPlayer(CFrame.new(Hub.teleportFrame(root).Position+Vector3.new(0,Hub.teleportFrame(root).Position.Y<=-12 and 5 or -10,Hub.teleportFrame(root).Position.Y<=-12 and -15 or -10)))
 					end
 				end,debug.traceback)
 				if Player.Character==myChar and myRoot.Parent==myChar and myHum.Health>0 and not Hub.safeZoneLoopActive then
-					pcall(function() myRoot.CFrame=saved;myRoot.AssemblyLinearVelocity=Vector3.zero;myRoot.AssemblyAngularVelocity=Vector3.zero end)
+					pcall(function() Hub.teleportPart(myRoot, saved);myRoot.AssemblyLinearVelocity=Vector3.zero;myRoot.AssemblyAngularVelocity=Vector3.zero end)
 				end
 				if camera and cameraState and Workspace.CurrentCamera==camera then pcall(function()
 						camera.CameraType=cameraState.kind;camera.CameraSubject=cameraState.subject;camera.CFrame=cameraState.cf
@@ -6714,7 +6793,7 @@ TargetGroup:AddToggle("DestroyAntiKickToggle", {
 					if part then
 						invis_touch(part, part.CFrame)
 						if Hub.canAffect(part) and part:FindFirstChild("PartOwner") and part.PartOwner.Value == Player.Name then
-							if Hub.canAffect(part) then part.CFrame = CFrame.new(0, 1000, 0) end
+							if Hub.canAffect(part) then Hub.teleportPart(part, CFrame.new(0, 1000, 0)) end
 						end
 					end
 				end
@@ -6809,7 +6888,7 @@ TargetGroup:AddToggle("AntiAntiInputLag", {
 						task.wait()
 
 						pcall(function()
-							Hub.invoke(hp.DropItemRemoteFunction, b, CFrame.new(hrp.Position + Vector3.new(0,-2000,0)), Vector3.new(0,0,0))
+							Hub.invoke(hp.DropItemRemoteFunction, b, CFrame.new(Hub.teleportFrame(hrp).Position + Vector3.new(0,-2000,0)), Vector3.new(0,0,0))
 						end)
 					end
 				end
@@ -7013,7 +7092,7 @@ do
 		if not Hub.loopTargetReady(target, targetChar) then return false end
 		if Hub.auraSettings.selectedOnly and not Hub.isSelectedTarget(target) then return false end
 		local otherRoot = target.Character:FindFirstChild("HumanoidRootPart")
-		return (root.Position - otherRoot.Position).Magnitude <= Hub.auraSettings.range
+		return (Hub.teleportFrame(root).Position - otherRoot.Position).Magnitude <= Hub.auraSettings.range
 	end
 
 	function Hub.getAuraTargets(myChar)
@@ -7091,7 +7170,7 @@ do
 	group:AddToggle("FlingAura", {Text = "Fling Aura", Default = false, Callback = function(on)
 		runAura("FlingAura", on, function(target, myChar, targetChar, running)
 			local root = targetChar:FindFirstChild("HumanoidRootPart")
-			local direction = lookAt(myChar.HumanoidRootPart.Position, root.Position).LookVector
+			local direction = lookAt(myChar.HumanoidRootPart.Position, Hub.teleportFrame(root).Position).LookVector
 			local velocity = Hub.new("BodyVelocity", root)
 			velocity.Name = "ArrivaAuraVelocity"
 			velocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -7176,7 +7255,7 @@ do
 		end
 		if preview then
 			makeRing()
-			marker.CFrame = CFrame.new(root.Position - Vector3.new(0, hum.HipHeight + root.Size.Y / 2, 0))
+			marker.CFrame = CFrame.new(Hub.teleportFrame(root).Position - Vector3.new(0, hum.HipHeight + root.Size.Y / 2, 0))
 			for i = 1, 32 do
 				local angle = (i - 1) * math.pi * 2 / 32
 				ringObjects[i + 1].Position = Vector3.new(math.cos(angle), 0, math.sin(angle)) * Hub.auraSettings.range
@@ -7248,10 +7327,10 @@ do
 		if Hub.auraOwned(part) then return true end
 		local now=os.clock()
 		if now-window>=1 then window,budget=now,0 end
-		if root and root.Parent==Player.Character and (part.Position-root.Position).Magnitude<=30
+		if root and root.Parent==Player.Character and (part.Position-Hub.teleportFrame(root).Position).Magnitude<=30
 			and now>=(requests[part] or 0) and budget<6 and setNetworkOwnerEvent then
 			requests[part]=now+2;budget+=1
-			local origin=root.Position+Vector3.new(0,1.593,0)
+			local origin=Hub.teleportFrame(root).Position+Vector3.new(0,1.593,0)
 			if (origin-part.Position).Magnitude>0.01 then
 				Hub.fire(setNetworkOwnerEvent,part,CFrame.lookAt(origin,part.Position))
 			end
@@ -7301,10 +7380,10 @@ do
 					local delta
 					if flags.tornado then
 						local angle=now*tornadoSpeed+(target.UserId%32)*math.pi/16
-						delta=(root.Position+Vector3.new(math.cos(angle)*15,10,math.sin(angle)*15)-part.Position)*4
+						delta=(Hub.teleportFrame(root).Position+Vector3.new(math.cos(angle)*15,10,math.sin(angle)*15)-part.Position)*4
 						if delta.Magnitude>100 then delta=delta.Unit*100 end
 					else
-						delta=root.Position-part.Position
+						delta=Hub.teleportFrame(root).Position-part.Position
 						delta=delta.Magnitude>0.01 and delta.Unit*math.min(pullSpeed,delta.Magnitude*4) or Vector3.zero
 					end
 					entry.force.Velocity=delta
@@ -7469,7 +7548,7 @@ do
 			if spin then Hub.instances[spin],Hub.assetTargets[spin]=nil,nil;spin:Destroy();spin=nil end
 			if origin and Player.Character==character and not Hub.blobFlightActive and not Hub.safeZoneLoopActive then
 				local root=character and character:FindFirstChild("HumanoidRootPart")
-				if root then root.CFrame=origin end
+				if root then Hub.teleportPart(root, origin) end
 			end
 			origin,character,current=nil,nil,nil
 		end
@@ -7499,11 +7578,11 @@ do
 				local root=character:FindFirstChild("HumanoidRootPart")
 				local hum=character:FindFirstChildOfClass("Humanoid")
 				if root and hum and hum.Health>0 and not hum.SeatPart and not root.Anchored then
-					origin=origin or root.CFrame
+					origin=origin or Hub.teleportFrame(root)
 					local seconds=type(dt)=="number" and math.clamp(dt,0,0.1) or 0
-					local position=root.Position+hum.MoveDirection*perspectiveSpeed*seconds
-					local facing=Hub.safeLookAt(position,part.Position,root.CFrame.LookVector)
-					if facing then root.CFrame=facing end
+					local position=Hub.teleportFrame(root).Position+hum.MoveDirection*perspectiveSpeed*seconds
+					local facing=Hub.safeLookAt(position,part.Position,Hub.teleportFrame(root).LookVector)
+					if facing then Hub.teleportPart(root, facing) end
 				end
 			end
 		end
@@ -7702,7 +7781,7 @@ do
 			local character=Player.Character
 			local root=character and character:FindFirstChild("HumanoidRootPart")
 			entry.tool=root
-			entry.rotationOffset=root and root.CFrame.Rotation:ToObjectSpace(part.CFrame.Rotation) or nil
+			entry.rotationOffset=root and Hub.teleportFrame(root).Rotation:ToObjectSpace(part.CFrame.Rotation) or nil
 		end
 		-- The orientation target is handled below, independently of positional movement.
 		set(entry,orientation,{Enabled=false})
@@ -7744,8 +7823,8 @@ do
 						local character=Player.Character
 						if root and root.Parent==character and entry.rotationOffset then
 							-- Preserve the grabbed face relative to the player, not to the world.
-							local rotation=root.CFrame.Rotation*entry.rotationOffset
-							part.CFrame=CFrame.new(part.Position)*rotation
+							local rotation=Hub.teleportFrame(root).Rotation*entry.rotationOffset
+							Hub.teleportPart(part, CFrame.new(part.Position)*rotation)
 						end
 						part.AssemblyAngularVelocity=Vector3.zero
 					end
@@ -7870,7 +7949,7 @@ local function startKillGrab()
 
 			while killGrabEnabled and Hub.canAffect(targetChar) and grabPart.Parent and hum.Health > 0 do
 				pcall(function()
-					Hub.fire(ReplicatedStorage.GrabEvents.SetNetworkOwner, root, myRoot.CFrame)
+					Hub.fire(ReplicatedStorage.GrabEvents.SetNetworkOwner, root, Hub.teleportFrame(myRoot))
 					hum.BreakJointsOnDeath = false
 					hum:ChangeState(Enum.HumanoidStateType.Dead)
 					hum.Health = 0
@@ -8044,11 +8123,11 @@ do
 			if not folder or not spawn or not owner or (mode=="Explode" and not explode) then Hub.lastMissileError="Toy remotes or your toy folder are not ready.";status:SetText(Hub.lastMissileError);return false end
 			local direction=camera.CFrame.LookVector
 			if aim=="Mouse" then
-				local delta=mouse.Hit.Position-root.Position
+				local delta=mouse.Hit.Position-Hub.teleportFrame(root).Position
 				if delta.Magnitude>0.001 then direction=delta.Unit end
 			end
-			local spawnPosition=root.Position+direction*6+Vector3.new(0,1,0)
-			local spawnFrame=Hub.safeLookAt(spawnPosition,spawnPosition+direction) or root.CFrame
+			local spawnPosition=Hub.teleportFrame(root).Position+direction*6+Vector3.new(0,1,0)
+			local spawnFrame=Hub.safeLookAt(spawnPosition,spawnPosition+direction) or Hub.teleportFrame(root)
 			local op={ticket=generation,character=char,humanoid=hum,claimed={},before={},deadline=os.clock()+(mode=="Cache" and 12 or 6),name=name,mode=mode,phase="Parts"}
 			active=op
 			for _,model in ipairs(folder:GetChildren()) do op.before[model]=true end
@@ -8109,7 +8188,7 @@ do
 							attempts+=1
 							nextRequest=now+math.min(2,0.5*2^math.min(attempts-1,2))
 							if Player:DistanceFromCharacter(physics.Position)<=30 then
-								Hub.fire(owner,physics,Hub.lookAt(root.Position,physics.Position) or physics.CFrame)
+								Hub.fire(owner,physics,Hub.lookAt(Hub.teleportFrame(root).Position,physics.Position) or physics.CFrame)
 							end
 						end
 						if now>=nextNotice then
@@ -8268,8 +8347,8 @@ do
 				local plot=p and p:FindFirstChild("InPlot")
 				if not p or not Hub.canHarm(p) or (plot and plot.Value) or not hum or hum.Health<=0 or not root then return nil end
 				if predict then
-					if own(aimEntry) then return aimEntry.position,root.Position+root.AssemblyLinearVelocity/1.93 end
-				else return root,root.Position end
+					if own(aimEntry) then return aimEntry.position,Hub.teleportFrame(root).Position+root.AssemblyLinearVelocity/1.93 end
+				else return root,Hub.teleportFrame(root).Position end
 			elseif own(aimEntry) then
 				local char=Player.Character
 				local camPart=char and char:FindFirstChild("CamPart")
@@ -8456,6 +8535,8 @@ end
 
 -- Click TP requires a finite, solid surface hit, never Mouse.Hit's sky fallback.
 Hub.clickTeleport=function()
+	Hub.cancelNativeTeleportMasks()
+	Hub.clearTeleportMask(false)
 	if Hub.safeZoneLoopActive then return end
 	local char=Player.Character
 	local root=char and char:FindFirstChild("HumanoidRootPart")
@@ -8651,7 +8732,7 @@ function Triggerbot:GetTarget()
 	local root = model:FindFirstChild("HumanoidRootPart")
 	if not root then return end
 
-	local dist = (c.HumanoidRootPart.Position - root.Position).Magnitude
+	local dist = (c.HumanoidRootPart.Position - Hub.teleportFrame(root).Position).Magnitude
 	if dist > self.maxDistance then return end
 
 	return model
@@ -8677,7 +8758,7 @@ function Triggerbot:OnHeartbeat()
 
 	if not (self.lastTarget and c and c:FindFirstChild("HumanoidRootPart") and root) then return end
 
-	if (c.HumanoidRootPart.Position - root.Position).Magnitude > self.maxDistance then
+	if (c.HumanoidRootPart.Position - Hub.teleportFrame(root).Position).Magnitude > self.maxDistance then
 		self.lastTarget = nil
 		return
 	end
@@ -8836,7 +8917,7 @@ do
 		for _,person in ipairs(Players:GetPlayers()) do
 			local char=person.Character
 			local root=char and char:FindFirstChild("HumanoidRootPart")
-			if root then lastPositions[person]={position=root.Position,time=now} end
+			if root then lastPositions[person]={position=Hub.teleportFrame(root).Position,time=now} end
 		end
 		for index=#recentHoles,1,-1 do
 			if now-recentHoles[index].time>6 then table.remove(recentHoles,index) end
@@ -8847,7 +8928,7 @@ do
 		lastPositions[person]=nil
 		local char=person.Character
 		local root=char and char:FindFirstChild("HumanoidRootPart")
-		local position=root and root.Position or (cached and os.clock()-cached.time<2 and cached.position)
+		local position=root and Hub.teleportFrame(root).Position or (cached and os.clock()-cached.time<2 and cached.position)
 		if not position then return end
 		for _,hole in ipairs(recentHoles) do
 			if os.clock()-hole.time<=6 then
@@ -9169,7 +9250,7 @@ do
 			local leader=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
 			local hum=char and char:FindFirstChildOfClass("Humanoid")
 			if not leader or leader.Parent~=char or not hum or hum.Health<=0 then return nil,"Waiting for the selected player's character." end
-			if not Hub.finiteVector(leader.Position) or (leader.Position-ownRoot.Position).Magnitude>100 then return nil,"Selected player is too far away; formation paused." end
+			if not Hub.finiteVector(leader.Position) or (leader.Position-Hub.teleportFrame(ownRoot).Position).Magnitude>100 then return nil,"Selected player is too far away; formation paused." end
 			return leader
 		end
 		local function refreshFormationPlayers()
@@ -9185,8 +9266,8 @@ do
 			local ray=mouse.UnitRay;local hit=Workspace:Raycast(ray.Origin,ray.Direction*200,params)
 			if not hit then return nil end
 			local root=char and char:FindFirstChild("HumanoidRootPart")
-			if not root or (hit.Position-root.Position).Magnitude>100 then return nil end
-			return CFrame.new(hit.Position+Vector3.new(0,height,0))*root.CFrame.Rotation
+			if not root or (hit.Position-Hub.teleportFrame(root).Position).Magnitude>100 then return nil end
+			return CFrame.new(hit.Position+Vector3.new(0,height,0))*Hub.teleportFrame(root).Rotation
 		end
 		settings:AddDropdown("CreativeAuraCenter",{Text="Formation center",Values={"Follow me","Follow mouse","Click to place","Follow selected player"},Default=1,
 			Callback=function(value) centerMode=value;placedCenter=nil;lastFormationMessage=nil;if enabled then status:SetText("Formation center: "..value) end end})
@@ -9334,7 +9415,7 @@ do
 				for _,item in ipairs(folder:GetDescendants()) do
 					if item:IsA("BasePart") then
 						local part=item.AssemblyRootPart or item
-						if not used[part] and (part.Position-root.Position).Magnitude<=80 then
+						if not used[part] and (part.Position-Hub.teleportFrame(root).Position).Magnitude<=80 then
 							used[part]=true
 							local parts=safeAssembly(part,folder)
 							if parts and Hub.acquireAuraPart(part,root) then addToy(part,parts) end
@@ -9356,7 +9437,7 @@ do
 				local root=characterRoot()
 				if not root then return end
 				phase=(phase+math.rad(speed)*math.min(delta,0.1))%(math.pi*2)
-				local center=root.CFrame*CFrame.new(0,height,-distance)
+				local center=Hub.teleportFrame(root)*CFrame.new(0,height,-distance)
 				if centerMode=="Follow selected player" then
 					local leader,reason=formationTargetRoot(root)
 					if not leader then
@@ -9475,7 +9556,7 @@ do
 						if folder then for _,toy in ipairs(folder:GetChildren()) do before[toy]=true end end
 						spawnStatus:SetText(string.format("Spawning %s, %d / %d. Stop cancels remaining requests.",choice.name,index,wanted))
 						-- Only one request can be in flight, even if the server is slow.
-						remote:InvokeServer(choice.id,root.CFrame*CFrame.new((index%4)*2,0,-10-math.floor((index-1)/4)*2),Vector3.zero)
+						remote:InvokeServer(choice.id,Hub.teleportFrame(root)*CFrame.new((index%4)*2,0,-10-math.floor((index-1)/4)*2),Vector3.zero)
 						local found
 						local deadline=os.clock()+5
 						repeat
@@ -9638,17 +9719,17 @@ do
 		local function scan(root)
 			local active,pending=0,0
 			for part in pairs(entries) do
-				if not eligible(part) or not Hub.auraOwned(part) or (part.Position-root.Position).Magnitude>range+5 then release(part)
+				if not eligible(part) or not Hub.auraOwned(part) or (part.Position-Hub.teleportFrame(root).Position).Magnitude>range+5 then release(part)
 				else active+=1 end
 			end
 			query.FilterDescendantsInstances=Player.Character and {Player.Character} or {}
 			if active<limit then
 				local seen={}
-				for _,item in ipairs(Workspace:GetPartBoundsInRadius(root.Position,range,query)) do
+				for _,item in ipairs(Workspace:GetPartBoundsInRadius(Hub.teleportFrame(root).Position,range,query)) do
 					local part=item.AssemblyRootPart or item
 					if not seen[part] and not entries[part] then
 						seen[part]=true
-						if (part.Position-root.Position).Magnitude<=range and eligible(part) then
+						if (part.Position-Hub.teleportFrame(root).Position).Magnitude<=range and eligible(part) then
 							if Hub.acquireAuraPart(part,root) then add(part);active+=1 else pending+=1 end
 							if active>=limit then break end
 						end
@@ -9675,10 +9756,10 @@ do
 				for part,entry in pairs(entries) do
 					if not eligible(part) or not Hub.auraOwned(part) then release(part)
 					else
-						local delta=part.Position-root.Position
+						local delta=part.Position-Hub.teleportFrame(root).Position
 						local horizontal=Vector3.new(delta.X,0,delta.Z)
-						local direction=horizontal.Magnitude>0.01 and horizontal.Unit or root.CFrame.LookVector
-						local goal=root.Position+direction*6+Vector3.new(0,1,0)
+						local direction=horizontal.Magnitude>0.01 and horizontal.Unit or Hub.teleportFrame(root).LookVector
+						local goal=Hub.teleportFrame(root).Position+direction*6+Vector3.new(0,1,0)
 						local offset=goal-part.Position
 						entry.force.Velocity=offset.Magnitude>0.05 and offset.Unit*math.min(pullSpeed,offset.Magnitude*6) or Vector3.zero
 					end
@@ -9936,7 +10017,7 @@ do
 			local root=char and char:FindFirstChild("HumanoidRootPart")
 			local hum=char and char:FindFirstChildOfClass("Humanoid")
 			if not root or not hum or hum.Health<=0 then return false end
-			root.CFrame=CFrame.new(destination)*root.CFrame.Rotation
+			Hub.teleportPart(root, CFrame.new(destination)*Hub.teleportFrame(root).Rotation)
 			root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
 			return true
 		end
@@ -9945,7 +10026,7 @@ do
 			local char=Player.Character
 			local root=char and char:FindFirstChild("HumanoidRootPart")
 			if not root then return end
-			local p=root.Position
+			local p=Hub.teleportFrame(root).Position
 			Options.SafeZoneCoordinates:SetValue(string.format("%.3f, %.3f, %.3f",p.X,p.Y,p.Z))
 			Hub.requestSave()
 		end})
@@ -10135,7 +10216,7 @@ do
 				if not LocalPlayer.Character then return nil end
 				local root = getRoot()
 				if not root then return nil end
-				local cf = cframe or (root.CFrame * CFrame.new(0, 5, 0))
+				local cf = cframe or (Hub.teleportFrame(root) * CFrame.new(0, 5, 0))
 				SpawnToyRF:InvokeServer(name, cf, Vector3.zero)
 				task.wait(0.3)
 				for _, v in pairs(SpawnedInToys:GetChildren()) do
@@ -10252,12 +10333,13 @@ do
 			if ticket.moved and Player.Character==ticket.char and root.Parent==ticket.char
 				and hum.Parent==ticket.char and hum.Health>0 and not hum.SeatPart and not root.Anchored then
 				local ok,err=pcall(function()
-					root.CFrame=ticket.original
+					Hub.teleportPart(root, ticket.original)
 					root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
 				end)
 				if not ok then warn("[Plots & slots return] "..tostring(err)) end
 			end
 		end
+		Hub.teleportMaskCancelers.PlotsSlots=function() if active then finish(active) end end
 		local function visit(kind,part,allowed,action)
 			if active or Hub.interactionVisitLock then return false,"Another movement interaction is running." end
 			local char=Player.Character
@@ -10275,7 +10357,7 @@ do
 						and (not ticket.gucci or gucciEnabled())
 				end
 				local function valid()
-					return pending() and selfRoot()==root and (root.Position-ticket.destination).Magnitude<12
+					return pending() and selfRoot()==root and (Hub.teleportFrame(root).Position-ticket.destination).Magnitude<12
 				end
 				local ok,err=pcall(function()
 					local deadline=os.clock()+20
@@ -10288,8 +10370,8 @@ do
 					end
 					if not root or not pending() or selfRoot()~=root then return end
 					-- Capture the confirmed live root and its return position only after readiness succeeds.
-					ticket.root,ticket.hum,ticket.original=root,hum,root.CFrame
-					local destination=(root.Position-part.Position).Magnitude>25 and part.Position+Vector3.new(0,3,6) or root.Position
+					ticket.root,ticket.hum,ticket.original=root,hum,Hub.teleportFrame(root)
+					local destination=(Hub.teleportFrame(root).Position-part.Position).Magnitude>25 and part.Position+Vector3.new(0,3,6) or Hub.teleportFrame(root).Position
 					if kind=="House renewal" then destination=part.Position+Vector3.new(0,3,0) end
 					for _,value in ipairs({destination.X,destination.Y,destination.Z}) do
 						if value~=value or math.abs(value)==math.huge then error("Invalid interaction position.",0) end
@@ -10297,7 +10379,7 @@ do
 					if destination.Y<=Workspace.FallenPartsDestroyHeight+8 then error("Destination is below the safe map height.",0) end
 					ticket.destination=destination;ticket.moved=true
 					status:SetText(kind..": visiting; will return when finished.")
-					root.CFrame=CFrame.new(destination)*root.CFrame.Rotation
+					Hub.teleportPart(root, CFrame.new(destination)*Hub.teleportFrame(root).Rotation)
 					root.AssemblyLinearVelocity=Vector3.zero
 					task.wait(0.2)
 					if valid() then action(root,valid) end
@@ -10311,7 +10393,7 @@ do
 			local events=ReplicatedStorage:FindFirstChild("GrabEvents")
 			local remote=events and events:FindFirstChild("SetNetworkOwner")
 			if not remote then return false end
-			local aim=Hub.safeLookAt(root.Position+Vector3.new(0,1.593,0),part.Position)
+			local aim=Hub.safeLookAt(Hub.teleportFrame(root).Position+Vector3.new(0,1.593,0),part.Position)
 			if not aim then return false end
 			Hub.fire(remote,part,aim)
 			return true
@@ -10886,6 +10968,93 @@ do
 		end
 		sunGroup:AddToggle("PrettyLatitudeOverride",{Text="Override sun latitude",Default=false,Callback=function(on) latitudeOn=on;updateLatitude() end})
 		slider(sunGroup,"PrettySunLatitude","Sun latitude",41.733,0,360,1,function(v) latitude=v;updateLatitude() end)
+		-- BEGIN TERRAIN REALISTIC WATER
+		-- Resonance replaces the flat ocean surfaces with Terrain water at a -4 offset.
+		do
+			local enabled,offset=false,-4
+			local revision=0
+			local worker
+			local regions,surfaces={},{}
+			local status=waterGroup:AddLabel("Realistic water: off.")
+			local function oceanModel()
+				local map=Workspace:FindFirstChild("Map")
+				local objects=map and map:FindFirstChild("AlwaysHereTweenedObjects")
+				local ocean=objects and objects:FindFirstChild("Ocean")
+				local object=ocean and ocean:FindFirstChild("Object")
+				return object and object:FindFirstChild("ObjectModel")
+			end
+			local function restore()
+				for part,saved in pairs(surfaces) do
+					if saved.connection then saved.connection:Disconnect();Hub.connections[saved.connection]=nil end
+					if part.Parent then part.Transparency=saved.transparency end
+					surfaces[part]=nil
+				end
+				for i=#regions,1,-1 do
+					local record=regions[i]
+					terrain:PasteRegion(record.copy,record.corner,true)
+					record.copy:Destroy();regions[i]=nil
+				end
+			end
+			local function build(ticket)
+				local model=oceanModel();if not terrain or not model then error("Ocean surface has not loaded.",0) end
+				local count=0
+				for _,part in ipairs(model:GetDescendants()) do
+					if part:IsA("BasePart") and part.Transparency<1 then
+						local shift=Vector3.new(0,offset,0)
+						local region=Region3.new(part.Position-part.Size/2+shift,part.Position+part.Size/2+shift):ExpandToGrid(4)
+						local low=region.CFrame.Position-region.Size/2;local high=region.CFrame.Position+region.Size/2
+						for x=low.X,high.X-1,128 do for y=low.Y,high.Y-1,128 do for z=low.Z,high.Z-1,128 do
+							if revision~=ticket or not enabled or not Hub.alive then return end
+							count+=1;if count>4096 then error("Ocean conversion exceeds the region limit.",0) end
+							local upper=Vector3.new(math.min(x+128,high.X),math.min(y+128,high.Y),math.min(z+128,high.Z))
+							if math.min(x/4,y/4,z/4)<-32768 or math.max(upper.X/4-1,upper.Y/4-1,upper.Z/4-1)>32767 then error("Ocean extends outside Terrain backup bounds.",0) end
+							local corner=Vector3int16.new(x/4,y/4,z/4)
+							local cellEnd=Vector3int16.new(upper.X/4-1,upper.Y/4-1,upper.Z/4-1)
+							local copy=terrain:CopyRegion(Region3int16.new(corner,cellEnd))
+							table.insert(regions,{copy=copy,corner=corner})
+							terrain:FillRegion(Region3.new(Vector3.new(x,y,z),upper),4,Enum.Material.Water)
+							if count%8==0 then task.wait() end
+						end end end
+						if not surfaces[part] then
+							local saved={transparency=part.Transparency};surfaces[part]=saved
+							saved.connection=Hub.connect(part:GetPropertyChangedSignal("Transparency"),function()
+								if enabled and surfaces[part] and part.Transparency~=1 then part.Transparency=1 end
+							end)
+						end
+						part.Transparency=1
+					end
+				end
+				status:SetText("Realistic water: Terrain water active ("..#regions.." regions).")
+			end
+			local function request()
+				revision+=1
+				if worker then return end
+				worker=task.defer(function()
+					repeat
+						local ticket=revision
+						restore()
+						if enabled then
+							status:SetText("Realistic water: converting ocean surfaces.")
+							local ok,message=pcall(build,ticket)
+							if not ok then restore();status:SetText("Realistic water: "..tostring(message));break end
+						else status:SetText("Realistic water: off.") end
+					until ticket==revision or not Hub.alive
+					worker=nil
+				end)
+			end
+			waterGroup:AddToggle("SourceRealisticWater",{Text="Realistic Water",Default=false,Callback=function(on) enabled=on;request();Hub.requestSave() end})
+			waterGroup:AddSlider("SourceRealisticWaterOffset",{Text="Water height offset",Default=-4,Min=-20,Max=20,Rounding=1,Callback=function(value) offset=value;if enabled then request() end;Hub.requestSave() end})
+			Hub.connect(Workspace.DescendantAdded,function(part)
+				local model=enabled and oceanModel()
+				if model and part:IsA("BasePart") and part:IsDescendantOf(model) then request() end
+			end)
+			Hub.cleanup(function()
+				enabled=false;revision+=1
+				if worker then pcall(Hub.nativeTask.cancel,worker);worker=nil end
+				restore()
+			end)
+		end
+		-- END TERRAIN REALISTIC WATER
 		local waterObjects={}
 		local hideOverlay=true
 		local waterEpoch=0
@@ -11223,7 +11392,7 @@ do
 			local char=who.Character
 			return char,char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart")),char and char:FindFirstChildOfClass("Humanoid")
 		end
-		tbl12.Teleport=function(part,frame) if part and part.Parent then part.CFrame=frame;part.AssemblyLinearVelocity=Vector3.zero;part.AssemblyAngularVelocity=Vector3.zero;return true end end
+		tbl12.Teleport=function(part,frame) if part and part.Parent then Hub.teleportPart(part, frame);part.AssemblyLinearVelocity=Vector3.zero;part.AssemblyAngularVelocity=Vector3.zero;return true end end
 		tbl12.IsNetworkOwner=function(part)
 			if not part or not part:IsA("BasePart") then return false end
 			local root=part.AssemblyRootPart or part
@@ -11305,10 +11474,10 @@ do
 			if flag11 or not part or not part.Parent or not setNetworkOwnerEvent then return false end
 			local char,root,hum=tbl12.Char()
 			if not root or not hum or hum.Health<=0 then return false end
-			local saved=root.CFrame
-			local moved=(root.Position-part.Position).Magnitude>=30
-			if moved then root.CFrame=part.CFrame;task.wait() end
-			local basis=Hub.lookAt(root.Position,part.Position)
+			local saved=Hub.teleportFrame(root)
+			local moved=(Hub.teleportFrame(root).Position-part.Position).Magnitude>=30
+			if moved then Hub.teleportPart(root, part.CFrame);task.wait() end
+			local basis=Hub.lookAt(Hub.teleportFrame(root).Position,part.Position)
 			if basis then Hub.fire(setNetworkOwnerEvent,part,basis) end
 			local deadline=os.clock()+0.75
 			repeat
@@ -11316,13 +11485,13 @@ do
 				if tbl12.IsNetworkOwner(part) then break end
 				task.wait()
 			until os.clock()>=deadline
-			if moved and root.Parent and Player.Character==char then root.CFrame=saved;root.AssemblyLinearVelocity=Vector3.zero end
+			if moved and root.Parent and Player.Character==char then Hub.teleportPart(root, saved);root.AssemblyLinearVelocity=Vector3.zero end
 			return part.Parent and tbl12.IsNetworkOwner(part) or false
 		end
 		tbl12.Grab=function(part)
 			local _,root,hum=tbl12.Char()
 			if not part or not part.Parent or not root or not hum or hum.Health<=0 then return end
-			local from=(root.CFrame*CFrame.new(0,1.593,0)).Position
+			local from=(Hub.teleportFrame(root)*CFrame.new(0,1.593,0)).Position
 			local basis=Hub.lookAt(from,part.Position)
 			if basis then Hub.fire(setNetworkOwnerEvent,part,basis) end
 		end
@@ -11353,8 +11522,9 @@ do
 			local moved=(root.Position-part.Position).Magnitude>=31
 			local visibleRoot,visibleHead=root.CFrame,head.CFrame
 			local serverFrame=visibleRoot
-			local heartbeat,bound
+			local heartbeat,bound,restored
 			local function restore()
+				if restored then return end;restored=true
 				if bound then originalRunService:UnbindFromRenderStep("ArrivaGucciOwnership");bound=false end
 				if heartbeat then heartbeat:Disconnect();Hub.connections[heartbeat]=nil;heartbeat=nil end
 				if moved and Player.Character==char and root.Parent==char and head.Parent==char then root.CFrame=visibleRoot;head.CFrame=visibleHead end
@@ -11375,7 +11545,7 @@ do
 					end)
 				end
 				local deadline=os.clock()+0.65
-				while Hub.alive and not flag11 and tbl8.GucciAntiGrab and Player.Character==char and root.Parent==char
+				while gucciOwnershipCleanup==restore and Hub.alive and not flag11 and tbl8.GucciAntiGrab and Player.Character==char and root.Parent==char
 					and part.Parent and hum.Health>0 and not owned() and os.clock()<deadline do
 					local predicted=part.CFrame+part.AssemblyLinearVelocity*math.clamp(Player:GetNetworkPing(),0,0.35)
 					if moved then serverFrame=predicted-Vector3.new(0,22,0) end
@@ -11395,6 +11565,8 @@ do
 			end
 			return acquired
 		end
+				Hub.teleportMaskCancelers=Hub.teleportMaskCancelers or {}
+		Hub.teleportMaskCancelers.GucciOwnership=function() if gucciOwnershipCleanup then gucciOwnershipCleanup() end end
 		local obj=setmetatable({},{__mode="k"})
 		local obj2=setmetatable({},{__mode="k"})
 		local runtimeConnections={}
@@ -13666,7 +13838,7 @@ do
 					local cFrame2 = cframe * v24
 
 					if v25.CFrame ~= cFrame2 then
-						v25.CFrame = cFrame2
+						Hub.teleportPart(v25, cFrame2)
 					end
 
 					if arg2 then
@@ -14093,10 +14265,10 @@ do
 			local char,root,hum,alive=charAlive()
 			if not alive or Hub.gucciCharacterBusy(char) then return end
 			if loopCharacter~=char then loopCharacter=char;loopSaved=root.CFrame end
-			char:PivotTo(CFrame.new(math.random(-1000,1000),-7.35,math.random(-1000,1000)))
+			Hub.teleportModel(char,CFrame.new(math.random(-1000,1000),-7.35,math.random(-1000,1000)))
 		end,function()
 			local char,root=tbl12.Char()
-			if root and char==loopCharacter and loopSaved then char:PivotTo(loopSaved);root.AssemblyLinearVelocity=Vector3.zero end
+			if root and char==loopCharacter and loopSaved then Hub.teleportModel(char,loopSaved);root.AssemblyLinearVelocity=Vector3.zero end
 			loopSaved,loopCharacter=nil,nil
 		end)
 		local originalVoid
@@ -15121,7 +15293,7 @@ do
 						end
 						task.wait(0.2)
 					end
-					if saved and root and root.Parent then root.CFrame=saved;root.AssemblyLinearVelocity=Vector3.zero end
+					if saved and root and root.Parent then Hub.teleportPart(root, saved);root.AssemblyLinearVelocity=Vector3.zero end
 				end)
 			end end
 		Hub.sourceGucci={remove=tbl12.RemoveGucci,set=tbl12.SetGucciAntiGrab,state=tbl8,settings=tbl9,helpers=tbl12}
@@ -15333,7 +15505,7 @@ do
 				flight.velocity=Hub.new("BodyVelocity",root);flight.velocity.Name="ArrivaFlightVelocity"
 				flight.velocity.MaxForce=Vector3.new(9e9,9e9,9e9);flight.velocity.Velocity=Vector3.zero
 				flight.gyro=Hub.new("BodyGyro",root);flight.gyro.Name="ArrivaFlightGyro"
-				flight.gyro.MaxTorque=Vector3.new(9e9,9e9,9e9);flight.gyro.P=90000;flight.gyro.CFrame=root.CFrame
+				flight.gyro.MaxTorque=Vector3.new(9e9,9e9,9e9);flight.gyro.P=90000;flight.gyro.CFrame=Hub.teleportFrame(root)
 				hum.PlatformStand=true;hum.AutoRotate=false;Hub.characterFlightActive=true
 			end
 			local camera=Workspace.CurrentCamera
@@ -15474,7 +15646,7 @@ do
 			if not part or not part:IsA("BasePart") or not part.Parent then label:SetText("Nothing held.");return end
 			local root=Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
 			local owner=Hub.playerOf(part)
-			label:SetText(string.format("%s | %.1f studs | mass %.1f | %s | %s",part.Name,root and (root.Position-part.Position).Magnitude or 0,
+			label:SetText(string.format("%s | %.1f studs | mass %.1f | %s | %s",part.Name,root and (Hub.teleportFrame(root).Position-part.Position).Magnitude or 0,
 				part.AssemblyMass,part.Anchored and "anchored" or "free",owner and owner.Name or "unassigned"))
 		end
 		group:AddToggle("PackHeldInformation",{Text="Grabbed object information",Default=false,Callback=function(on) enabled=on;if on then Hub.sampleHeldInformation() else label:SetText("Object information off.") end end})
@@ -15531,7 +15703,7 @@ do
 			for object,entry in pairs(entries) do
 				if not object.Parent or not enabled[entry.kind] then clear(object)
 				else
-					local near=root and (object.Position-root.Position).Magnitude<=distance
+					local near=root and (object.Position-Hub.teleportFrame(root).Position).Magnitude<=distance
 					entry.highlight.Enabled=near and true or false
 					entry.highlight.FillColor=tint;entry.highlight.OutlineColor=tint
 					entry.highlight.FillTransparency=fill;entry.highlight.OutlineTransparency=outline
@@ -15909,6 +16081,13 @@ do
 		Callback=function(value) Hub.setMetricsPreference("metricsSize",value/100) end})
 end
 local ThemeGroup = Tabs.Customization:AddLeftGroupbox("Hub Theme")
+do
+	local group=Tabs.Misc:AddRightGroupbox("Teleport display")
+	group:AddToggle("MaskAllTeleportMovement",{Text="Mask teleports (except Z)",Default=true,Callback=function(on) Hub.setTeleportMaskEnabled(on);Hub.requestSave() end})
+	group:AddButton("Show actual position",function() Hub.clearTeleportMask(true) end)
+	group:AddLabel("Your server position still changes. Z always clears the mask and moves visibly.")
+end
+
 -- Optional creative tools. No ownership requests or changes to other players' toys.
 do
 	(function()
@@ -16103,7 +16282,7 @@ do
 			local ok, err = pcall(function()
 				for _, candidate in ipairs(candidates) do
 					for _, root in ipairs(candidate.roots) do
-						local entry = {root = root, offset = header.CFrame:ToObjectSpace(root.CFrame), objects = {}}
+						local entry = {root = root, offset = header.CFrame:ToObjectSpace(Hub.teleportFrame(root)), objects = {}}
 						table.insert(session.entries, entry)
 						Hub.toyBuildClaims[root] = session
 						local attachment = Hub.new("Attachment", root)
@@ -16119,7 +16298,7 @@ do
 						position.MaxForce = 100000
 						position.MaxVelocity = 40
 						position.Responsiveness = 35
-						position.Position = root.Position
+						position.Position = Hub.teleportFrame(root).Position
 						local orientation = Hub.new("AlignOrientation", root)
 						session.controllers[orientation] = true
 						table.insert(entry.objects, orientation)
@@ -16128,7 +16307,7 @@ do
 						orientation.Attachment0 = attachment
 						orientation.MaxTorque = 100000
 						orientation.Responsiveness = 35
-						orientation.CFrame = root.CFrame.Rotation
+						orientation.CFrame = Hub.teleportFrame(root).Rotation
 						entry.position, entry.orientation = position, orientation
 					end
 				end
@@ -16223,7 +16402,7 @@ do
 			for model in pairs(recoveryModels()) do
 				local roots=Hub.inspectOwnBuildToy(model,true)
 				for _,root in ipairs(roots or {}) do
-					if not seen[root] and not locallyOwned(root) and (root.Position-ownRoot.Position).Magnitude<=30 and #targets<12 then
+					if not seen[root] and not locallyOwned(root) and (Hub.teleportFrame(root).Position-Hub.teleportFrame(ownRoot).Position).Magnitude<=30 and #targets<12 then
 						seen[root]=true;table.insert(targets,{root=root,model=model})
 					end
 				end
@@ -16251,11 +16430,11 @@ do
 						if not valid() then return end
 						local roots=Hub.inspectOwnBuildToy(entry.model,true)
 						local root=entry.root
-						if roots and table.find(roots,root) and (root.Position-ownRoot.Position).Magnitude<=30 then
+						if roots and table.find(roots,root) and (Hub.teleportFrame(root).Position-Hub.teleportFrame(ownRoot).Position).Magnitude<=30 then
 							for _=1,2 do
-								if not valid() or not root.Parent or (root.Position-ownRoot.Position).Magnitude>30 then break end
+								if not valid() or not root.Parent or (Hub.teleportFrame(root).Position-Hub.teleportFrame(ownRoot).Position).Magnitude>30 then break end
 								if locallyOwned(root) then break end
-								local aim=Hub.safeLookAt(ownRoot.Position+Vector3.new(0,1.593,0),root.Position)
+								local aim=Hub.safeLookAt(Hub.teleportFrame(ownRoot).Position+Vector3.new(0,1.593,0),Hub.teleportFrame(root).Position)
 								if not aim then break end
 								Hub.fire(remote,root,aim);task.wait(0.25)
 							end
@@ -16377,7 +16556,7 @@ do
 			template:Destroy()
 			if not cloneOK then clear(); status:SetText("Could not create local decoys: " .. tostring(cloneError)); return false end
 			sourceCharacter = char
-			pivotOffset = root.CFrame:ToObjectSpace(char:GetPivot())
+			pivotOffset = Hub.teleportFrame(root):ToObjectSpace(char:GetPivot())
 			status:SetText(string.format("%d local visual decoys: %s.", #clones, mode))
 			return true
 		end
@@ -16395,7 +16574,7 @@ do
 			phase = (phase + math.min(delta or 0.05, 0.1) * orbitSpeed) % (math.pi * 2)
 			for index, clone in ipairs(clones) do
 				local offset = Hub.decoyFormationOffset(mode, index, #clones, spacing, radius, phase)
-				clone:PivotTo(root.CFrame * CFrame.new(offset) * pivotOffset)
+				clone:PivotTo(Hub.teleportFrame(root) * CFrame.new(offset) * pivotOffset)
 			end
 		end
 		local function start()
@@ -16934,7 +17113,7 @@ do
 			local foreign=owner and owner.Value and owner.Value~="" and owner.Value~=person.Name and owner.Value~=person
 			local velocity=root.AssemblyLinearVelocity
 			local excluded=hum.SeatPart or hum.PlatformStand or root.Anchored or (ragdoll and ragdoll.Value) or (held and held.Value) or foreign or (velocity and velocity.Magnitude>250)
-			local position=root.Position
+			local position=Hub.teleportFrame(root).Position
 			if not position then return end
 			if excluded or now-history.born<5 then history.hits=0;history.untilTime=nil
 			elseif history.position and history.time then
@@ -17217,29 +17396,32 @@ do
 			end
 			if visit and me.Character==visit.char and readySelf()==visit.root
 				and (visit.masked or (visit.root.Position-visit.destination).Magnitude<12) then
-				visit.root.CFrame=visit.original;visit.root.AssemblyLinearVelocity=Vector3.zero
+				if visit.sharedMasked then Hub.teleportPart(visit.root,visit.original) else visit.root.CFrame=visit.original end;visit.root.AssemblyLinearVelocity=Vector3.zero
 				if visit.head and visit.head.Parent==visit.char then visit.head.CFrame=visit.headFrame end
 			end
 			if visit and Hub.interactionVisitLock==visit then Hub.interactionVisitLock=nil end
 		end
+		Hub.teleportMaskCancelers.WhitelistAssist=function() epoch+=1;finishVisit() end
 		local function acquire(part,record,ticket,kind,toy)
 			if not valid(record,ticket,kind) then return false end
 			if Hub.interactionVisitLock and Hub.interactionVisitLock~=ownVisit then say("Assistance waiting: another movement visit is running.");return false end
 			local root,char=readySelf()
 			if not root then say("Assistance waiting: your character is busy, held, seated or flying.");return false end
-			if (root.Position-part.Position).Magnitude>30 then
+			if (Hub.teleportFrame(root).Position-part.Position).Magnitude>30 then
 				if not allowVisits then say("Distant assistance needs Allow brief assist visits enabled.");return false end
 				local destination=part.Position+Vector3.new(0,3,6)
 				if destination.Y<=World.FallenPartsDestroyHeight+8 then return false end
-				ownVisit={root=root,char=char,original=root.CFrame,destination=destination}
+				ownVisit={root=root,char=char,original=Hub.teleportFrame(root),destination=destination}
 				Hub.interactionVisitLock=ownVisit
 				local visit=ownVisit
 				visit.frame=CFrame.new(destination)*root.CFrame.Rotation
 				visit.head=char:FindFirstChild("Head")
 				visit.headFrame=visit.head and visit.head.CFrame
 				if not visit.headFrame then visit.head=nil end
-				visit.masked=maskVisits
-				if visit.masked then
+				visit.sharedMasked=Hub.teleportMaskEnabled()
+				visit.masked=maskVisits or visit.sharedMasked
+				if visit.sharedMasked then Hub.teleportPart(root,visit.frame) end
+				if visit.masked and not visit.sharedMasked then
 					local function live() return ownVisit==visit and Hub.alive and me.Character==char and root.Parent==char end
 					-- Keep the local character at its saved display position before
 					-- the camera renders, while the physics window uses the visit frame.
@@ -17261,13 +17443,13 @@ do
 			if not remote then return false end
 			for _=1,4 do
 				if not valid(record,ticket,kind) or not part.Parent or me.Character~=char or readySelf()~=root then return false end
-				if ownVisit and not ownVisit.masked and (root.Position-ownVisit.destination).Magnitude>=12 then return false end
+				if ownVisit and not ownVisit.masked and (Hub.teleportFrame(root).Position-ownVisit.destination).Magnitude>=12 then return false end
 				if owned(part,not toy and record.char or nil,toy) then return true end
 				-- Narrow defensive path: ONLY this current trusted player's root,
 				-- or a sticky part inside this component's own newly spawned toy.
 				local permitted=not toy and part==record.root
 					or toy and created[toy] and toy.Parent==ownFolder() and part:IsDescendantOf(toy)
-				local origin=ownVisit and ownVisit.masked and ownVisit.frame.Position or root.Position
+				local origin=ownVisit and ownVisit.masked and ownVisit.frame.Position or Hub.teleportFrame(root).Position
 				if not permitted or (origin-part.Position).Magnitude>30 then return false end
 				if ownVisit and ownVisit.masked then root.CFrame=ownVisit.frame end
 				local aim=Hub.safeLookAt(origin+Vector3.new(0,1.593,0),part.Position)
@@ -17320,7 +17502,7 @@ do
 			local remote=menu and menu:FindFirstChild("SpawnToyRemoteFunction")
 			local can=me:FindFirstChild("CanSpawnToy")
 			if not remote or (can and not can.Value) then return end
-			local root=readySelf();local frame=root.CFrame*CFrame.new(0,4,0)
+			local root=readySelf();local frame=Hub.teleportFrame(root)*CFrame.new(0,4,0)
 			local before={};local folder=ownFolder()
 			if folder then for _,model in ipairs(folder:GetChildren()) do before[model]=true end end
 			spawnBusy=true;nextSpawn=os.clock()+4
@@ -17447,7 +17629,7 @@ do
 			for _,person in ipairs(Players:GetPlayers()) do
 				if trusted(person) then
 					local char,root,hum=character(person)
-					if char and not records[person.UserId] then records[person.UserId]={player=person,char=char,root=root,hum=hum,saved=root.CFrame} end
+					if char and not records[person.UserId] then records[person.UserId]={player=person,char=char,root=root,hum=hum,saved=Hub.teleportFrame(root)} end
 				end
 			end
 		end
@@ -17684,13 +17866,13 @@ do
 			local root=readyRoot(char)
 			if not saved or not root then return false end
 			if not Hub.finiteVector(saved.Position) or saved.Position.Y<=Workspace.FallenPartsDestroyHeight+8 then return false end
-			root.CFrame=saved;root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
+			Hub.teleportPart(root, saved);root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
 			status:SetText("Returned to your spawn bookmark.");return true
 		end
 		group:AddButton({Text="Save current spawn location",Func=function()
 			local root=readyRoot(Player.Character)
-			if not root or not Hub.finiteVector(root.Position) then status:SetText("Wait for a free, live character and confirmed Gucci if enabled.");return end
-			saved=root.CFrame;status:SetText(string.format("Spawn bookmark saved at %.0f, %.0f, %.0f.",root.Position.X,root.Position.Y,root.Position.Z))
+			if not root or not Hub.finiteVector(Hub.teleportFrame(root).Position) then status:SetText("Wait for a free, live character and confirmed Gucci if enabled.");return end
+			saved=Hub.teleportFrame(root);status:SetText(string.format("Spawn bookmark saved at %.0f, %.0f, %.0f.",Hub.teleportFrame(root).Position.X,Hub.teleportFrame(root).Position.Y,Hub.teleportFrame(root).Position.Z))
 		end})
 		group:AddButton({Text="Return to spawn bookmark",Func=function()
 			if not restore(Player.Character) then status:SetText("No valid bookmark, or your character is busy.") end
@@ -17805,18 +17987,18 @@ do
 			if not root then return false,char end
 			local camera=Workspace.CurrentCamera;frame=frame or (camera and camera.CFrame)
 			if not frame or not Hub.finiteVector(frame.Position) then return false,"Camera position is unavailable." end
-			if (frame.Position-root.Position).Magnitude>512 then return false,"Camera is more than 512 studs away." end
+			if (frame.Position-Hub.teleportFrame(root).Position).Magnitude>512 then return false,"Camera is more than 512 studs away." end
 			local params=RaycastParams.new();params.FilterType=Enum.RaycastFilterType.Exclude
 			params.FilterDescendantsInstances=selection and {char,selection} or {char};params.IgnoreWater=true;params.RespectCanCollide=true
 			local hit=Workspace:Raycast(frame.Position+Vector3.new(0,4,0),Vector3.new(0,-204,0),params)
 			if not hit or not ((hit.Instance:IsA("BasePart") and hit.Instance.Anchored) or hit.Instance:IsA("Terrain")) or hit.Normal.Y<0.6 then return false,"No stable ground below the camera." end
 			local destination=hit.Position+Vector3.new(0,math.max(3,hum.HipHeight+root.Size.Y/2+0.5),0)
 			if not Hub.finiteVector(destination) or destination.Y<=Workspace.FallenPartsDestroyHeight+8 then return false,"Destination is outside the safe map height." end
-			if (destination-root.Position).Magnitude>512 then return false,"Ground destination is more than 512 studs away." end
+			if (destination-Hub.teleportFrame(root).Position).Magnitude>512 then return false,"Ground destination is more than 512 studs away." end
 			local facing=Vector3.new(frame.LookVector.X,0,frame.LookVector.Z)
-			local goal=Hub.safeLookAt(destination,destination+facing,root.CFrame.LookVector)
+			local goal=Hub.safeLookAt(destination,destination+facing,Hub.teleportFrame(root).LookVector)
 			if not goal then return false,"Camera direction is unavailable." end
-			root.CFrame=goal;root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
+			Hub.teleportPart(root, goal);root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero
 			return true
 		end
 		stopDrive=function()
@@ -18484,10 +18666,10 @@ end
 			error("Destination is below the safe map height.", 0)
 		end
 
-		root.CFrame = CFrame.lookAt(
+		Hub.teleportPart(root, CFrame.lookAt(
 			position,
 			Vector3.new(other.Position.X, position.Y, other.Position.Z)
-		)
+		))
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 

@@ -113,3 +113,16 @@ Loop Players now has one **Loop type** dropdown and **Enable loop** switch. Type
 The master switch reflects legacy shortcuts, target rejection and emergency stops. Loading an older config with multiple enabled modes reconciles to one mode after restore finishes. Loop type is saved; enabled state continues through the original IDs. No loop algorithm changed.
 
 Validation: full Luau compilation and mocked selector transitions, stop-before-switch, rejected starts, emergency stops, legacy controls/configs and hidden-row checks passed. Existing command UI checks also pass. Layout has not been viewed in a live Roblox session.
+
+
+### Shared teleport display, old kill loops, and Terrain water
+
+The latest imported Resonance kill port is reverted. Kill and Kill all again use the previous implementation behind the single loop dropdown. Their self-teleport writes now use the common display mask; their target-action algorithm is unchanged.
+
+**World & Travel → Teleport display → Mask teleports (except Z)** is enabled by default, as requested. Script-owned teleport writes, including temporary action visits, protections, travel commands/bookmarks and Loop TP, use one Heartbeat/render-step split. The simulation applies the requested destination while root/head render at the visible position. Feature distance checks use the logical destination. Ordinary walking is preserved separately. Returning to the original position releases the mask; one-way travel remains hidden until Z, disabling the option, or **Show actual position**. This does not prevent server-side movement or mask server-originated teleports outside the hub.
+
+Z cancels active plot/slot and private assist masks, clears shared masking, and uses its existing visible teleport/smooth-click handler. Gucci's existing ownership mask retains its own frame sequence and yields when cancelled. Stale callbacks and respawn/unload cleanup cannot clear a newer character's mask.
+
+**Visuals → Water Appearance → Realistic Water** now performs the conversion seen in Resonance, rather than merely adjusting the existing surface: ocean part bounds, shifted down four studs by default, are filled with local Terrain water in 128-stud chunks; original ocean surfaces are hidden. Water height offset is adjustable. Each chunk is backed up before filling, and turning it off, cancelling a build, or unloading restores previous terrain and transparency instead of clearing existing terrain to Air. Terrain coordinates and total chunk count are bounded. Appearance sliders and Non-Swimmable Water remain separate settings. Terrain changes are local to your client.
+
+Automated validation: full-script Luau compilation; mocked display/physics split, logical positions, walking, return-to-origin, model pivots, stale callbacks, visible Z, disabling and respawn; Terrain conversion/offset, exact restoration and partial-build cancellation. Existing save/Anti Banana/plot visit, selector, command, Gucci, respawn, train, paint, whitelist, build/recovery, formation and QOL regressions pass. Rendering, replication, actual swimming and gameplay interactions have not been verified in Roblox.
