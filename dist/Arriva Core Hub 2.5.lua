@@ -344,127 +344,66 @@ local Workspace = workspace
 local LocalPlayer = Players.LocalPlayer
 
 -- BEGIN SHARED TELEPORT MASK
--- Only explicit teleports move the real rig. A local stand-in keeps the old view.
+-- Resonance ClientVision: root-only Heartbeat/render swap, without a clone.
 do
-	local state,pendingDisplay,pendingClone
-	local enabled=true
-	local renderName="ArrivaSharedTeleportMask"
-	Hub.teleportMaskCancelers={}
-	function Hub.teleportMaskEnabled() return enabled end
-	function Hub.cancelNativeTeleportMasks() for _,cancel in pairs(Hub.teleportMaskCancelers) do pcall(cancel) end end
-	local function current(record)
-		return record and LocalPlayer.Character==record.char and record.root.Parent==record.char
-			and record.hum.Parent==record.char and record.hum.Health>0
-	end
-	function Hub.clearTeleportMask(commit)
-		local old=state;state=nil;Hub.teleportMaskState=nil
-		RunService:UnbindFromRenderStep(renderName)
-		if not old then return end
-		if old.added then old.added:Disconnect();Hub.connections[old.added]=nil end
-		for part,value in pairs(old.transparency) do if part.Parent then part.LocalTransparencyModifier=value end end
-		local camera=Workspace.CurrentCamera
-		if camera and camera.CameraSubject==old.displaySubject then camera.CameraSubject=(current(old) and old.hum) or old.cameraSubject end
-		if old.display then Hub.instances[old.display]=nil;old.display:Destroy() end
-		if not commit and current(old) then old.root.CFrame=old.visualRoot end
-	end
-	function Hub.teleportFrame(part) return part.CFrame end
-	function Hub.visibleCharacterTransparency(part)
-		if state and state.transparency[part]~=nil then return state.transparency[part] end
-		return part.LocalTransparencyModifier
-	end
-	local function beginDisplay(char,root,hum,frame)
-		local original=char.Archivable;local rootArchivable=root.Archivable
-		char.Archivable=true;root.Archivable=true
-		local ok,display=pcall(function() return char:Clone() end)
-		char.Archivable=original;root.Archivable=rootArchivable
-		if not ok or not display then return nil end
-		pendingClone=display
-		local displayRoot=display:FindFirstChild(root.Name)
-		local displayHum=display:FindFirstChildOfClass("Humanoid")
-		if not displayRoot or not displayHum then display:Destroy();return nil end
-		local poses={};local sourceParts={}
-		local function path(object,model)
-			local names={}
-			while object and object~=model do table.insert(names,1,object.Name);object=object.Parent end
-			return table.concat(names,"/")
-		end
-		for _,object in ipairs(char:GetDescendants()) do if object:IsA("BasePart") then sourceParts[path(object,char)]=object end end
-		for _,object in ipairs(display:GetDescendants()) do
-			if object:IsA("LuaSourceContainer") or object:IsA("BodyMover") or object:IsA("AlignPosition") or object:IsA("AlignOrientation")
-				or object:IsA("LinearVelocity") or object:IsA("AngularVelocity") or object:IsA("VectorForce") or object:IsA("Torque") then object:Destroy()
-			elseif object:IsA("BasePart") then
-				object.Anchored=true;object.CanCollide=false;object.CanTouch=false;object.CanQuery=false;object.LocalTransparencyModifier=0
-				local source=sourceParts[path(object,display)];if source then table.insert(poses,{copy=object,source=source}) else object.Transparency=1 end
-			elseif object:IsA("Weld") or object:IsA("WeldConstraint") then
-				if (object.Part0 and not object.Part0:IsDescendantOf(display)) or (object.Part1 and not object.Part1:IsDescendantOf(display)) then object:Destroy() end
-			elseif object:IsA("Motor6D") then object:Destroy()
-			end
-		end
-		display.Name="ArrivaTeleportDisplay";displayHum.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
-		displayHum.BreakJointsOnDeath=false
-		local pivotOffset=displayRoot.CFrame:ToObjectSpace(display:GetPivot())
-		display:PivotTo(root.CFrame*pivotOffset);display.Parent=Workspace;Hub.instances[display]=true
-		local camera=Workspace.CurrentCamera
-		local record={char=char,root=root,hum=hum,origin=root.CFrame,visualRoot=root.CFrame,lastPhysical=frame,destination=frame,
-			display=display,displayHum=displayHum,displaySubject=displayRoot.Name=="HumanoidRootPart" and displayHum or displayRoot,pivotOffset=pivotOffset,poses=poses,transparency={},cameraSubject=camera and camera.CameraSubject}
-		pendingDisplay=record
-		local function hide(part)
-			if part:IsA("BasePart") then if record.transparency[part]==nil then record.transparency[part]=part.LocalTransparencyModifier end;part.LocalTransparencyModifier=1 end
-		end
-		for _,part in ipairs(char:GetDescendants()) do hide(part) end
-		record.added=Hub.connect(char.DescendantAdded,hide)
-		if camera and (camera.CameraSubject==hum or camera.CameraSubject==root or (camera.CameraSubject and camera.CameraSubject:IsDescendantOf(char))) then camera.CameraSubject=record.displaySubject end
-		return record
-	end
-	function Hub.teleportPart(part,frame)
-		if not part then return end
-		local char=LocalPlayer.Character
-		local root=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
-		local hum=char and char:FindFirstChildOfClass("Humanoid")
-		if part~=root then part.CFrame=frame;return end
-		Hub.lastSelfTeleport={char=char,frame=frame,at=os.clock()}
-		if not enabled or not hum or hum.Health<=0 then part.CFrame=frame;return end
-		if state and not current(state) then Hub.clearTeleportMask(true) end
-		if state and (frame.Position-state.origin.Position).Magnitude<0.05 then Hub.clearTeleportMask(true);part.CFrame=frame;return end
-		if not state and (frame.Position-root.Position).Magnitude<0.05 then part.CFrame=frame;return end
-		if not state then
-			local ok,record=pcall(beginDisplay,char,root,hum,frame)
-			if not ok or not record then
-				if pendingDisplay then state=pendingDisplay;Hub.clearTeleportMask(true)
-				elseif pendingClone then Hub.instances[pendingClone]=nil;pendingClone:Destroy() end
-				pendingDisplay,pendingClone=nil,nil
-				Hub.lastTeleportMaskError=tostring(record or "Could not clone current character.");part.CFrame=frame;return
-			end
-			pendingDisplay,pendingClone=nil,nil
-			state=record;Hub.teleportMaskState=record
-			RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value+1,function()
-				if state~=record then return end
-				if not current(record) or not record.display.Parent then Hub.clearTeleportMask(true);return end
-				local actual=record.root.CFrame
-				local delta=record.lastPhysical:ToObjectSpace(actual)
-				if (actual.Position-record.lastPhysical.Position).Magnitude<10 then record.visualRoot=record.visualRoot*delta end
-				record.lastPhysical=actual;record.destination=actual
-				record.display:PivotTo(record.visualRoot*record.pivotOffset)
-				for _,pose in ipairs(record.poses) do
-					if pose.copy.Parent and pose.source:IsDescendantOf(record.char) then pose.copy.CFrame=record.visualRoot*actual:ToObjectSpace(pose.source.CFrame)
-					else pose.copy.Transparency=1 end
-				end
-				for real in pairs(record.transparency) do if real.Parent then real.LocalTransparencyModifier=1 end end
-			end)
-		end
-		state.destination=frame;state.lastPhysical=frame
-		part.CFrame=frame
-	end
-	function Hub.teleportModel(model,frame)
-		if model~=LocalPlayer.Character then model:PivotTo(frame);return end
-		local root=model:FindFirstChild("realHrp") or model:FindFirstChild("HumanoidRootPart")
-		if not root then return end
-		local destination=frame*model:GetPivot():ToObjectSpace(root.CFrame)
-		Hub.teleportPart(root,destination);model:PivotTo(frame)
-	end
-	function Hub.setTeleportMaskEnabled(on) enabled=on==true;if not enabled then Hub.clearTeleportMask(true) end end
-	Hub.connect(LocalPlayer.CharacterRemoving,function() Hub.clearTeleportMask(true) end)
-	Hub.cleanup(function() Hub.clearTeleportMask(true);Hub.teleportPart=nil;Hub.teleportModel=nil;Hub.teleportFrame=nil end)
+ local enabled=true
+ local state
+ local renderName="ArrivaSharedTeleportMask"
+ Hub.teleportMaskCancelers={}
+ function Hub.teleportMaskEnabled() return enabled end
+ function Hub.cancelNativeTeleportMasks() for _,cancel in pairs(Hub.teleportMaskCancelers) do pcall(cancel) end end
+ local function current(record)
+  return record and LocalPlayer.Character==record.char and record.root.Parent==record.char and record.hum.Parent==record.char and record.hum.Health>0
+ end
+ function Hub.clearTeleportMask(commit)
+  local old=state;state=nil;Hub.teleportMaskState=nil
+  RunService:UnbindFromRenderStep(renderName)
+  if not old then return end
+  if old.physics then old.physics:Disconnect();Hub.connections[old.physics]=nil end
+  if current(old) then old.root.CFrame=commit and old.frame or old.origin end
+ end
+ function Hub.teleportFrame(part)
+  if state and state.root==part then return state.frame end
+  return part.CFrame
+ end
+ function Hub.visibleCharacterTransparency(part) return part.LocalTransparencyModifier end
+ function Hub.teleportPart(part,frame)
+  if not part then return end
+  local char=LocalPlayer.Character
+  local root=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+  local hum=char and char:FindFirstChildOfClass("Humanoid")
+  if part~=root then part.CFrame=frame;return end
+  Hub.lastSelfTeleport={char=char,frame=frame,at=os.clock()}
+  if state and not current(state) then Hub.clearTeleportMask(true) end
+  if state and (frame.Position-state.origin.Position).Magnitude<0.05 then Hub.clearTeleportMask(true);part.CFrame=frame;return end
+  if not enabled or not hum or hum.Health<=0 then part.CFrame=frame;return end
+  if not state and (frame.Position-root.Position).Magnitude>=0.05 then
+   local record={char=char,root=root,hum=hum,origin=root.CFrame,frame=root.CFrame}
+   state=record;Hub.teleportMaskState=record
+   RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value-1,function()
+    if state~=record then return end
+    if not current(record) then Hub.clearTeleportMask(true);return end
+    record.root.CFrame=record.frame
+   end)
+   record.physics=Hub.connect(RunService.Heartbeat,function()
+    if state~=record then return end
+    if not current(record) then Hub.clearTeleportMask(true);return end
+    record.frame=record.root.CFrame
+    record.root.CFrame=record.origin
+   end)
+  end
+  if state then state.frame=frame end
+  part.CFrame=frame
+ end
+ function Hub.teleportModel(model,frame)
+  if model~=LocalPlayer.Character then model:PivotTo(frame);return end
+  local root=model:FindFirstChild("realHrp") or model:FindFirstChild("HumanoidRootPart")
+  if not root then return end
+  Hub.teleportPart(root,frame*model:GetPivot():ToObjectSpace(root.CFrame))
+ end
+ function Hub.setTeleportMaskEnabled(on) enabled=on==true;if not enabled then Hub.clearTeleportMask(true) end end
+ Hub.connect(LocalPlayer.CharacterRemoving,function() Hub.clearTeleportMask(true) end)
+ Hub.cleanup(function() Hub.clearTeleportMask(true);Hub.teleportPart=nil;Hub.teleportModel=nil;Hub.teleportFrame=nil end)
 end
 -- END SHARED TELEPORT MASK
 
@@ -11003,149 +10942,185 @@ do
 		slider(sunGroup,"PrettySunLatitude","Sun latitude",41.733,0,360,1,function(v) latitude=v;updateLatitude() end)
 		local waterObjects={}
 		-- BEGIN TERRAIN REALISTIC WATER
-		-- Resonance replaces the flat ocean surfaces with Terrain water at a -4 offset.
-		do
-			local enabled,offset=false,-4
-			local revision=0
-			local worker
-			local observedModel
-			local regions,surfaces={},{}
-			local chunkCache={}
-			local resetRequested,additionsPending=false,false
-			local originalTerrainTransparency
-			local function waterVisibility()
-				if enabled and terrain and not waterOn then
-					if originalTerrainTransparency==nil then originalTerrainTransparency=terrain.WaterTransparency end
-					terrain.WaterTransparency=water.WaterTransparency
-				elseif not enabled and originalTerrainTransparency~=nil then
-					if not waterOn then terrain.WaterTransparency=originalTerrainTransparency
-					elseif savedWater then savedWater.WaterTransparency=originalTerrainTransparency end
-					originalTerrainTransparency=nil
-				end
-			end
-			local status=waterGroup:AddLabel("Realistic water: off.")
-			local function oceanModel()
-				local map=Workspace:FindFirstChild("Map")
-				local objects=map and map:FindFirstChild("AlwaysHereTweenedObjects")
-				local ocean=objects and objects:FindFirstChild("Ocean")
-				local object=ocean and ocean:FindFirstChild("Object")
-				return object and object:FindFirstChild("ObjectModel")
-			end
-			local function restore(yielding)
-				for part,saved in pairs(surfaces) do
-					if saved.connection then saved.connection:Disconnect();Hub.connections[saved.connection]=nil end
-					if part.Parent then part.Transparency=waterOn and water.WaterTransparency or saved.baseOpacity end
-					surfaces[part]=nil
-				end
-				for i=#regions,1,-1 do
-					local record=regions[i]
-					if record.empty then terrain:FillRegion(record.region,4,Enum.Material.Air)
-					else terrain:WriteVoxels(record.region,4,record.materials,record.occupancy) end
-					regions[i]=nil
-					if yielding and i%2==0 then task.wait() end
-				end
-				table.clear(chunkCache)
-			end
-			local function build(ticket)
-				local model=oceanModel()
-				local deadline=os.clock()+5
-				while not model and enabled and revision==ticket and Hub.alive and os.clock()<deadline do task.wait(0.1);model=oceanModel() end
-				if not enabled or revision~=ticket or not Hub.alive then return end
-				if not terrain or not model then error("Ocean surface has not loaded.",0) end
-				observedModel=model
-				local camera=Workspace.CurrentCamera
-				local focus=camera and camera.CFrame.Position or Vector3.zero
-				local function nearFirst(low,high,position)
-					local first,last=math.floor(low/128),math.floor((high-1)/128)
-					local middle=math.clamp(math.floor(position/128),first,last)
-					local nextIndex,distance,side=middle,0,-1
-					return function()
-						while nextIndex do
-							local value=nextIndex
-							if distance==0 then distance=1;nextIndex=middle-distance
-							elseif side==-1 then side=1;nextIndex=middle+distance
-							else side=-1;distance+=1;nextIndex=middle-distance end
-							if distance>last-first+1 then nextIndex=nil end
-							if value>=first and value<=last then return value*128 end
-						end
-					end
-				end
-				for _,part in ipairs(model:GetDescendants()) do
-					local originalOpacity=waterObjects[part] and waterObjects[part].Transparency
-					local savedSurface=surfaces[part]
-					if part:IsA("BasePart") and not (savedSurface and savedSurface.complete) and (originalOpacity or (savedSurface and savedSurface.baseOpacity) or part.Transparency)<1 then
-						if not surfaces[part] then
-							local saved={baseOpacity=originalOpacity or part.Transparency};surfaces[part]=saved
-							saved.connection=Hub.connect(part:GetPropertyChangedSignal("Transparency"),function()
-								if enabled and surfaces[part] and part.Transparency~=1 then part.Transparency=1 end
-							end)
-						end
-						part.Transparency=1
-						local shift=Vector3.new(0,offset,0)
-						local region=Region3.new(part.Position-part.Size/2+shift,part.Position+part.Size/2+shift):ExpandToGrid(4)
-						local low=region.CFrame.Position-region.Size/2;local high=region.CFrame.Position+region.Size/2
-						for gx in nearFirst(low.X,high.X,focus.X) do for gy in nearFirst(low.Y,high.Y,focus.Y) do for gz in nearFirst(low.Z,high.Z,focus.Z) do
-							local x,y,z=math.max(gx,low.X),math.max(gy,low.Y),math.max(gz,low.Z)
-							if revision~=ticket or not enabled or not Hub.alive then return end
-							local upper=Vector3.new(math.min(gx+128,high.X),math.min(gy+128,high.Y),math.min(gz+128,high.Z))
-							local key=string.format("%d:%d:%d:%d:%d:%d",x,y,z,upper.X,upper.Y,upper.Z)
-							if not chunkCache[key] then
-								local chunk=Region3.new(Vector3.new(x,y,z),upper)
-								local materials,occupancy=terrain:ReadVoxels(chunk,4)
-								local empty=true
-								for _,plane in ipairs(occupancy) do for _,row in ipairs(plane) do for _,value in ipairs(row) do if value>0 then empty=false;break end end;if not empty then break end end;if not empty then break end end
-								table.insert(regions,{region=chunk,empty=empty,materials=not empty and materials or nil,occupancy=not empty and occupancy or nil})
-								terrain:FillRegion(chunk,4,Enum.Material.Water)
-								chunkCache[key]=true
-								-- One terrain mutation per frame; never queue a burst of eight.
-								task.wait()
-							end
-						end end end
-						if revision==ticket and enabled then surfaces[part].complete=true end
+ do
+  local tbl7={WaterParts={},WaterRegions={},WaterPartStates={}}
+  local tbl9={WaterYOffset=-4}
+  local toggles={}
+  local active=false
+		local n36 = 0
+		local n37 = 0.004
+		local n38 = 128
 
+		local function fn21(arg)
+			if os.clock() - arg < n37 then
+				return arg
+			end
+			RunService.Heartbeat:Wait()
+			return os.clock()
+		end
+
+		local function fn22(arg)
+			local now2 = os.clock()
+
+			for i = #tbl7.WaterParts, 1, -1 do
+				if arg ~= n36 then
+					return false
+				end
+				local v20 = tbl7.WaterParts[i]
+				local v21 = v20[1]
+				local transparency = v20[2]
+
+				if v21 and v21.Parent then
+					local value = toggles.WaterWalk and toggles.WaterWalk.Value
+
+					if value and transparency ~= 1 then
+						transparency = 0.5
+					end
+
+					v21.Transparency = transparency
+
+					if not value and tbl7.WaterPartStates[v21] then
+						v21.CanCollide = tbl7.WaterPartStates[v21][1]
+						tbl7.WaterPartStates[v21] = nil
 					end
 				end
-				status:SetText("Realistic water: Terrain water active ("..#regions.." regions).")
+
+				tbl7.WaterParts[i] = nil
+				now2 = fn21(now2)
 			end
-			local function request(incremental)
-				if incremental then additionsPending=true
-				else revision+=1;resetRequested=true end
-				if worker then return end
-				worker=task.defer(function()
-					repeat
-						if resetRequested then resetRequested=false;restore(true) end
-						-- Consume setting changes that arrived during restoration once.
-						resetRequested=false
-						local ticket=revision
-						additionsPending=false
-						if enabled then
-							status:SetText("Realistic water: converting ocean surfaces gradually.")
-							local ok,message=pcall(build,ticket)
-							if not ok then restore(true);status:SetText("Realistic water: "..tostring(message));break end
-						else status:SetText("Realistic water: off.") end
-					until (ticket==revision and not resetRequested and not additionsPending) or not Hub.alive
-					worker=nil
-				end)
+
+			for i = #tbl7.WaterRegions, 1, -1 do
+				if arg ~= n36 then
+					return false
+				end
+				terrain:FillRegion(tbl7.WaterRegions[i], 4, Enum.Material.Air)
+				tbl7.WaterRegions[i] = nil
+				now2 = fn21(now2)
 			end
-			waterGroup:AddToggle("SourceRealisticWater",{Text="Realistic Water",Default=false,Callback=function(on) enabled=on;waterVisibility();request();Hub.requestSave() end})
-			waterGroup:AddSlider("SourceRealisticWaterOffset",{Text="Water height offset",Default=-4,Min=-20,Max=20,Rounding=1,Callback=function(value) offset=value;if enabled then request() end;Hub.requestSave() end})
-			Hub.connect(Workspace.DescendantAdded,function(part)
-				local model=enabled and oceanModel()
-				if model and part:IsA("BasePart") and part:IsDescendantOf(model) and not surfaces[part] then request(true) end
-			end)
-			local elapsed=0
-			Hub.connect(RunService.Heartbeat,function(dt)
-				if not enabled then return end;elapsed+=dt;if elapsed<1 then return end;elapsed=0
-				waterVisibility()
-				local model=oceanModel();if model and model~=observedModel then observedModel=model;request() end
-			end)
-			Hub.cleanup(function()
-				enabled=false;revision+=1;waterVisibility()
-				if worker then pcall(Hub.nativeTask.cancel,worker);worker=nil end
-				restore()
+
+			table.clear(tbl7.WaterRegions)
+			table.clear(tbl7.WaterParts)
+			return true
+		end
+
+		local function fn23(arg, arg2, arg3, arg4)
+			local v20 = Region3.new(arg, arg2):ExpandToGrid(4)
+			local n39 = v20.CFrame.Position - v20.Size / 2
+			local n40 = v20.CFrame.Position + v20.Size / 2
+			local x = n39.X
+
+			while x < n40.X do
+				local n41 = math.min(x + n38, n40.X)
+				local y = n39.Y
+				local exitTo = nil
+
+				while true do
+					if not (y < n40.Y) then
+						exitTo = 1
+						break
+					else
+						local n42 = math.min(y + n38, n40.Y)
+						local z = n39.Z
+						local exitTo2 = nil
+
+						while true do
+							if not (z < n40.Z) then
+								exitTo2 = 1
+								break
+							else
+								if arg3 == n36 then
+									local n43 = math.min(z + n38, n40.Z)
+									local v21 = Region3.new(Vector3.new(x, y, z), Vector3.new(n41, n42, n43))
+									tbl7.WaterRegions[#tbl7.WaterRegions + 1] = v21
+									terrain:FillRegion(v21, 4, Enum.Material.Water)
+									arg4 = fn21(arg4)
+									z = n43
+									continue
+								end
+
+								break
+							end
+						end
+
+						if exitTo2 == 1 then
+							y = n42
+							continue
+						end
+						break
+					end
+				end
+
+				if exitTo == 1 then
+					x = n41
+					continue
+				end
+				return arg4, false
+			end
+
+			return arg4, true
+		end
+
+		local function fn24(arg)
+			n36 += 1
+			local v20 = n36
+
+			task.spawn(function()
+				if not fn22(v20) or not arg then
+					return
+				end
+				local objectModel = Workspace.Map.AlwaysHereTweenedObjects.Ocean.Object.ObjectModel
+				local vector = Vector3.new(0, tbl9.WaterYOffset, 0)
+				local tbl16 = {}
+
+				for _, v21 in ipairs(objectModel:QueryDescendants("BasePart")) do
+					local tbl17 = tbl7.WaterPartStates[v21]
+
+					if not tbl17 then
+						if v21.Transparency == 1 then
+							continue
+						end
+						tbl17 = { v21.CanCollide, v21.Transparency }
+						tbl7.WaterPartStates[v21] = tbl17
+					end
+
+					if tbl17[2] ~= 1 then
+						tbl16[#tbl16 + 1] = { v21, tbl17[2], v21.Position - v21.Size / 2 + vector, v21.Position + v21.Size / 2 + vector }
+					end
+				end
+
+				for _, v21 in ipairs(tbl16) do
+					local v22 = v21[1]
+
+					if v22.Parent then
+						tbl7.WaterParts[#tbl7.WaterParts + 1] = { v22, v21[2] }
+						v22.Transparency = 1
+					end
+				end
+
+				local now2 = os.clock()
+
+				for _, v21 in ipairs(tbl16) do
+					if v20 ~= n36 then
+						return
+					end
+					local v22, v23 = fn23(v21[3], v21[4], v20, now2)
+					if not v23 then
+						return
+					end
+					now2 = v22
+				end
 			end)
 		end
-		-- END TERRAIN REALISTIC WATER
+
+  waterGroup:AddToggle("SourceRealisticWater",{Text="Realistic Water",Default=false,Callback=function(on)
+   active=on;fn24(on);Hub.requestSave()
+  end})
+  waterGroup:AddSlider("SourceRealisticWaterOffset",{Text="Water height offset",Default=-4,Min=-20,Max=20,Rounding=1,Callback=function(value)
+   tbl9.WaterYOffset=value;if active then fn24(true) end;Hub.requestSave()
+  end})
+  Hub.cleanup(function() active=false;n36+=1;fn22(n36) end)
+ end
+ -- END TERRAIN REALISTIC WATER
 		local hideOverlay=true
 		local waterEpoch=0
 		local function waterRoot()

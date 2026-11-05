@@ -185,3 +185,11 @@ Resonance uses 128-stud fills and a roughly 4 ms yield budget, without voxel bac
 The teleport display anchors every copied part and copies source poses explicitly instead of simulating copied character joints. Missing source parts are hidden. Auto Reset is unchanged.
 
 Automated checks cover full compilation, water cancellation/restoration and duplicate streaming, and display anchoring/cleanup without per-frame real-character movement. Actual FPS, terrain rendering and the reported split-character symptom still require in-game verification.
+
+### Resonance parity replacement (supersedes previous water/display notes)
+
+Realistic Water uses the attached Resonance's fn21–fn24 algorithm: 128-stud chunks, a 0.004-second Heartbeat yield budget, the original -4 height offset, original visible-surface selection, and FillRegion(Air) on removal. Voxel backups, per-chunk yields, chunk caches, streaming rebuild callbacks and the terrain-transparency override are removed. Turning it off clears the converted regions rather than restoring earlier terrain contents, matching the reference.
+
+Teleport masking uses Resonance's root-only ClientVision sequence: capture the root at Heartbeat, restore the starting root frame, then restore the captured frame before the camera render step. The cloned stand-in, copied joints, visibility overrides and CameraSubject replacement are removed. Hub adapters retain enable/off controls, return/respawn cleanup, broader teleport coverage and the visible Z exception. Auto Reset is unchanged. The reference itself scopes this helper to individual actions rather than all teleports.
+
+Validation: full compilation; mocked direct water fills/Air cleanup, cancellation and budget yielding; mocked root-only Heartbeat/render ordering and return/off/respawn cleanup; direct comparison of water function bodies after adapting Workspace naming. Actual FPS and rendered character behavior remain unverified in Roblox.
