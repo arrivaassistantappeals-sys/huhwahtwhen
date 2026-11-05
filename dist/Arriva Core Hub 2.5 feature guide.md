@@ -93,3 +93,14 @@ Compared the train sequence and spawn helper against Resonance. Omitted spawn fr
 Destroy Train waits for HoldItemRemoteFunction, DropItemRemoteFunction and RigidConstraint instead of requiring them to exist immediately. Hold requests retry every 0.15 seconds for at most one second until the left grip attachment confirms. All outstanding hold workers are cleaned by the train interaction's existing cleanup. Missing toy and missing component errors are reported separately.
 
 Automated validation reproduced the old nil-frame and indefinite-remote lock failures, then verified default placement, unchanged explicit frames, timeout cancellation, later successful spawning, remote errors, delayed component replication and repeated grip acquisition. Full Luau compilation and existing Gucci, respawn, Anti Banana and plot-visit regressions pass. Actual train destruction remains unverified in Roblox.
+
+
+### Anti Paint coverage correction
+
+Rechecked the latest supplied Resonance source: Anti Paint immediately queries every BasePart named PaintPlayerPart, sets CanTouch false, maintains that property and handles newly added parts. There is no separate named radioactive, toilet or sickness filter in that source. Coverage for those effects depends on their shared touch parts.
+
+Arriva previously used an incremental initial scan. Changing the poison toggle invalidated that scan; turning poison off while paint remained enabled did not start a replacement. This could leave existing paint/effect parts unprotected. Anti Paint/Poison now reconcile immediately with the original named-part query (GetDescendants fallback when unavailable), on either toggle change, on new parts, and once per second while enabled for late names/reparenting. The existing CanTouch enforcement remains. Overlapping modes share saved values, so disabling one does not release the other's coverage. No blanket character-touch, collision or query suppression is added.
+
+Protection settings show the number of effect parts currently blocked and include Refresh touch protection. This confirms detected parts, not proof of immunity to server-triggered effects or effects already applied.
+
+Automated validation reproduces the cancelled-scan bug and verifies immediate coverage, overlapping toggle changes, external CanTouch re-enable, late names, query fallback, exact baseline restoration and untouched ordinary interactions. Full script compiles; Gucci recovery and train/spawn regressions pass. Radioactive/toilet/sickness effects have not been verified in a live game.

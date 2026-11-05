@@ -14161,16 +14161,45 @@ do
 			part.CanTouch=false
 		end
 		local touchEpoch=0
+		local touchStatus=DefenseExtra:AddLabel("Touch protection: off.")
+		local function refreshTouchProtection()
+			for part in pairs(touchRecords) do
+				if not part.Parent or not touchMatch(part) then restoreTouch(part) end
+			end
+			if touchModes.paint or touchModes.poison then
+				-- Same immediate named-part query as Resonance. No cancelled incremental scan.
+				local ok,parts=pcall(function() return Workspace:QueryDescendants("BasePart#PaintPlayerPart") end)
+				if ok then
+					for _,part in ipairs(parts) do inspectTouch(part) end
+					if touchModes.poison then
+						local poisonOK,poisonParts=pcall(function() return Workspace:QueryDescendants("BasePart#PoisonHurtPart") end)
+						if poisonOK then for _,part in ipairs(poisonParts) do inspectTouch(part) end
+						else for _,part in ipairs(Workspace:GetDescendants()) do inspectTouch(part) end end
+					end
+				else
+					for _,part in ipairs(Workspace:GetDescendants()) do inspectTouch(part) end
+				end
+			end
+			local count=0;for _ in pairs(touchRecords) do count+=1 end
+			touchStatus:SetText((touchModes.paint or touchModes.poison) and ("Touch protection: "..count.." effect parts blocked.") or "Touch protection: off.")
+		end
 		local function setTouchMode(key,on)
-			touchModes[key]=on;touchEpoch+=1;local ticket=touchEpoch
-			for part in pairs(touchRecords) do if not touchMatch(part) then restoreTouch(part) end end
-			if on then Hub.scanDescendants(Workspace,inspectTouch,function() return ticket==touchEpoch and (touchModes.paint or touchModes.poison) end) end
-			Hub.requestSave()
+			touchModes[key]=on;touchEpoch+=1
+			-- Switching either mode must rescan the other mode's still-active coverage.
+			refreshTouchProtection();Hub.requestSave()
 		end
 		if Toggles.PaintDeleteToggle then Toggles.PaintDeleteToggle.Callback=function(on) setTouchMode("paint",on) end end
 		if Toggles.PrivatePoisonTouch then Toggles.PrivatePoisonTouch.Callback=function(on) setTouchMode("poison",on) end end
+		DefenseExtra:AddButton("Refresh touch protection",refreshTouchProtection)
 		Hub.connect(Workspace.DescendantAdded,function(part) if touchModes.paint or touchModes.poison then inspectTouch(part) end end)
 		Hub.connect(Workspace.DescendantRemoving,function(part) if touchRecords[part] then restoreTouch(part) end end)
+		local touchElapsed=0
+		Hub.connect(originalRunService.Heartbeat,function(dt)
+			if not touchModes.paint and not touchModes.poison then touchElapsed=0;return end
+			touchElapsed+=dt;if touchElapsed<1 then return end;touchElapsed=0
+			-- Reconcile streaming, late names, reparenting, and changes made by other toggles.
+			refreshTouchProtection()
+		end)
 
 		bind("AntiStickyToggle","AntiSticky",0.1,function()
 			local char=Player.Character;if not char then return end
