@@ -18649,7 +18649,7 @@ end
 		end
 
 		for _, run in pairs(Hub.targetLoopRuns or {}) do
-			if run.enabled then
+			if run.enabled and not run.assist then
 				error("Stop your action loops before moving with a command.", 0)
 			end
 		end
