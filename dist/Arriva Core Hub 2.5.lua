@@ -6659,6 +6659,60 @@ TargetGroup:AddToggle("BringAllGrab",{Text="Bring All",Default=false,Callback=fu
 	bindWorker(worker)
 end})
 
+-- Loop Bring: rotate selected players and bring them to the current local anchor.
+TargetGroup:AddToggle("LoopBringSelected",{Text="Bring selected",Default=false,Callback=function(on)
+	local running,_,onCleanup,bindWorker=Hub.beginTargetLoop("LoopBringSelected",on);Hub.requestSave()
+	if not on then return end
+	local char=Player.Character;local root=char and char:FindFirstChild("HumanoidRootPart")
+	if not root then Toggles.LoopBringSelected:SetValue(false);return end
+	local saved=Hub.teleportFrame(root)
+	local requestedRoot
+	local function restore()
+		if requestedRoot then
+			local events=ReplicatedStorage:FindFirstChild("GrabEvents");local drop=events and events:FindFirstChild("DestroyGrabLine")
+			if drop and requestedRoot.Parent then pcall(Hub.fire,drop,requestedRoot) end
+			requestedRoot=nil
+		end
+		if Player.Character==char and root.Parent==char then Hub.teleportPart(root,saved);root.AssemblyLinearVelocity=Vector3.zero;root.AssemblyAngularVelocity=Vector3.zero end end
+	onCleanup(restore)
+	local worker=task.spawn(function()
+		while running() and Player.Character==char do
+			saved=Hub.teleportFrame(root)
+			local selected=Hub.nextLoopTarget("loopBring")
+			for _,target in ipairs(selected and {selected} or {}) do
+				if not running() or Player.Character~=char then break end
+				if CheckPlayerBring(target) then
+					local targetChar=target.Character;local targetRoot=targetChar:FindFirstChild("HumanoidRootPart")
+					local function valid() return running() and Player.Character==char and target.Character==targetChar and targetRoot.Parent==targetChar and CheckPlayer(target) and Hub.isSelectedTarget(target) end
+					local ok,message=xpcall(function()
+						for _=1,51 do
+							if not valid() then break end
+							requestedRoot=targetRoot;SNOWshipOnce(targetRoot)
+							if CheckNetworkOwnerShipOnPlayer(target) then
+								for _=1,3 do
+									if not valid() then break end
+									targetChar:PivotTo(saved*CFrame.new(0,0,-5)*targetRoot.CFrame:Inverse()*targetChar:GetPivot())
+									for _,part in ipairs(targetChar:GetDescendants()) do if part:IsA("BasePart") then part.AssemblyLinearVelocity=Vector3.zero;part.AssemblyAngularVelocity=Vector3.zero end end
+									RunService.Heartbeat:Wait()
+								end
+								local events=ReplicatedStorage:FindFirstChild("GrabEvents");local drop=events and events:FindFirstChild("DestroyGrabLine")
+								if drop and targetRoot.Parent then Hub.fire(drop,targetRoot) end
+								break
+							end
+							local offset=targetRoot.Position.Y<=-12 and Vector3.new(0,5,-15) or Vector3.new(0,-10,-10)
+							Hub.teleportPart(root,CFrame.new(targetRoot.Position+offset));RunService.Heartbeat:Wait()
+						end
+					end,debug.traceback)
+					restore();if not ok then warn("[Loop Bring] "..tostring(message)) end
+				end
+			end
+			if running() then task.wait(0.2) end
+		end
+		restore()
+	end)
+	bindWorker(worker)
+end})
+
 do
 	(function()
 		TargetGroup:AddButton({Text="Bring (grab)",Func=function()
@@ -9133,7 +9187,7 @@ do
 end
 
 -- Shared readiness for manual self-movement and nearby ownership actions.
-function Hub.freeCharacterForTools()
+function Hub.freeCharacterForTools(allowedLoop)
 	if not Hub.alive then return nil,"The hub is unloaded." end
 	local char=Player.Character
 	local root,hum
@@ -9151,7 +9205,7 @@ function Hub.freeCharacterForTools()
 		or (held and held.Value) or Hub.interactionVisitLock or Hub.safeZoneLoopActive or Hub.characterFlightActive or Hub.blobFlightActive then
 		return nil,"Your character is busy, held, seated or not ready."
 	end
-	for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return nil,"Stop player action loops first." end end
+	for key,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and not (allowedLoop=="LoopOwnToyRecovery" and key==allowedLoop) then return nil,"Stop player action loops first." end end
 	return root,char,hum
 end
 
@@ -16131,6 +16185,7 @@ do
 			return false
 		end
 		function Hub.inspectOwnBuildToy(model,allowOwnershipRecovery)
+			if Hub.isGucciReserved and Hub.isGucciReserved(model) then return nil,"Gucci is using this toy" end
 			local folder = Workspace:FindFirstChild(Player.Name .. "SpawnedInToys")
 			if not folder or not model or model.Parent ~= folder or not model:IsA("Model")
 				or model:FindFirstChildOfClass("Humanoid") or Players:GetPlayerFromCharacter(model) then return nil, "unsupported toy" end
@@ -16315,12 +16370,15 @@ do
 			ownershipStatus:SetText(string.format("Ownership: %d local assemblies, %d unconfirmed, %d ineligible toys.",owned,missing,skipped))
 		end
 		local function cancelRecovery()
+			local wasBusy=recoveryBusy
 			recoveryGeneration+=1;recoveryBusy=false
 			if recoveryFinish then local finish=recoveryFinish;recoveryFinish=nil;finish() end
+			if wasBusy and session then session.resume=true;Hub.sampleOwnToyBuild() end
 		end
-		local function recoverOwnership()
+		local function recoverOwnership(allowedLoop,active)
+			if allowedLoop~="LoopOwnToyRecovery" then allowedLoop=nil;active=nil end
 			if recoveryBusy or os.clock()<nextRecovery then ownershipStatus:SetText("Recovery is running or cooling down.");return end
-			local ownRoot,char,hum=Hub.freeCharacterForTools()
+			local ownRoot,char,hum=Hub.freeCharacterForTools(allowedLoop)
 			if not ownRoot then ownershipStatus:SetText(tostring(char));return end
 			local grab=ReplicatedStorage:FindFirstChild("GrabEvents")
 			local remote=grab and grab:FindFirstChild("SetNetworkOwner")
@@ -16341,10 +16399,10 @@ do
 			recoveryFinish=finish
 			local build=session
 			if build then build.paused=true;enabledControllers(false) end
-			local function valid()
+			local function valid(model)
 				local held=Player:FindFirstChild("IsHeld")
-				for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return false end end
-				return Hub.alive and ticket==recoveryGeneration and Player.Character==char and ownRoot.Parent==char
+				for key,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and key~=allowedLoop then return false end end
+				return (not active or active()) and (not model or recoveryModels()[model]) and Hub.alive and ticket==recoveryGeneration and Player.Character==char and ownRoot.Parent==char
 					and hum.Parent==char and hum.Health>0 and not hum.SeatPart and not ownRoot.Anchored
 					and not (held and held.Value) and not Hub.interactionVisitLock and not Hub.safeZoneLoopActive
 					and not Hub.characterFlightActive and not Hub.blobFlightActive
@@ -16357,9 +16415,9 @@ do
 						if not valid() then return end
 						local roots=Hub.inspectOwnBuildToy(entry.model,true)
 						local root=entry.root
-						if roots and table.find(roots,root) and (Hub.teleportFrame(root).Position-Hub.teleportFrame(ownRoot).Position).Magnitude<=30 then
+						if valid(entry.model) and roots and table.find(roots,root) and (Hub.teleportFrame(root).Position-Hub.teleportFrame(ownRoot).Position).Magnitude<=30 then
 							for _=1,2 do
-								if not valid() or not root.Parent or (Hub.teleportFrame(root).Position-Hub.teleportFrame(ownRoot).Position).Magnitude>30 then break end
+								if not valid(entry.model) or not root.Parent or (Hub.teleportFrame(root).Position-Hub.teleportFrame(ownRoot).Position).Magnitude>30 then break end
 								if locallyOwned(root) then break end
 								local aim=Hub.safeLookAt(Hub.teleportFrame(ownRoot).Position+Vector3.new(0,1.593,0),Hub.teleportFrame(root).Position)
 								if not aim then break end
@@ -18160,6 +18218,21 @@ end)
 
 
 
+-- Loop own-toy recovery reuses the bounded, nearby-only recovery transaction.
+TargetGroup:AddToggle("LoopOwnToyRecovery",{Text="Own toy ownership recovery",Default=false,Callback=function(on)
+	local running,_,onCleanup,bindWorker=Hub.beginTargetLoop("LoopOwnToyRecovery",on);Hub.requestSave()
+	if not on then return end
+	onCleanup(function() if Hub.cancelOwnToyRecovery then Hub.cancelOwnToyRecovery() end end)
+	local worker=task.spawn(function()
+		while running() do
+			if Hub.recoverOwnToyOwnership then Hub.recoverOwnToyOwnership("LoopOwnToyRecovery",running) end
+			local deadline=os.clock()+3
+			repeat task.wait(0.1) until not running() or os.clock()>=deadline
+		end
+	end)
+	bindWorker(worker)
+end})
+
 -- BEGIN LOOP SELECTOR UI
 -- Existing callbacks/IDs remain the action implementations and saved enabled state.
 do
@@ -18168,7 +18241,8 @@ do
 			{"Kill","LoopKillToggle"}, {"Kill all","LoopKillToggleAll"},
 			{"Kick (spam grab)","LoopKickToggle"}, {"Blob kick (grab + blob)","LoopKickToggle2"},
 			{"Blob kick (dual hand)","DualHandLoopKick"}, {"Fling","PlayerFlingBtn"},
-			{"Remove Gucci","DestroyTargetGucci"}, {"Bring all","BringAllGrab"},
+			{"Remove Gucci","DestroyTargetGucci"}, {"Bring selected","LoopBringSelected"}, {"Bring all","BringAllGrab"},
+			{"Own toy ownership recovery","LoopOwnToyRecovery"},
 			{"Grab Anti Kick","DestroyAntiKickToggle"}, {"Anti Anti Input Lag","AntiAntiInputLag"},
 		}
 		local names,byName,hidden={},{},{}

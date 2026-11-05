@@ -151,3 +151,15 @@ Reviewed the remaining loop modes using the supplied Blitz handshakes and Resona
 - Grab Anti Kick now refreshes SetNetworkOwner at use time and binds its worker to the loop lifecycle.
 
 Automated validation: full Luau compilation; mocked exact collision/noclip restoration, Fling target loss and respawn, confirmed three-frame Bring All without persistent movers, protected-target exclusion, attached-item scope/off/timeout/selection changes, dual-hand delayed handshake cancellation and error cleanup. Existing masking, Terrain water, loop selector, commands, Gucci and Blitz kill regression checks pass. Live remote acceptance and gameplay outcomes are unverified in Roblox.
+
+
+### New loop modes: selected Bring and own-toy recovery
+
+Two modes are added to the existing Loop type dropdown:
+
+- **Bring selected** rotates through selected players, confirms ownership, and uses the short three-frame bring/release sequence. The destination follows your current anchor between attempts. No selection means no action; protected or invalid targets are skipped. Stop/respawn cancels the worker, releases its requested grab ownership and restores only the same local character.
+- **Own toy ownership recovery** repeats the existing nearby recovery routine at a three-second polling interval. Choose a toy or named group under Objects & Toys → My Toy Manager and Groups. Only eligible assemblies in your own spawned-toy folder, within 30 studs, are considered; a transaction handles at most 12 assemblies with up to two requests each. Rigs, seats, external assemblies, other active movement controllers, missiles and Gucci's reserved vehicle remain excluded. It never teleports.
+
+The own-recovery mode has a narrow exception to the free-character action-loop gate so it does not block itself; other active action loops still block it. Selection changes are rechecked before each request. Stopping cancels pending recovery and releases any build pause it owned. Both modes use existing saved IDs/selector lifecycle and are mutually exclusive with the other dropdown modes.
+
+Validation: full Luau compilation; mocked selected-only Bring/release, stop and protected-target checks; recovery cadence/off/respawn; own-loop gate exception and other-loop blocking; current selection validation and build-pause release. Existing selector and own-toy eligibility/range/cancellation/error checks pass. In-game ownership acceptance and gameplay results remain unverified.
