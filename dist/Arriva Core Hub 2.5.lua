@@ -5689,129 +5689,519 @@ TargetGroup:AddToggle("LoopKickToggle", {
 
 
 
--- Loop Kill selected players
--- Shared lifecycle for selected/all kill modes: bounded attempts and immediate cleanup.
+-- BEGIN RESONANCE KILL MODULE
+-- Original function bodies below; adapters connect remotes, cleanup and target selection.
 do
-	local activeRun
-	local function cleanupAttempt(run)
-		if not run or not run.attempt then return end
-		local attempt = run.attempt
-		run.attempt = nil
-		for part, original in pairs(attempt.collisions) do
-			pcall(function()
-				if part.Parent then
-					if noclipEnabled then part.CanCollide = false else part.CanCollide = original end
+	(function()
+		local workspace=Workspace
+		local localPlayer=Player
+		local nativeRunService=RunService
+		local flag11=false
+		local tbl7={States={},PartOwnerCache=setmetatable({}, {__mode="k"}),BrokenPlots={}}
+		local tbl8=setmetatable({PositionPrediction=false,DirectGrab=false},{__index=function(_,key)
+			if key=="DestroyVoid" then return Toggles.SourceDisableVoid and Toggles.SourceDisableVoid.Value end
+		end})
+		local tbl9={}
+		local tbl16=setmetatable({}, {__mode="k"})
+		local tbl12={}
+		local toggles={}
+		local fallenPartsDestroyHeight=Workspace.FallenPartsDestroyHeight
+		local binding,view,context
+		local function restoreView()
+			if binding then nativeRunService:UnbindFromRenderStep(binding);binding=nil end
+			if view then
+				if Player.Character==view.char and view.root.Parent==view.char and view.head.Parent==view.char then
+					view.root.CFrame=view.rootFrame;view.head.CFrame=view.headFrame
 				end
-			end)
+				view=nil
+			end
 		end
-		if Player.Character == attempt.character and attempt.root.Parent == attempt.character then
-			attempt.root.CFrame = attempt.position
-			attempt.root.AssemblyLinearVelocity = Vector3.zero
-			attempt.root.AssemblyAngularVelocity = Vector3.zero
+		local RunService=setmetatable({}, {__index=function(_,key)
+			if key=="BindToRenderStep" then return function(_,name,priority,callback)
+				local char,root=tbl12.Char();local head=char and char:FindFirstChild("Head")
+				view={char=char,root=root,head=head,rootFrame=root.CFrame,headFrame=head.CFrame}
+				binding="ArrivaKill:"..name
+				nativeRunService:BindToRenderStep(binding,priority,function()
+					if view and Player.Character==view.char then callback() end
+				end)
+			end end
+			if key=="UnbindFromRenderStep" then return function(_,name) restoreView() end end
+			if key=="Heartbeat" then return {Wait=function() return nativeRunService.Heartbeat:Wait() end,Connect=function(_,callback)
+				local char=Player.Character
+				local connection
+				connection=Hub.connect(nativeRunService.Heartbeat,function()
+					if flag11 or Player.Character~=char then connection:Disconnect();return end
+					callback()
+				end)
+				if context then table.insert(context.connections,connection) end
+				return connection
+			end} end
+			return nativeRunService[key]
+		end})
+		local function remote(name,folder)
+			return {FireServer=function(_,...) local group=folder=="Player" and Player or ReplicatedStorage:FindFirstChild(folder or "GrabEvents");local event=group and group:FindFirstChild(name);if event then Hub.fire(event,...) end end}
 		end
-	end
-	local function stopRun(run)
-		if not run then return end
-		run.enabled = false
-		cleanupAttempt(run)
-	end
-	local function nextAll(run)
-		local candidates = {}
-		for _, target in ipairs(Players:GetPlayers()) do
-			if Hub.loopTargetReady(target) then table.insert(candidates, target) end
+		local tbl11={SetNetworkOwner=remote("SetNetworkOwner"),DestroyGrabLine=remote("DestroyGrabLine"),StickyPartEvent=remote("StickyPartEvent","Player")}
+		tbl12.Char=function(who)
+			local char=(who or Player).Character
+			return char,char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart")),char and char:FindFirstChildOfClass("Humanoid")
 		end
-		table.sort(candidates, function(a, b) return a.UserId < b.UserId end)
-		local nextTarget = candidates[1]
-		for _, target in ipairs(candidates) do
-			if target.UserId > run.cursor then nextTarget = target; break end
+		tbl12.GetMagnitude=function(a,b) return (a.Position-b.Position).Magnitude end
+		tbl12.FindNicePart=function(model) return model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart",true) end
+		-- The imported object manager has no entries for player characters in this hub.
+		tbl12.ReleaseObject=function() end
+		tbl12.ClearObjectAura=function(model)
+			for asset,target in pairs(Hub.assetTargets) do
+				if target and (target==model or target:IsDescendantOf(model)) and asset:IsA("BodyMover") then asset:Destroy();Hub.assetTargets[asset]=nil;Hub.instances[asset]=nil end
+			end
 		end
-		if nextTarget then run.cursor = nextTarget.UserId end
-		return nextTarget
-	end
-	local function start(key, on, all)
-		local running = Hub.beginTargetLoop(key, on)
-		Hub.requestSave()
-		if key == "LoopKillToggle" then loopKillEnabled = on else loopKillEnabledAll = on end
-		if not on then
-			if activeRun and activeRun.key == key then stopRun(activeRun); activeRun = nil end
-			return
-		end
-		if activeRun then
-			local previous = activeRun
-			stopRun(previous)
-			activeRun = nil
-			if previous.key ~= key and Toggles[previous.key] then Toggles[previous.key]:SetValue(false) end
-		end
-		local run = {key = key, enabled = true, cursor = 0}
-		activeRun = run
-		local function live() return run.enabled and activeRun == run and running() end
-		task.spawn(function()
-			while live() do
-				local target = all and nextAll(run) or Hub.nextLoopTarget("loopKill")
-				local char = Player.Character
-				local root = char and char:FindFirstChild("HumanoidRootPart")
-				local hum = char and char:FindFirstChildOfClass("Humanoid")
-				local targetChar = target and target.Character
-				local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
-				local targetHum = targetChar and targetChar:FindFirstChildOfClass("Humanoid")
-				local function valid()
-					return live() and Player.Character == char and root and root.Parent == char
-						and hum and hum.Health > 0 and not Hub.blobFlightActive and not Hub.safeZoneLoopActive
-						and targetRoot and targetRoot.Parent == targetChar and Hub.loopTargetReady(target, targetChar)
-						and (all or Hub.isSelectedTarget(target))
+		tbl12.SpawnToy = function(...) local helper=Hub.sourceGucci and Hub.sourceGucci.helpers;return helper and helper.SpawnToy(...) end
+		tbl12.DestroyToy=function(model) if typeof(model)~="Instance" then return end;local helper=Hub.sourceGucci and Hub.sourceGucci.helpers;if helper then helper.DestroyToy(model) end end
+		tbl12.IsPartOwner = function(arg)
+				if not (arg and arg:IsA("BasePart")) then
+					return
 				end
-				if not valid() then task.wait(0.2); continue end
-				local attempt = {character = char, root = root, position = root.CFrame, collisions = {}}
-				run.attempt = attempt
-				local ok, err = xpcall(function()
-					local deadline = os.clock() + 0.75
-					for _ = 1, 15 do
-						if not valid() or os.clock() >= deadline then break end
-						for _, part in ipairs(char:GetDescendants()) do
-							if part:IsA("BasePart") then
-								if attempt.collisions[part] == nil then attempt.collisions[part] = part.CanCollide end
-								part.CanCollide = false
+				local v24 = tbl7.PartOwnerCache[arg]
+				if v24 and v24.Parent then
+					return v24.Value == localPlayer.Name
+				end
+				local parent2 = arg.Parent
+				local head = arg.Name == "HumanoidRootPart" and parent2 and parent2:FindFirstChild("Head")
+				head = head and head:FindFirstChild("PartOwner")
+				if head and head.Value == localPlayer.Name then
+					tbl7.PartOwnerCache[arg] = head
+					return true
+				end
+				local partOwner = arg:FindFirstChild("PartOwner")
+				if partOwner and partOwner.Value == localPlayer.Name then
+					tbl7.PartOwnerCache[arg] = partOwner
+					return true
+				end
+				parent2 = parent2 and parent2:FindFirstChild("PartOwner", true)
+				if parent2 then
+					tbl7.PartOwnerCache[arg] = parent2
+					return parent2.Value == localPlayer.Name
+				end
+				return false
+			end
+
+		tbl12.PredictCFrame = function(arg, arg2)
+				local cFrame2 = arg2 or arg.CFrame
+				if not tbl8.PositionPrediction then
+					return cFrame2
+				end
+				local n36 = math.clamp(localPlayer:GetNetworkPing(), 0, 0.35)
+				return cFrame2 + tbl12.GetCustomVelocity(arg) * n36
+			end
+
+		tbl12.Grab = function(arg, arg2)
+				local v24, v25, v26 = tbl12.Char()
+				if not v25 or not v26 or v26.Health == 0 or not arg or not arg.Parent or not arg:IsA("BasePart") then
+					return
+				end
+				local n36 = (arg2 or v25.CFrame) * CFrame.new(0, 1.593, 0)
+				local cframe = tbl12.PredictCFrame(arg)
+
+				if not tbl8.DirectGrab then
+					cframe = CFrame.new(n36.Position, cframe.Position)
+				end
+
+				tbl11.SetNetworkOwner:FireServer(arg, cframe)
+			end
+
+		tbl12.SNO = function(arg, arg2, arg3)
+				local v24, v25, v26 = tbl12.Char()
+				local head = v24 and v24:FindFirstChild("Head")
+				local ragdolled = v26 and v26:FindFirstChild("Ragdolled")
+				if not (head and ragdolled and v25 and v26 and v26.Health > 0) then
+					return false
+				end
+
+				if not arg or not arg:IsA("BasePart") or not arg.Parent or tbl12.GetMagnitude(arg, workspace.SpawnLocation) > 10000000 then
+					return false
+				end
+
+				if tbl12.IsPartOwner(arg) then
+					return true
+				end
+
+				if tbl7.States.Owning or arg3 and not arg3() then
+					return false
+				end
+				local flag12 = false
+				local cframe = CFrame.new()
+				local cframe2 = CFrame.new()
+				local cframe3 = CFrame.new()
+				local connection = nil
+
+				if (v25.Position - arg.Position).Magnitude >= 31 then
+					flag12 = true
+				end
+
+				local flag13 = arg.Name == "HumanoidRootPart" or arg.Name == "Torso"
+				local v27 = nil
+
+				if flag13 then
+					local v28 = Players:FindFirstChild(arg.Parent.Name)
+					v27 = nil
+
+					if v28 then
+						local v29, v30, v31 = tbl12.Char(v28)
+						if not v31 or v31.Health == 0 then
+							return false
+						end
+						local inPlot2 = v28:FindFirstChild("InPlot")
+						inPlot2 = inPlot2 and inPlot2.Value == true
+						v27 = nil
+
+						if inPlot2 then
+							v27 = tbl12.BreakPlot(v28)
+							if not v27 then
+								return false
 							end
 						end
-						-- Move into ownership range before requesting it, rather than wasting the first pass.
-						local offset = targetRoot.Position.Y <= -12 and Vector3.new(0, 5, -15) or Vector3.new(0, -10, -10)
-						root.CFrame = CFrame.new(targetRoot.Position + offset)
-						root.AssemblyLinearVelocity = Vector3.zero
-						SNOWship(targetRoot)
-						if not valid() then break end
-						if (CheckNetworkOwnerShipOnPlayer and CheckNetworkOwnerShipOnPlayer(target))
-							or targetRoot.AssemblyLinearVelocity.Magnitude > 500 then
-							if not valid() then break end
-							local events = ReplicatedStorage:FindFirstChild("GrabEvents")
-							local drop = events and events:FindFirstChild("DestroyGrabLine")
-							if drop then Hub.fire(drop, targetRoot) end
-							if valid() then CreateSkyVelocity(targetRoot) end
-							break
-						end
-						if not valid() then break end
-						if Hub.canAffect(targetHum) then
-							targetHum:ChangeState(Enum.HumanoidStateType.Dead)
-							targetHum.Jump, targetHum.Sit = true, false
-						end
-						task.wait(0.05)
 					end
-				end, debug.traceback)
-				cleanupAttempt(run)
-				if not ok and live() then
-					Hub.lastKillLoopError = tostring(err)
-					warn("[Arriva kill loop] " .. tostring(err))
+				end
+
+				tbl7.States.Owning = true
+
+				local function fn21()
+					cframe2 = v25.CFrame
+					cframe = head.CFrame
+					cframe3 = v25.CFrame
+
+					RunService:BindToRenderStep("RSCClient", Enum.RenderPriority.Camera.Value - 1, function()
+						v25.CFrame = cframe2
+						head.CFrame = cframe
+					end)
+
+					connection = RunService.Heartbeat:Connect(function()
+						cframe2 = v25.CFrame
+						cframe = head.CFrame
+						v25.CFrame = cframe3
+						head.CFrame = cframe3
+					end)
+				end
+
+				local function fn22()
+					RunService:UnbindFromRenderStep("RSCClient")
+
+					if connection then
+						connection:Disconnect()
+						connection = nil
+					end
+
+					head.CFrame = cframe
+					v25.CFrame = cframe2
+				end
+
+				local ok, result = pcall(function()
+					if flag12 then
+						fn21()
+					end
+
+					arg2 = arg2 or 0.65
+					local now3 = tick()
+
+					while not flag11 and arg.Parent and not tbl12.IsPartOwner(arg) and v26.Health ~= 0 and v25.Parent and (not arg3 or arg3()) and tick() - now3 < arg2 do
+						if flag12 then
+							cframe3 = tbl12.PredictCFrame(arg) - Vector3.new(0, 22, 0)
+						end
+
+						RunService.Heartbeat:Wait()
+						local grab = tbl12.Grab
+						local v28
+
+						if flag12 then
+							v28 = cframe3
+						else
+							v28 = nil
+						end
+
+						grab(arg, v28)
+					end
+				end)
+
+				if flag12 then
+					pcall(fn22)
+				end
+
+				if v27 then
+					task.delay(1, tbl12.DestroyToy, v27)
+				end
+
+				tbl7.States.Owning = false
+				if not ok then
+					return warn(result)
+				end
+				return tbl12.IsPartOwner(arg)
+			end
+
+		tbl12.WhichPlot = function(arg)
+				local plots = workspace:FindFirstChild("Plots")
+				if not plots then
+					return
+				end
+
+				for _, child in pairs(plots:GetChildren()) do
+					local plotArea = child:FindFirstChild("PlotArea")
+					if not plotArea then
+						continue
+					end
+					local partsInPart = workspace:GetPartsInPart(plotArea)
+
+					for _, v24 in pairs(partsInPart) do
+						if Players:GetPlayerFromCharacter(v24.Parent) == arg then
+							local inOwnedPlot2 = arg:FindFirstChild("InOwnedPlot")
+							return child, inOwnedPlot2 and inOwnedPlot2.Value
+						end
+					end
+				end
+			end
+
+		tbl12.BreakPlot = function(arg)
+				local inPlot2 = nil
+
+				if arg:IsA("Player") then
+					inPlot2 = arg:FindFirstChild("InPlot")
+					if not inPlot2 then
+						return
+					end
+					arg = tbl12.WhichPlot(arg)
+					if not arg then
+						return
+					end
+				end
+
+				if tbl7.BrokenPlots[arg.Name] then
+					return true
+				end
+				local plotArea = arg:FindFirstChild("PlotArea")
+				if not plotArea then
+					return
+				end
+				local NinjaShuriken = tbl12.SpawnToy("NinjaShuriken")
+				if not NinjaShuriken then
+					return
+				end
+				local stickyPart = NinjaShuriken and NinjaShuriken:WaitForChild("StickyPart", 0.4)
+				local stickyWeld = stickyPart and stickyPart:WaitForChild("StickyWeld", 0.4)
+				local cframe = CFrame.new(1099511627776, 1099511627776, 1099511627776)
+
+				if arg.Name == "Plot5" then
+					cframe = CFrame.new(2147483648, 2147483648, 2147483648)
+				end
+
+				if not stickyWeld or not tbl12.SNO(stickyPart) then
+					return
+				end
+				tbl11.StickyPartEvent:FireServer(stickyPart, plotArea, cframe)
+				local now3 = tick()
+
+				while true do
+					task.wait()
+					if not (stickyWeld.Part1 == plotArea and (not inPlot2 or not inPlot2.Value) or not stickyWeld.Parent or tick() - now3 > 0.8) then
+						continue
+					end
+					break
+				end
+
+				if not stickyWeld.Parent or stickyWeld.Part1 ~= plotArea or inPlot2 and inPlot2.Value == true then
+					if NinjaShuriken then
+						tbl12.DestroyToy(NinjaShuriken)
+					end
+
+					return false
+				end
+
+				tbl7.BrokenPlots[arg.Name] = NinjaShuriken
+
+				NinjaShuriken.Destroying:Once(function()
+					tbl7.BrokenPlots[arg.Name] = nil
+				end)
+
+				return NinjaShuriken
+			end
+
+		tbl12.PivotTo = function(arg, arg2, arg3, arg4)
+				if not arg or not arg:IsA("Model") or typeof(arg2) ~= "CFrame" then
+					return false
+				end
+				local n36 = arg2 * arg:GetPivot():Inverse()
+				arg3 = arg3 or arg:QueryDescendants("BasePart")
+				arg4 = arg4 or {}
+				table.clear(arg4)
+
+				for i, v24 in ipairs(arg3) do
+					local assemblyRootPart = v24:IsDescendantOf(arg) and v24.AssemblyRootPart
+
+					if assemblyRootPart and not v24.Anchored and not assemblyRootPart.Anchored then
+						arg4[i] = n36 * v24.CFrame
+					end
+				end
+
+				for k, v24 in pairs(arg4) do
+					arg3[k].CFrame = v24
+				end
+
+				return true
+			end
+
+		tbl12.DestroyObject = function(arg, arg2)
+				if not arg or not arg:IsA("Model") then
+					return
+				end
+				arg2 = arg2 or tbl12.FindNicePart(arg)
+				if not arg2 or arg2.Anchored or not tbl12.SNO(arg2) then
+					return
+				end
+				tbl12.ReleaseObject(arg)
+				tbl12.ClearObjectAura(arg)
+
+				if toggles.DisblVoid then
+					toggles.DisblVoid:SetDisabled(true)
+				end
+
+				workspace.FallenPartsDestroyHeight = fallenPartsDestroyHeight
+				tbl12.PivotTo(arg, CFrame.new(0, -11111, 0))
+
+				if tbl9.DestroyThread then
+					task.cancel(tbl9.DestroyThread)
+				end
+
+				tbl9.DestroyThread = task.delay(math.clamp(localPlayer:GetNetworkPing() + 0.05, 0.08, 0.25), function()
+					workspace.FallenPartsDestroyHeight = -10000
+					task.wait()
+					local v22 = workspace
+					local fallenPartsDestroyHeight2
+
+					if tbl8.DestroyVoid then
+						fallenPartsDestroyHeight2 = (0/0)
+					else
+						fallenPartsDestroyHeight2 = -100
+					end
+
+					v22.FallenPartsDestroyHeight = fallenPartsDestroyHeight2
+
+					if toggles.DisblVoid then
+						toggles.DisblVoid:SetDisabled(false)
+					end
+
+					tbl9.DestroyThread = nil
+				end)
+
+				task.delay(0.5, tbl12.RNO, arg2)
+				return true
+			end
+
+		tbl12.ClearDestroyObjects = function()
+				if tbl9.DestroyThread then
+					task.cancel(tbl9.DestroyThread)
+					tbl9.DestroyThread = nil
+				end
+
+				local v22 = workspace
+				local fallenPartsDestroyHeight2
+
+				if tbl8.DestroyVoid then
+					fallenPartsDestroyHeight2 = (0/0)
+				else
+					fallenPartsDestroyHeight2 = -100
+				end
+
+				v22.FallenPartsDestroyHeight = fallenPartsDestroyHeight2
+			end
+
+		tbl12.Kill = function(arg)
+				local v22, v23, v24 = tbl12.Char(arg)
+
+				if v24 and v24.Health ~= 0 and v23 and tbl12.GetMagnitude(workspace.SpawnLocation, v23) < 15000 and not tbl16[v22] then
+					v24.BreakJointsOnDeath = false
+					v24:ChangeState(Enum.HumanoidStateType.Dead)
+					tbl12.DestroyObject(v22, v23)
+					tbl16[v22] = true
+
+					task.delay(1, function()
+						tbl16[v22] = nil
+					end)
+				end
+			end
+		tbl12.RNO = function(arg)
+				tbl11.DestroyGrabLine:FireServer(arg)
+			end
+		local sourceSNO=tbl12.SNO
+		tbl12.SNO=function(part,seconds,valid)
+			local current=context
+			local result=sourceSNO(part,seconds,function()
+				return not flag11 and current and context==current and current.valid() and (not valid or valid()) and Hub.canAffect(part)
+			end)
+			return current and context==current and current.valid() and result or false
+		end
+		Hub.stopResonanceKill=function()
+			flag11=true
+			if context then for _,connection in ipairs(context.connections) do connection:Disconnect();Hub.connections[connection]=nil end end
+			restoreView();tbl7.States.Owning=false
+			tbl12.ClearDestroyObjects()
+			-- Keep an in-flight caller exclusive until its original SNO unwinds.
+		end
+		Hub.resonanceKill=function(target,valid)
+			if context or not valid() or not Hub.canHarm(target) then return end
+			flag11=false;context={valid=valid,connections={}}
+			local ok,message=pcall(tbl12.Kill,target)
+			for _,connection in ipairs(context and context.connections or {}) do connection:Disconnect();Hub.connections[connection]=nil end
+			restoreView();tbl7.States.Owning=false;context=nil
+			if not ok then error(message,0) end
+		end
+		Hub.cleanup(function() Hub.stopResonanceKill();Hub.resonanceKill=nil;Hub.stopResonanceKill=nil end)
+	end)()
+end
+-- END RESONANCE KILL MODULE
+
+-- Loop Kill selected players
+-- The original kill helper owns acquisition/movement; this wrapper only schedules targets.
+do
+	local activeRun
+	local function stopRun(run)
+		if not run then return end
+		run.enabled=false
+		if Hub.stopResonanceKill then Hub.stopResonanceKill() end
+	end
+	local function nextAll(run)
+		local candidates={}
+		for _,target in ipairs(Players:GetPlayers()) do if Hub.loopTargetReady(target) then table.insert(candidates,target) end end
+		table.sort(candidates,function(a,b) return a.UserId<b.UserId end)
+		local nextTarget=candidates[1]
+		for _,target in ipairs(candidates) do if target.UserId>run.cursor then nextTarget=target;break end end
+		if nextTarget then run.cursor=nextTarget.UserId end
+		return nextTarget
+	end
+	local function start(key,on,all)
+		local running=Hub.beginTargetLoop(key,on);Hub.requestSave()
+		if key=="LoopKillToggle" then loopKillEnabled=on else loopKillEnabledAll=on end
+		if not on then if activeRun and activeRun.key==key then stopRun(activeRun);activeRun=nil end;return end
+		if activeRun then local previous=activeRun;stopRun(previous);activeRun=nil;if previous.key~=key and Toggles[previous.key] then Toggles[previous.key]:SetValue(false) end end
+		local run={key=key,enabled=true,cursor=0};activeRun=run
+		local function live() return run.enabled and activeRun==run and running() end
+		task.spawn(function()
+			while live() do
+				local target=all and nextAll(run) or Hub.nextLoopTarget("loopKill")
+				local char=Player.Character;local targetChar=target and target.Character
+				local function valid()
+					return live() and Player.Character==char and target and target.Character==targetChar
+						and Hub.loopTargetReady(target,targetChar) and (all or Hub.isSelectedTarget(target))
+						and not Hub.blobFlightActive and not Hub.safeZoneLoopActive and not Hub.gucciCharacterBusy(char)
+				end
+				if valid() and Hub.resonanceKill then
+					local ok,message=pcall(Hub.resonanceKill,target,valid)
+					if not ok then Hub.lastKillLoopError=tostring(message);warn("[Resonance kill] "..tostring(message)) end
 				end
 				if live() then task.wait(0.1) end
 			end
-			cleanupAttempt(run)
 		end)
 	end
-	TargetGroup:AddToggle("LoopKillToggle", {Text = "Loop kill", Default = false,
-		Callback = function(on) start("LoopKillToggle", on, false) end})
-	-- Loop Kill All
-	TargetGroup:AddToggle("LoopKillToggleAll", {Text = "Loop kill All", Default = false,
-		Callback = function(on) start("LoopKillToggleAll", on, true) end})
-	Hub.cleanup(function() stopRun(activeRun); activeRun = nil end)
+	TargetGroup:AddToggle("LoopKillToggle",{Text="Loop kill",Default=false,Callback=function(on) start("LoopKillToggle",on,false) end})
+	TargetGroup:AddToggle("LoopKillToggleAll",{Text="Loop kill All",Default=false,Callback=function(on) start("LoopKillToggleAll",on,true) end})
+	Hub.cleanup(function() stopRun(activeRun);activeRun=nil end)
 end
 -- End kill loop lifecycle
 
