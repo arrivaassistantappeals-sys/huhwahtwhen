@@ -11789,14 +11789,13 @@ do
 						or (hum.SeatPart and hum.SeatPart~=record.Seat) and "Character entered another seat."
 						or "Original controller validity changed or Gucci was stopped."
 					Hub.gucciLastInterruption=reason
-					-- A disturbed active toy can retain stale seat/controller state. Rebuild it once.
-					record.RebuildRequired=record.Type~="Train"
 				end
 				record.Confirmed=false
 				if Hub.gucciVerifiedRun==record then Hub.gucciVerifiedRun=nil end
 				if Hub.gucciSeatRun==record then Hub.gucciSeatRun=nil end
 				if Hub.gucciSetupCharacter==record.Char then Hub.gucciSetupCharacter=nil end
-				if announce and wasActive and Hub.alive and tbl8.GucciAntiGrab and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying","Gucci interrupted: "..tostring(Hub.gucciLastInterruption)) end
+				if announce and wasActive and Hub.alive and tbl8.GucciAntiGrab and Player.Character==record.Char
+					and record.Hum and record.Hum.Parent==record.Char and record.Hum.Health>0 and Hub.reportGucciStatus then Hub.reportGucciStatus("Retrying","Gucci interrupted: "..tostring(Hub.gucciLastInterruption)) end
 			end
 			local function publishGucciCompletion(record,isValid,weldObserved)
 				if not weldObserved or not isValid() or Player.Character~=record.Char then return end
@@ -11911,7 +11910,7 @@ do
 							n36 = os.clock() + 1
 						end
 
-						if tbl16 and (tbl16.RebuildRequired or tbl16.Type ~= gucciType or not tbl16.Vehicle.Parent or not tbl16.Seat.Parent or tbl16.Char ~= v24) then
+						if tbl16 and (tbl16.Type ~= gucciType or not tbl16.Vehicle.Parent or not tbl16.Seat.Parent or tbl16.Char ~= v24) then
 							fn23()
 						end
 
@@ -15388,7 +15387,8 @@ do
 			if phase=="Active" and (not tbl8.GucciAntiGrab or not proof or not proof.Confirmed or proof.Char~=Player.Character) then
 				phase="Verifying";message=nil
 			end
-			if phase~="Active" then Hub.gucciVerifiedRun=nil end
+			-- Reporting must not invalidate a controller-owned proof.
+			if (phase=="Retrying" or phase=="Verifying") and proof and proof.Confirmed and proof.Char==Player.Character then return end
 			Hub.gucciStage=phase
 			status:SetText("Gucci: "..phase)
 			if previousStatus then previousStatus() end
