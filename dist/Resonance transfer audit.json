@@ -1,0 +1,1200 @@
+[
+  {
+    "reference_id": "AutoRj",
+    "reference_label": "Auto Rejoin",
+    "reference_line": 35385,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "ResonanceAutoRejoin"
+    ]
+  },
+  {
+    "reference_id": "RejoinWithAntiLag",
+    "reference_label": "Join with Anti-Lag",
+    "reference_line": 35393,
+    "status": "Not imported: automatic anti-lag injection during reconnect is not installed.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "RejoinWithScript",
+    "reference_label": "Join with script",
+    "reference_line": 35402,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "ResonanceReloadAfterTeleport"
+    ]
+  },
+  {
+    "reference_id": "AutoServerHop",
+    "reference_label": "Auto Server-Hop",
+    "reference_line": 35494,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "ResonanceAutoHop"
+    ]
+  },
+  {
+    "reference_id": "FlyT",
+    "reference_label": "Flight",
+    "reference_line": 35551,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackCharacterFlight"
+    ]
+  },
+  {
+    "reference_id": "WalkspeedT",
+    "reference_label": "Walkspeed",
+    "reference_line": 35564,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SpeedModifierToggle"
+    ]
+  },
+  {
+    "reference_id": "JumpPowerT",
+    "reference_label": "Jump Power",
+    "reference_line": 35581,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "JumpModifierToggle"
+    ]
+  },
+  {
+    "reference_id": "SpinT",
+    "reference_label": "Character Spin",
+    "reference_line": 35590,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SpinToggle"
+    ]
+  },
+  {
+    "reference_id": "NoclipT",
+    "reference_label": "Noclip",
+    "reference_line": 35625,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SelfNoclipToggle"
+    ]
+  },
+  {
+    "reference_id": "InfJumpT",
+    "reference_label": "Inf Jump",
+    "reference_line": 35642,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "infJumpToggle"
+    ]
+  },
+  {
+    "reference_id": "JerkOffT",
+    "reference_label": "Jerk Off",
+    "reference_line": 35650,
+    "status": "Not imported: reference-specific animation macro.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "DesyncT",
+    "reference_label": "Position Desync",
+    "reference_line": 35692,
+    "status": "Not imported: executor/engine flag-based position desync; current Gucci remains separate.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "MakeSpawnLoc",
+    "reference_label": "Make Spawn Location",
+    "reference_line": 35724,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "ReturnToSpawnBookmark"
+    ]
+  },
+  {
+    "reference_id": "LoopTPToLoc",
+    "reference_label": "Loop TP to Location",
+    "reference_line": 35752,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "LoopTP"
+    ]
+  },
+  {
+    "reference_id": "LoopSpectatePlayer",
+    "reference_label": "Spectate Player",
+    "reference_line": 35775,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "LocalSpectatorEnabled"
+    ]
+  },
+  {
+    "reference_id": "LoopTPToPlayer",
+    "reference_label": "Loop TP to Player",
+    "reference_line": 35800,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SelfFollowEnabled"
+    ]
+  },
+  {
+    "reference_id": "LookFigures",
+    "reference_label": "Enabled",
+    "reference_line": 35834,
+    "status": "Not imported: separate rig-pose controller.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "LookFiguresPreview",
+    "reference_label": "Show Locally",
+    "reference_line": 35836,
+    "status": "Not imported: preview depends on the rig-pose controller.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "AnimationToggle",
+    "reference_label": "Toggle Animation",
+    "reference_line": 35948,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateAnimationEnabled"
+    ]
+  },
+  {
+    "reference_id": "ExtLineToggle",
+    "reference_label": "Toggle Extend Line",
+    "reference_line": 36000,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "ExtendToggle"
+    ]
+  },
+  {
+    "reference_id": "SupStrength",
+    "reference_label": "Super Strength",
+    "reference_line": 36022,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "ThrowStrengthToggle"
+    ]
+  },
+  {
+    "reference_id": "LineLagToggle",
+    "reference_label": "Line-Lag Server",
+    "reference_line": 36035,
+    "status": "Excluded: previously removed line flooder stays removed.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "CrazyLineToggle",
+    "reference_label": "Crazy Line",
+    "reference_line": 36069,
+    "status": "Not imported: separate remote line-spam controller.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "PacketLagToggle",
+    "reference_label": "Packet-Lag Server",
+    "reference_line": 36103,
+    "status": "Excluded: previously removed packet flooder stays removed.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "ToggleGrabs",
+    "reference_label": "Toggle Grabs",
+    "reference_line": 36263,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "KillGrabToggle",
+      "ToolSpinGrab"
+    ]
+  },
+  {
+    "reference_id": "ToggleAuras",
+    "reference_label": "Toggle Auras",
+    "reference_line": 36333,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "Deathaura",
+      "FlingAura"
+    ]
+  },
+  {
+    "reference_id": "AuraVisualizer",
+    "reference_label": "Show Aura Radius",
+    "reference_line": 36342,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PlayerAuraRangePreview"
+    ]
+  },
+  {
+    "reference_id": "ExcludeT",
+    "reference_label": "Exclude Targets",
+    "reference_line": 36358,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "WhitelistFriends"
+    ]
+  },
+  {
+    "reference_id": "ToggleTAuras",
+    "reference_label": "Toggle Toy Auras",
+    "reference_line": 36412,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "CreativeAuraEnabled"
+    ]
+  },
+  {
+    "reference_id": "ToyAuraVisualizer",
+    "reference_label": "Show Toy Aura Radius",
+    "reference_line": 36422,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "CreativeAuraRangePreview"
+    ]
+  },
+  {
+    "reference_id": "AntiGrab",
+    "reference_label": "Anti Grab",
+    "reference_line": 36442,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AntiGrabObsidian",
+      "AntiGrabType"
+    ]
+  },
+  {
+    "reference_id": "GucciAntiGrab",
+    "reference_label": "[GUCCI] Anti Grab",
+    "reference_line": 36452,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AutoGucciBlobToggle",
+      "SourceGucciVehicle"
+    ]
+  },
+  {
+    "reference_id": "AntiBlobman",
+    "reference_label": "Anti Blobman",
+    "reference_line": 36467,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AntiBlobmanToggle"
+    ]
+  },
+  {
+    "reference_id": "AntiInputLag",
+    "reference_label": "Anti Network Ownership",
+    "reference_line": 36476,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AntiInputLag"
+    ]
+  },
+  {
+    "reference_id": "AntiExplosion",
+    "reference_label": "Anti Explosion",
+    "reference_line": 36491,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AntiExplosionToggle"
+    ]
+  },
+  {
+    "reference_id": "AntiBurn",
+    "reference_label": "Anti Burn",
+    "reference_line": 36500,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AntiBurnToggle"
+    ]
+  },
+  {
+    "reference_id": "AntiVoid",
+    "reference_label": "Anti Void",
+    "reference_line": 36509,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AntiVoidToggle"
+    ]
+  },
+  {
+    "reference_id": "AntiKick",
+    "reference_label": "Anti Kick",
+    "reference_line": 36518,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "ShurikenAntiKick"
+    ]
+  },
+  {
+    "reference_id": "AntiKick2",
+    "reference_label": "[Break PCLD] Anti Kick",
+    "reference_line": 36528,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceBreakPCLD"
+    ]
+  },
+  {
+    "reference_id": "AntiSticky",
+    "reference_label": "Anti Sticky",
+    "reference_line": 36537,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AntiStickyToggle"
+    ]
+  },
+  {
+    "reference_id": "AntiSnowball",
+    "reference_label": "Anti Snowball",
+    "reference_line": 36576,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceAntiSnowball"
+    ]
+  },
+  {
+    "reference_id": "AntiBanana",
+    "reference_label": "Anti Banana",
+    "reference_line": 36593,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceAntiBanana"
+    ]
+  },
+  {
+    "reference_id": "AntiPaint",
+    "reference_label": "Anti Paint",
+    "reference_line": 36602,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PaintDeleteToggle"
+    ]
+  },
+  {
+    "reference_id": "AntiPoison",
+    "reference_label": "Anti Poison",
+    "reference_line": 36648,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivatePoisonTouch"
+    ]
+  },
+  {
+    "reference_id": "AntiLag",
+    "reference_label": "Anti Lag",
+    "reference_line": 36674,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AntiLagToggle"
+    ]
+  },
+  {
+    "reference_id": "AutoAntiLag",
+    "reference_label": "Auto Anti Lag",
+    "reference_line": 36710,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceLowFpsAntiLag"
+    ]
+  },
+  {
+    "reference_id": "AntiInvis",
+    "reference_label": "Anti Invis",
+    "reference_line": 36719,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceAntiInvis"
+    ]
+  },
+  {
+    "reference_id": "AutoReset",
+    "reference_label": "Auto Reset",
+    "reference_line": 36751,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AutoResetToggle"
+    ]
+  },
+  {
+    "reference_id": "LoopTP",
+    "reference_label": "Loop TP",
+    "reference_line": 36760,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "LoopTP"
+    ]
+  },
+  {
+    "reference_id": "DisblVoid",
+    "reference_label": "Disable Void",
+    "reference_line": 36801,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceDisableVoid"
+    ]
+  },
+  {
+    "reference_id": "WaterWalk",
+    "reference_label": "Water Walk",
+    "reference_line": 36817,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "WaterWalkToggle"
+    ]
+  },
+  {
+    "reference_id": "DeleteBarriers",
+    "reference_label": "Noclip Barrier",
+    "reference_line": 36856,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceNoclipBarrier"
+    ]
+  },
+  {
+    "reference_id": "OtherInvCollisions",
+    "reference_label": "Anti-Fling [Objects Noclip]",
+    "reference_line": 36879,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceAntiObjectFling"
+    ]
+  },
+  {
+    "reference_id": "CAToggle",
+    "reference_label": "Counter Attack",
+    "reference_line": 36936,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AutoAttacker"
+    ]
+  },
+  {
+    "reference_id": "AutoLeave",
+    "reference_label": "Auto Leave",
+    "reference_line": 36978,
+    "status": "Excluded: would change the Auto Reset behavior the user required unchanged.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "AntiKickHL",
+    "reference_label": "Highlight",
+    "reference_line": 37090,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceAntiKickHighlight"
+    ]
+  },
+  {
+    "reference_id": "RagdollNK",
+    "reference_label": "Loop Ragdoll",
+    "reference_line": 37201,
+    "status": "Not imported: optional modification to the reference kick controller; existing loops retained.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "AntiKickRemoverNK",
+    "reference_label": "Remove Anti-Kick",
+    "reference_line": 37209,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "DestroyAntiKickToggle"
+    ]
+  },
+  {
+    "reference_id": "EKIToggle",
+    "reference_label": "Experimental Kick Improvements [BETA]",
+    "reference_line": 37217,
+    "status": "Not imported: experimental kick controller variant; existing loops retained.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "RagdollInRG",
+    "reference_label": "Break Player? [Inf Ragdoll]",
+    "reference_line": 37270,
+    "status": "Existing scoped variant: SourceRagdollOnRemoveGucci; not a generic permanent ragdoll modifier.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "AutoSeatBlobman",
+    "reference_label": "Auto Sit Blobman",
+    "reference_line": 37326,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "AutoSitZ"
+    ]
+  },
+  {
+    "reference_id": "FreezeBlob",
+    "reference_label": "Freeze Blobman",
+    "reference_line": 37346,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "HeavyBlobman"
+    ]
+  },
+  {
+    "reference_id": "ShurikenDeleteBlob",
+    "reference_label": "Remove Anti-Kick [Sticky]",
+    "reference_line": 37380,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "DestroyAntiKickToggle"
+    ]
+  },
+  {
+    "reference_id": "NetOwninKick",
+    "reference_label": "Net Owner Spam",
+    "reference_line": 37391,
+    "status": "Not imported: separate network-owner spam modifier.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "BreakBarrierT",
+    "reference_label": "Disable House Barrier",
+    "reference_line": 37410,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceNoclipBarrier"
+    ]
+  },
+  {
+    "reference_id": "ToysAuraLimitEnabled",
+    "reference_label": "Limit Toys",
+    "reference_line": 37750,
+    "status": "Not imported: exact reference toy-aura limit switch; current shape/toy budgets are separate.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "ToysAuraOwnInventory",
+    "reference_label": "Only Your Inventory",
+    "reference_line": 37775,
+    "status": "Not imported: exact reference inventory filter; current own-toy picker is separate.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "AutoExpTarget",
+    "reference_label": "Auto Explode Target",
+    "reference_line": 37915,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "BlitzExplodeEnabled"
+    ]
+  },
+  {
+    "reference_id": "GroupNoclip",
+    "reference_label": "Noclip Toys",
+    "reference_line": 38046,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackGroupNoclip"
+    ]
+  },
+  {
+    "reference_id": "GroupHighlight",
+    "reference_label": "Highlight Group",
+    "reference_line": 38054,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackGroupHighlight"
+    ]
+  },
+  {
+    "reference_id": "BreakPartAffectsYou",
+    "reference_label": "Affects you",
+    "reference_line": 38119,
+    "status": "Not imported: global part-break targeting modifier; existing part tools remain scoped.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "HighlightBrokenParts",
+    "reference_label": "Highlight Broken Parts",
+    "reference_line": 38135,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackPartHighlight"
+    ]
+  },
+  {
+    "reference_id": "CoconutFormsToggle",
+    "reference_label": "Coconut Forms",
+    "reference_line": 38372,
+    "status": "Not imported: reference coconut formation rig; current local formations are not equivalent.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "DestroyAllHoldables",
+    "reference_label": "Break all Holdables",
+    "reference_line": 38469,
+    "status": "Not imported: global holdable-breaking controller.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "PlrESPT",
+    "reference_label": "Player ESP",
+    "reference_line": 38548,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "NicknameESP"
+    ]
+  },
+  {
+    "reference_id": "PCLDESPT",
+    "reference_label": "Server ESP [PCLD]",
+    "reference_line": 38593,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "BoxESPWhite"
+    ]
+  },
+  {
+    "reference_id": "StickyESPT",
+    "reference_label": "Sticky ESP",
+    "reference_line": 38641,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackStickyESP"
+    ]
+  },
+  {
+    "reference_id": "BlackholeESPT",
+    "reference_label": "Blackhole ESP",
+    "reference_line": 38670,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackBlackholeESP"
+    ]
+  },
+  {
+    "reference_id": "PlayerHighlightEnabled",
+    "reference_label": "Enabled",
+    "reference_line": 38725,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackESPHighlight"
+    ]
+  },
+  {
+    "reference_id": "NameESPEnabled",
+    "reference_label": "Enabled",
+    "reference_line": 38763,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackESPNameplate"
+    ]
+  },
+  {
+    "reference_id": "BoldToggleFF",
+    "reference_label": "Bold?",
+    "reference_line": 38791,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "DetailedESPBoldText"
+    ]
+  },
+  {
+    "reference_id": "NameShowIconToggle",
+    "reference_label": "Show Icon",
+    "reference_line": 38816,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackESPAvatar"
+    ]
+  },
+  {
+    "reference_id": "SmoothPCLD",
+    "reference_label": "Smooth Movement",
+    "reference_line": 38866,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "PCLDESPSmooth"
+    ]
+  },
+  {
+    "reference_id": "PCLDNameEnabled",
+    "reference_label": "Enabled",
+    "reference_line": 38921,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "PCLDESPLabels"
+    ]
+  },
+  {
+    "reference_id": "BoldTogglePCLDFF",
+    "reference_label": "Bold?",
+    "reference_line": 38949,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PCLDESPFont"
+    ]
+  },
+  {
+    "reference_id": "BoldToggleFF2",
+    "reference_label": "Bold?",
+    "reference_line": 39117,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackWorldESPNames"
+    ]
+  },
+  {
+    "reference_id": "DisableBlurT",
+    "reference_label": "Disable Ragdoll Blur",
+    "reference_line": 39146,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateDisableBlur"
+    ]
+  },
+  {
+    "reference_id": "ThirdpersonT",
+    "reference_label": "Third Person",
+    "reference_line": 39160,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateThirdPerson"
+    ]
+  },
+  {
+    "reference_id": "CameraNoclip",
+    "reference_label": "Camera Noclip",
+    "reference_line": 39181,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "CameraClipFade"
+    ]
+  },
+  {
+    "reference_id": "RealisticFirstPersonT",
+    "reference_label": "Realistic First Person",
+    "reference_line": 39219,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateVisibleLimbs"
+    ]
+  },
+  {
+    "reference_id": "CustomWaterT",
+    "reference_label": "Realistic Water",
+    "reference_line": 39473,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SourceRealisticWater"
+    ]
+  },
+  {
+    "reference_id": "NonSwimmableWater",
+    "reference_label": "Non-Swimmable Water",
+    "reference_line": 39492,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackNoSwimming"
+    ]
+  },
+  {
+    "reference_id": "ShadersT",
+    "reference_label": "Shaders",
+    "reference_line": 39596,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateShader"
+    ]
+  },
+  {
+    "reference_id": "ParticlesT",
+    "reference_label": "Particles",
+    "reference_line": 39737,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "ResonanceParticles"
+    ]
+  },
+  {
+    "reference_id": "BoostFPS",
+    "reference_label": "Boost FPS",
+    "reference_line": 39831,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "ResonanceFPSBoost"
+    ]
+  },
+  {
+    "reference_id": "ForcefieldChar",
+    "reference_label": "Highlight Your Character",
+    "reference_line": 39846,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateForcefieldCharacter"
+    ]
+  },
+  {
+    "reference_id": "ChinaHat",
+    "reference_label": "China Hat",
+    "reference_line": 39875,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateConeHat"
+    ]
+  },
+  {
+    "reference_id": "EnableCL",
+    "reference_label": "Toggle Custom Line",
+    "reference_line": 39907,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackCustomLine"
+    ]
+  },
+  {
+    "reference_id": "GObjectInfo",
+    "reference_label": "Grabbed Object Information",
+    "reference_line": 39917,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "PackHeldInformation",
+      "ResonanceHeldHUD"
+    ]
+  },
+  {
+    "reference_id": "CustomCrosshair",
+    "reference_label": "Custom Crosshair",
+    "reference_line": 39928,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateCrosshair"
+    ]
+  },
+  {
+    "reference_id": "EnableCBHS",
+    "reference_label": "Toggle Custom Sound",
+    "reference_line": 40023,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackBlackholeSoundOn"
+    ]
+  },
+  {
+    "reference_id": "EnableCBH",
+    "reference_label": "Toggle Custom Image",
+    "reference_line": 40044,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackBlackholeImageOn"
+    ]
+  },
+  {
+    "reference_id": "EnableBHStaying",
+    "reference_label": "Toggle Blackhole Staying",
+    "reference_line": 40086,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "ResonanceKeepBlackholes"
+    ]
+  },
+  {
+    "reference_id": "CustomSkyboxT",
+    "reference_label": "Custom Skybox",
+    "reference_line": 40308,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateSkyEnabled"
+    ]
+  },
+  {
+    "reference_id": "CloudsEnabled",
+    "reference_label": "Enable Clouds",
+    "reference_line": 40399,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateClouds"
+    ]
+  },
+  {
+    "reference_id": "AutoClicker",
+    "reference_label": "Toggle",
+    "reference_line": 40448,
+    "status": "Not imported: reference target-pose/autoclicker engine.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "IndependentACPoses",
+    "reference_label": "Independent Target Poses",
+    "reference_line": 40456,
+    "status": "Not imported: depends on the reference target-pose engine.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "CustomACPoseCenter",
+    "reference_label": "Custom Pose Center",
+    "reference_line": 40563,
+    "status": "Not imported: depends on the reference target-pose engine.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "SmoothClickTP",
+    "reference_label": "Smooth Click TP",
+    "reference_line": 41140,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackSmoothClickTP"
+    ]
+  },
+  {
+    "reference_id": "FartherReach",
+    "reference_label": "Further Reach Line",
+    "reference_line": 41513,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "ExtendToggle"
+    ]
+  },
+  {
+    "reference_id": "GradientLineT",
+    "reference_label": "Gradient Line",
+    "reference_line": 41648,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackGradientLine"
+    ]
+  },
+  {
+    "reference_id": "FasterEscapeT",
+    "reference_label": "Faster Escape",
+    "reference_line": 41702,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "ResonanceFasterEscape"
+    ]
+  },
+  {
+    "reference_id": "SoundSpamT",
+    "reference_label": "Sound Spam",
+    "reference_line": 41982,
+    "status": "Not imported: sound-spam controller; local audio filters are separate.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "autohouse",
+    "reference_label": "Auto-House Teleport",
+    "reference_line": 41994,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "ToolAutoSaveHouse"
+    ]
+  },
+  {
+    "reference_id": "AutoSlotsT",
+    "reference_label": "Auto-Slots",
+    "reference_line": 42003,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "ToolAutoSpin"
+    ]
+  },
+  {
+    "reference_id": "AimbotToggle",
+    "reference_label": "Toggle",
+    "reference_line": 42016,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackAimAssist"
+    ]
+  },
+  {
+    "reference_id": "AlwaysOnToggleAB",
+    "reference_label": "Always On",
+    "reference_line": 42049,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackAimAlways"
+    ]
+  },
+  {
+    "reference_id": "FovCircle",
+    "reference_label": "FOV Circle",
+    "reference_line": 42062,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackAimCircle"
+    ]
+  },
+  {
+    "reference_id": "TriggerToggle",
+    "reference_label": "Toggle",
+    "reference_line": 42119,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "TriggerbotToggle"
+    ]
+  },
+  {
+    "reference_id": "TriggerTricks",
+    "reference_label": "Camera Tricks",
+    "reference_line": 42186,
+    "status": "Not imported: camera manipulation modifier for the trigger controller.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "SilentAim",
+    "reference_label": "Silent Aim",
+    "reference_line": 42224,
+    "status": "Not imported: silent aim/hitbox override controller; visible aim assist is separate.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "SilentAimIgnoreWhitelist",
+    "reference_label": "Ignore Whitelisted",
+    "reference_line": 42237,
+    "status": "Not imported: would bypass the current safety whitelist.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "SilentAimTargetsOnly",
+    "reference_label": "Selected Targets Only",
+    "reference_line": 42246,
+    "status": "Not imported: depends on the separate silent-aim controller.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "SilentAimFOV",
+    "reference_label": "Show FOV Circle",
+    "reference_line": 42259,
+    "status": "Not imported: depends on the separate silent-aim controller.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "AutoClaimPlot",
+    "reference_label": "Auto-Claim Plot",
+    "reference_line": 42323,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PackAutoClaimPlot"
+    ]
+  },
+  {
+    "reference_id": "AutoWhitelistFriends",
+    "reference_label": "Auto Whitelist Friends",
+    "reference_line": 42535,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "WhitelistFriends"
+    ]
+  },
+  {
+    "reference_id": "WhitelistToggle",
+    "reference_label": "Toggle Whitelist",
+    "reference_line": 42569,
+    "status": "Adapted: Arriva whitelist remains always enforced; no bypass master added.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "ImmunityAGToggle",
+    "reference_label": "Give Anti-Grab",
+    "reference_line": 42591,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "WhitelistAssistGrab"
+    ]
+  },
+  {
+    "reference_id": "ImmunityAKToggle",
+    "reference_label": "Give Anti-Kick",
+    "reference_line": 42601,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "WhitelistAssistKick"
+    ]
+  },
+  {
+    "reference_id": "ImmunityAEToggle",
+    "reference_label": "Give Anti-Explosion",
+    "reference_line": 42610,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "WhitelistAssistExplosion"
+    ]
+  },
+  {
+    "reference_id": "WatermarkT",
+    "reference_label": "Watermark",
+    "reference_line": 42626,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "SessionWatermark"
+    ]
+  },
+  {
+    "reference_id": "KeybindMenuOpen",
+    "reference_label": "Open Keybind Menu",
+    "reference_line": 42636,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "KeybindOverlay"
+    ]
+  },
+  {
+    "reference_id": "OnlyAssignedKeybinds",
+    "reference_label": "Only Show Assigned",
+    "reference_line": 42645,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "KeybindAssignedOnly"
+    ]
+  },
+  {
+    "reference_id": "UnlockMouse",
+    "reference_label": "Unlock Mouse",
+    "reference_line": 42657,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "MenuKeybind"
+    ]
+  },
+  {
+    "reference_id": "MouseLockT",
+    "reference_label": "Mouse-Lock",
+    "reference_line": 42666,
+    "status": "Added/expanded in this pass",
+    "arriva_controls": [
+      "ResonanceMouseLock"
+    ]
+  },
+  {
+    "reference_id": "PositionPrediction",
+    "reference_label": "Position Prediction",
+    "reference_line": 42724,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "BlitzPredictPlayer"
+    ]
+  },
+  {
+    "reference_id": "DirectGrab",
+    "reference_label": "Direct Grab CFrame",
+    "reference_line": 42733,
+    "status": "Not imported: direct-grab CFrame override.",
+    "arriva_controls": []
+  },
+  {
+    "reference_id": "ShowCustomCursor",
+    "reference_label": "Custom Cursor",
+    "reference_line": 42747,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "PrivateCustomCursor"
+    ]
+  },
+  {
+    "reference_id": "NotificationMaster",
+    "reference_label": "Master Switch",
+    "reference_line": 42836,
+    "status": "Existing/adapted counterpart",
+    "arriva_controls": [
+      "NotificationMaster"
+    ]
+  }
+]

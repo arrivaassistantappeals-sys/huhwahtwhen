@@ -1,5 +1,7 @@
 # Arriva Core Hub 2.5: additional transfers and tools
 
+Current mapping and explicit omissions: [Resonance transfer audit](Resonance%20transfer%20audit.md). Later sections supersede older change notes.
+
 These additions adapt useful controls from the original Resonance to Arriva's current UI. They do not replace the current gameplay controllers.
 
 | Where | Addition | Behavior |
@@ -229,3 +231,25 @@ Validation: full compilation; mocked all four modes, exact ragdoll arguments, ex
 The general protection respawn handler was cancelling AntiKick2 on every CharacterRemoving and reapplying its checked toggle after spawn. That discarded the in-progress two-respawn transaction, causing it to restart instead of completing. AntiKick2 is now excluded from that respawn cancellation; its single worker retains progress across both respawns, marks the final humanoid, and idles while the checkbox stays checked. Toggle-off and hub unload still use the normal cancellation path. Other protection respawn behavior is unchanged.
 
 The lifecycle regression exercises the actual runWorker wrapper plus CharacterRemoving/CharacterAdded handlers. It fails with the previous cancellation rule and passes with the exemption, including one completion, a living final character, checked idle state and explicit off cancellation. Full compilation and isolated reset checks pass. Live Roblox verification remains outstanding.
+
+### Bulk Resonance transfer pass
+
+Added 43 controls, including keybinds and the transient public-server selector. New active features default to off.
+
+| Where | Additions and behavior |
+| --- | --- |
+| Visuals → Camera zoom & stretch | Reference-style exponential smoothing and FOV tween; adjustable FOV/smoothing/stretch. Existing FOV slider updates the restore value while zoom is active. Stretch does not compound when a camera frame is reused. Scriptable cameras are left alone. |
+| Keybinds → Mouse lock | Reference PlayerModule MouseLockController BoundKeys setting; LeftAlt when enabled, with original binding restoration. Zoom gets a separate unassigned keybind. |
+| Visuals → Ambient particles | Camera-centred emitter with Circles, Snowflakes, Resonance or custom texture; colour, rate, size, speed, volume, lifetime and transparency. Reference defaults: 2500/sec, 500-stud volume, lifetime 10, feature off. One invisible anchored/noninteractive volume; off/camera replacement/unload cleanup. |
+| Visuals → FPS settings | Selective materials/textures/reflections/shadows (default selections), optional particles/blur. Reuses existing filters; adds mesh-texture and reflection overrides. Restores prior settings only if not independently changed. Chunked scans/restoration; actual FPS gain unmeasured. |
+| PCLD ESP | Assignment labels, optional smooth display, font/size/height/range and outline controls. Original 3-confirmation tracker (6 studs, 0.75 ambiguity margin) now works passively for ESP without starting Anti Kick. Assignments are inferred, not authoritative ownership. Smoothing moves a noninteractive display, never the detector. |
+| Grab options → Held Object | Optional dark/purple HUD showing the held part, mass, speed and anchored/free state. Shares the existing sampler; hides when nothing is held. |
+| Defense → Escape timer | Reference held-timer/UI adaptation with 0–12 second delay (default 3), Space/mobile-jump input gating, manual escape and release/off restoration. Server acceptance of escape requests remains unverified. |
+| Visuals → Blackhole keepsakes | Captures inert visuals after the reference 4.75-second delay, strips scripts/sounds/physics interactions, keeps original objects intact, and limits saved displays (default 15). Distinct display names avoid original-event classification. Clear/off/unload cancel pending captures and free copies. Presentation only. |
+| Creative Object Aura | Optional range adornment centred on the existing formation; no change to ownership-confirmed toy manipulation. |
+| World & Travel → Server browser & reconnect | First public-server page (up to 100 rows), excluding current/full servers; population/ping sort, ID copying, joining and timed hopping. No datacenter/region lookup. Reconnect uses the reference terminal error-code range with disconnect-text fallback. Hop/reconnect start off (30 minute interval / 5 second reconnect delay). |
+| Same section → Reload hub after teleport | Optional supported execution-queue loader for this repository's Version-2.5 script. Shared by the existing Rejoin button. Failed saves/queue preparation stop travel; retries do not queue duplicates. Public raw script URL returned HTTP 200 during development. Actual Roblox teleport/reload not tested. |
+
+The audit covers 139 literal named reference toggles; 110 have mapped current/adapted counterparts. This is not a full one-to-one port. Unported controllers/options and prior constraints are explicitly recorded in the audit. The previous kill-loop rollback is preserved. Auto Reset, Gucci's spawner and its seven original event-handler pairs are unchanged; packet/line flooders and Shutdown stay removed.
+
+Validation: full Luau compilation and 16 mocked/static suites covering new feature lifecycles plus PCLD tracking, Break PCLD's actual respawn worker, Anti Grab modes, teleport masking, Gucci parity/proof/notices, Heavy Blobman, unchanged Auto Reset, assist travel gates, reference water, loop selection, Z guards, train spawning and notification themes. Live rendering, measured FPS, asset availability, public-server API acceptance, execution-queue support and protection effectiveness require Roblox verification.

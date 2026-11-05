@@ -2421,7 +2421,7 @@ Hub.connect(Workspace:GetPropertyChangedSignal("CurrentCamera"), function()
 	Camera = Workspace.CurrentCamera
 	if Camera and Options.FOVSlider then
 		Hub.cameraFOV[Camera] = Camera.FieldOfView
-		Camera.FieldOfView = Options.FOVSlider.Value
+		if Hub.applyCameraFOV then Hub.applyCameraFOV(Options.FOVSlider.Value) else Camera.FieldOfView = Options.FOVSlider.Value end
 	end
 end)
 Hub.cleanup(function()
@@ -4943,8 +4943,12 @@ end)
 do
  (function()
   local enabled,showLabels=false,true
+  local smoothOn,smoothSpeed=false,14
   local accent=Color3.fromRGB(184,145,255)
   local fillAlpha=0.92
+  local outlineAlpha,thickness,labelSize,labelOffset,labelRange,ownerAway=0.12,0.025,12,0.6,1200,0
+  local showOwner=true
+  local font=Enum.Font.GothamMedium
   local entries={}
   local scanRevision=0
   local function target(part)
@@ -4956,20 +4960,41 @@ do
    local entry=entries[part];if not entry then return end
    entries[part]=nil
    for _,object in ipairs(entry.gui:GetDescendants()) do Hub.instances[object]=nil end
-   for _,object in ipairs({entry.fill,entry.outline,entry.gui}) do Hub.instances[object]=nil;object:Destroy() end
+   for _,object in ipairs({entry.fill,entry.outline,entry.gui,entry.proxy}) do Hub.instances[object]=nil;object:Destroy() end
+  end
+  local function smoothTarget(part,entry)
+   if smoothOn and not entry.proxy then
+    local proxy=Hub.new("Part",Workspace.CurrentCamera or Workspace);proxy.Name="ArrivaPCLDDisplay"
+    proxy.Anchored=true;proxy.CanCollide=false;proxy.CanTouch=false;proxy.CanQuery=false;proxy.CastShadow=false;proxy.Transparency=1
+    proxy.Size=part.Size;proxy.CFrame=part.CFrame;entry.proxy=proxy
+   elseif not smoothOn and entry.proxy then
+    entry.fill.Adornee=part;entry.outline.Adornee=part;entry.gui.Adornee=part
+    Hub.instances[entry.proxy]=nil;entry.proxy:Destroy();entry.proxy=nil
+   end
+   local target=entry.proxy or part
+   entry.fill.Adornee=target;entry.outline.Adornee=target;entry.gui.Adornee=target
   end
   local function update(part,entry)
+   smoothTarget(part,entry)
    local waiting=part.Position==Vector3.zero
    entry.fill.Visible=not waiting;entry.outline.Visible=not waiting
+   if entry.proxy then entry.proxy.Size=part.Size end
    entry.fill.Size=part.Size;entry.fill.Color3=accent;entry.fill.Transparency=fillAlpha
-   entry.outline.Color3=accent
+   entry.outline.Color3=accent;entry.outline.Transparency=outlineAlpha;entry.outline.LineThickness=thickness
    entry.gui.Enabled=showLabels and not waiting
-   entry.gui.StudsOffsetWorldSpace=Vector3.new(0,part.Size.Y/2+0.6,0)
+   entry.gui.StudsOffsetWorldSpace=Vector3.new(0,part.Size.Y/2+labelOffset,0)
+   entry.gui.MaxDistance=labelRange;entry.text.TextSize=labelSize;entry.text.Font=font
    entry.stroke.Color=accent;entry.icon.TextColor3=accent
    local char=Player.Character
    local root=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
    local distance=root and math.floor((part.Position-root.Position).Magnitude+0.5)
-   entry.text.Text=distance and ("PCLD  ·  "..distance.." studs") or "PCLD"
+   local owner=Hub.pcldAssignedPlayer and Hub.pcldAssignedPlayer(part)
+   local title=showOwner and owner and ("PCLD · @"..owner.Name) or "PCLD"
+   entry.text.Text=distance and (title.." · "..distance.." studs") or title
+   if owner and ownerAway>0 then
+    local ownerRoot=owner.Character and (owner.Character:FindFirstChild("realHrp") or owner.Character:FindFirstChild("HumanoidRootPart"))
+    if ownerRoot and (ownerRoot.Position-part.Position).Magnitude<ownerAway then entry.gui.Enabled=false end
+   end
   end
   local function add(part)
    if entries[part] or not part.Parent or not target(part) then return end
@@ -4979,13 +5004,13 @@ do
    outline.Name="ArrivaPCLDOutline";outline.Adornee=part;outline.LineThickness=0.025;outline.SurfaceTransparency=1;outline.Transparency=0.12
    local gui=Hub.new("BillboardGui",game.CoreGui)
    gui.Name="ArrivaPCLDLabel";gui.Adornee=part;gui.AlwaysOnTop=true;gui.MaxDistance=1200
-   gui.Size=UDim2.fromOffset(156,28);gui.StudsOffsetWorldSpace=Vector3.new(0,part.Size.Y/2+0.6,0)
+   gui.Size=UDim2.fromOffset(230,28);gui.StudsOffsetWorldSpace=Vector3.new(0,part.Size.Y/2+0.6,0)
    local plate=Hub.new("Frame",gui);plate.Size=UDim2.fromScale(1,1);plate.BackgroundColor3=Color3.fromRGB(25,21,34);plate.BackgroundTransparency=0.16;plate.BorderSizePixel=0
    local corner=Hub.new("UICorner",plate);corner.CornerRadius=UDim.new(0,8)
    local stroke=Hub.new("UIStroke",plate);stroke.Transparency=0.4;stroke.Thickness=1
    local icon=Hub.new("TextLabel",plate);icon.BackgroundTransparency=1;icon.Size=UDim2.fromOffset(26,28);icon.Text="◇";icon.TextSize=19;icon.Font=Enum.Font.GothamBold
    local text=Hub.new("TextLabel",plate);text.BackgroundTransparency=1;text.Position=UDim2.fromOffset(26,0);text.Size=UDim2.new(1,-30,1,0)
-   text.Font=Enum.Font.GothamMedium;text.TextSize=12;text.TextColor3=Color3.fromRGB(239,232,255);text.TextXAlignment=Enum.TextXAlignment.Left
+   text.TextTruncate=Enum.TextTruncate.AtEnd;text.Font=Enum.Font.GothamMedium;text.TextSize=12;text.TextColor3=Color3.fromRGB(239,232,255);text.TextXAlignment=Enum.TextXAlignment.Left
    local entry={fill=fill,outline=outline,gui=gui,stroke=stroke,icon=icon,text=text};entries[part]=entry;update(part,entry)
   end
   local function clear() for part in pairs(entries) do remove(part) end end
@@ -4998,6 +5023,7 @@ do
   end)
   PlayerESP:AddToggle("BoxESPWhite",{Text="PCLD ESP",Default=false,Callback=function(on)
    enabled=on;scanRevision+=1;local ticket=scanRevision
+   if Hub.refreshPCLDDisplayTracker then Hub.refreshPCLDDisplayTracker(on) end
    if on then Hub.scanDescendants(Workspace,add,function() return enabled and scanRevision==ticket end) else clear() end
    Hub.requestSave()
   end})
@@ -5008,6 +5034,26 @@ do
    if #hex~=6 or not hex:match("^%x+$") then return end
    accent=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16));Hub.requestSave()
   end})
+  PlayerESP:AddToggle("PCLDESPSmooth",{Text="Smooth PCLD movement",Default=false,Callback=function(on)
+   smoothOn=on;for part,entry in pairs(entries) do smoothTarget(part,entry) end;Hub.requestSave()
+  end})
+  PlayerESP:AddSlider("PCLDESPSmoothing",{Text="PCLD smoothing speed",Default=14,Min=1,Max=40,Rounding=1,Callback=function(v) smoothSpeed=v;Hub.requestSave() end})
+  Hub.connect(RunService.RenderStepped,function(dt)
+   if not enabled or not smoothOn then return end
+   local alpha=math.clamp(1-math.exp(-smoothSpeed*dt),0,1)
+   for part,entry in pairs(entries) do if part.Parent and entry.proxy then
+    if Workspace.CurrentCamera then entry.proxy.Parent=Workspace.CurrentCamera end
+    entry.proxy.CFrame=entry.proxy.CFrame:Lerp(part.CFrame,alpha)
+   end end
+  end)
+  PlayerESP:AddToggle("PCLDESPOwner",{Text="PCLD owner labels",Default=true,Callback=function(on) showOwner=on;Hub.requestSave() end})
+  PlayerESP:AddSlider("PCLDESPOwnerAway",{Text="Show PCLD label when owner is away",Default=0,Min=0,Max=100,Rounding=0,Callback=function(v) ownerAway=v;Hub.requestSave() end})
+  PlayerESP:AddSlider("PCLDESPOutlineAlpha",{Text="PCLD outline transparency",Default=12,Min=0,Max=100,Rounding=0,Callback=function(v) outlineAlpha=v/100;Hub.requestSave() end})
+  PlayerESP:AddSlider("PCLDESPThickness",{Text="PCLD outline thickness",Default=0.025,Min=0.01,Max=0.1,Rounding=3,Callback=function(v) thickness=v;Hub.requestSave() end})
+  PlayerESP:AddSlider("PCLDESPTextSize",{Text="PCLD label size",Default=12,Min=10,Max=20,Rounding=0,Callback=function(v) labelSize=v;Hub.requestSave() end})
+  PlayerESP:AddSlider("PCLDESPTextOffset",{Text="PCLD label height",Default=0.6,Min=0,Max=10,Rounding=1,Callback=function(v) labelOffset=v;Hub.requestSave() end})
+  PlayerESP:AddSlider("PCLDESPLabelRange",{Text="PCLD label distance",Default=1200,Min=50,Max=5000,Rounding=0,Callback=function(v) labelRange=v;Hub.requestSave() end})
+  PlayerESP:AddDropdown("PCLDESPFont",{Text="PCLD label font",Values={"GothamMedium","GothamBold","Code","SourceSans"},Default=1,Callback=function(v) font=Enum.Font[v] or Enum.Font.GothamMedium;Hub.requestSave() end})
   Hub.cleanup(function() enabled=false;scanRevision+=1;clear() end)
  end)()
 end
@@ -8853,7 +8899,7 @@ PlayerView:AddSlider("FOVSlider", {
 		local cam = workspace.CurrentCamera
 		if cam then
 			if Hub.cameraFOV[cam] == nil then Hub.cameraFOV[cam] = cam.FieldOfView end
-			cam.FieldOfView = value
+			if Hub.applyCameraFOV then Hub.applyCameraFOV(value) else cam.FieldOfView = value end
 		end
 		Hub.requestSave()
 	end
@@ -9248,6 +9294,8 @@ do
 		local shapes=Tabs.Fun:AddLeftGroupbox("Creative Object Aura")
 		local settings=Tabs.Fun:AddRightGroupbox("Shape Settings")
 		local enabled=false
+		local showRange=false
+		local rangeAdornment
 		local mode,shape="My spawned toys","Heart"
 		local count,radius,height,distance,speed=24,8,5,12,20
 		local entries={}
@@ -9357,6 +9405,7 @@ do
 			end)
 		end
 		local function stopWorker()
+			if rangeAdornment then Hub.instances[rangeAdornment]=nil;rangeAdornment:Destroy();rangeAdornment=nil end
 			if cancelSpawn then cancelSpawn() end
 			epoch+=1
 			if connection then connection:Disconnect();Hub.connections[connection]=nil;connection=nil end
@@ -9449,12 +9498,13 @@ do
 				if elapsed<1/30 then return end
 				local delta=elapsed;elapsed=0
 				local root=characterRoot()
-				if not root then return end
+				if not root then if rangeAdornment then rangeAdornment.Visible=false end;return end
 				phase=(phase+math.rad(speed)*math.min(delta,0.1))%(math.pi*2)
 				local center=Hub.teleportFrame(root)*CFrame.new(0,height,-distance)
 				if centerMode=="Follow selected player" then
 					local leader,reason=formationTargetRoot(root)
 					if not leader then
+						if rangeAdornment then rangeAdornment.Visible=false end
 						for _,entry in ipairs(entries) do
 							if entry.decoration then entry.part.Transparency=1
 							else entry.position.Enabled=false;entry.orientation.Enabled=false end
@@ -9465,6 +9515,13 @@ do
 					center=leader.CFrame*CFrame.new(0,height,-distance)
 				elseif centerMode=="Follow mouse" then center=aimedCenter() or center
 				elseif centerMode=="Click to place" then center=placedCenter or center end
+				if showRange then
+					if not rangeAdornment then
+						rangeAdornment=Hub.new("SphereHandleAdornment",game.CoreGui);rangeAdornment.Name="ArrivaToyAuraRange"
+						rangeAdornment.AlwaysOnTop=true;rangeAdornment.Transparency=0.92;rangeAdornment.Color3=Color3.fromRGB(184,145,255)
+					end
+					rangeAdornment.Visible=true;rangeAdornment.Adornee=root;rangeAdornment.Radius=radius;rangeAdornment.CFrame=root.CFrame:ToObjectSpace(center)
+				elseif rangeAdornment then Hub.instances[rangeAdornment]=nil;rangeAdornment:Destroy();rangeAdornment=nil end
 				if mode=="My spawned toys" and os.clock()>=nextScan then
 					nextScan=os.clock()+2;refreshToys(root)
 				end
@@ -9494,6 +9551,7 @@ do
 			Callback=function(value) shape=value end})
 		settings:AddSlider("CreativeAuraCount",{Text="Maximum objects",Default=24,Min=8,Max=40,Rounding=0,
 			Callback=function(value) count=value;start() end})
+		settings:AddToggle("CreativeAuraRangePreview",{Text="Show toy aura range",Default=false,Callback=function(on) showRange=on;if not on and rangeAdornment then Hub.instances[rangeAdornment]=nil;rangeAdornment:Destroy();rangeAdornment=nil end;Hub.requestSave() end})
 		settings:AddSlider("CreativeAuraRadius",{Text="Shape size",Default=8,Min=3,Max=20,Rounding=0,Callback=function(value) radius=value end})
 		settings:AddSlider("CreativeAuraHeight",{Text="Height",Default=5,Min=0,Max=20,Rounding=0,Callback=function(value) height=value end})
 		settings:AddSlider("CreativeAuraDistance",{Text="Distance in front",Default=12,Min=6,Max=40,Rounding=0,Callback=function(value) distance=value end})
@@ -14898,8 +14956,10 @@ do
 		tbl12.DetectPCLD = function(arg)
 			return tbl7.PCLD[arg]
 		end
+		local displayTracking=Toggles.BoxESPWhite and Toggles.BoxESPWhite.Value or false
+		local displayEpoch=0
 		local function trackPCLD(part)
-			if tbl8.AntiKick and part:IsA("BasePart") and part.Name=="PlayerCharacterLocationDetector" then tbl7.PCLDParts[part]=true end
+			if (tbl8.AntiKick or displayTracking) and part:IsA("BasePart") and part.Name=="PlayerCharacterLocationDetector" then tbl7.PCLDParts[part]=true end
 		end
 		Hub.connect(Workspace.DescendantAdded,trackPCLD)
 		Hub.connect(Workspace.DescendantRemoving,function(part)
@@ -14910,10 +14970,27 @@ do
 			end
 		end)
 		Hub.connect(originalRunService.Heartbeat,function(dt)
-			if not tbl8.AntiKick then return end
+			if not tbl8.AntiKick and not displayTracking then return end
 			trackerElapsed+=dt;if trackerElapsed<0.1 then return end;trackerElapsed=0
 			tbl7.PlayerList=Players:GetPlayers();tbl12.UpdatePCLDAssignments()
 		end)
+		Hub.pcldAssignedPlayer=function(part)
+			local record=tbl7.PCLDTracker.PartStates[part]
+			local player=record and record.Player
+			return player and player.Parent==Players and player or nil
+		end
+		Hub.refreshPCLDDisplayTracker=function(on)
+			displayTracking=on==true;displayEpoch+=1;local ticket=displayEpoch
+			if displayTracking then
+				Hub.scanDescendants(Workspace,trackPCLD,function() return Hub.alive and not flag11 and displayTracking and displayEpoch==ticket end)
+			elseif not tbl8.AntiKick then
+				for part,record in pairs(tbl7.PCLDTracker.PartStates) do tbl12.ClearPCLDAssignment(part,record) end
+				table.clear(tbl7.PCLDParts);table.clear(tbl7.PCLDTracker.PartStates);table.clear(tbl7.PCLD)
+			end
+		end
+		if displayTracking then Hub.refreshPCLDDisplayTracker(true) end
+		Hub.cleanup(function() displayTracking=false;displayEpoch+=1;Hub.pcldAssignedPlayer=nil;Hub.refreshPCLDDisplayTracker=nil end)
+
 		local stickyEvents=ReplicatedStorage:FindFirstChild("PlayerEvents")
 		local stickyRemote=stickyEvents and stickyEvents:FindFirstChild("StickyPartEvent")
 		tbl11.StickyPartEvent={FireServer=function(_,...) if stickyRemote then Hub.fire(stickyRemote,...) end end}
@@ -14925,6 +15002,7 @@ do
 			if v18 then tbl12.DestroyToy(v18);v18=nil end
 			for part,state in pairs(tbl7.PCLDTracker.PartStates) do tbl12.ClearPCLDAssignment(part,state) end
 			table.clear(tbl7.PCLDParts);table.clear(tbl7.PCLDTracker.PartStates);table.clear(tbl7.PCLD)
+			if displayTracking and not flag11 and Hub.alive then Hub.refreshPCLDDisplayTracker(true) end
 		end
 		do
 			local function fn21()
@@ -15818,21 +15896,41 @@ do
 	end)();
 	(function()
 		local group=Tabs.Grab:AddRightGroupbox("Held Object")
-		local enabled=false
+		local enabled,hudOn=false,false
+		local hud,text
 		local label=group:AddLabel("Object information off.")
+		local function clearHUD()
+			if hud then for _,object in ipairs(hud:GetDescendants()) do Hub.instances[object]=nil end;Hub.instances[hud]=nil;hud:Destroy();hud,text=nil,nil end
+		end
+		local function showHUD(message)
+			if not hudOn then clearHUD();return end
+			local parent=Player:FindFirstChildOfClass("PlayerGui");if not parent then return end
+			if not hud or not hud.Parent then
+				clearHUD();hud=Hub.new("ScreenGui",parent);hud.Name="ArrivaHeldObjectHUD";hud.ResetOnSpawn=false;hud.IgnoreGuiInset=true
+				text=Hub.new("TextLabel",hud);text.AnchorPoint=Vector2.new(1,1);text.Position=UDim2.new(1,-18,1,-90);text.Size=UDim2.fromOffset(310,96)
+				text.BackgroundColor3=Color3.fromRGB(29,23,40);text.BackgroundTransparency=0.16;text.TextColor3=Color3.fromRGB(235,225,255)
+				text.Font=Enum.Font.GothamMedium;text.TextSize=13;text.TextWrapped=true;text.TextXAlignment=Enum.TextXAlignment.Left
+				local corner=Hub.new("UICorner",text);corner.CornerRadius=UDim.new(0,9)
+				local padding=Hub.new("UIPadding",text);padding.PaddingLeft=UDim.new(0,12);padding.PaddingRight=UDim.new(0,12)
+				local stroke=Hub.new("UIStroke",text);stroke.Color=Color3.fromRGB(184,145,255);stroke.Transparency=0.45
+			end
+			text.Text=message or "";text.Visible=message~=nil
+		end
 		function Hub.sampleHeldInformation()
-			if not enabled then return end
+			if not enabled and not hudOn then return end
 			local model=Workspace:FindFirstChild("GrabParts")
 			local grab=model and model:FindFirstChild("GrabPart",true)
 			local weld=grab and grab:FindFirstChildWhichIsA("WeldConstraint")
 			local part=weld and weld.Part1
-			if not part or not part:IsA("BasePart") or not part.Parent then label:SetText("Nothing held.");return end
+			if not part or not part:IsA("BasePart") or not part.Parent then label:SetText("Nothing held.");showHUD(nil);return end
 			local root=Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
 			local owner=Hub.playerOf(part)
 			label:SetText(string.format("%s | %.1f studs | mass %.1f | %s | %s",part.Name,root and (Hub.teleportFrame(root).Position-part.Position).Magnitude or 0,
 				part.AssemblyMass,part.Anchored and "anchored" or "free",owner and owner.Name or "unassigned"))
+			showHUD(string.format("◇ HELD OBJECT\n%s\nMass %.1f · Speed %.1f · %s",part.Name,part.AssemblyMass,part.AssemblyLinearVelocity.Magnitude,part.Anchored and "Anchored" or "Free"))
 		end
 		group:AddToggle("PackHeldInformation",{Text="Grabbed object information",Default=false,Callback=function(on) enabled=on;if on then Hub.sampleHeldInformation() else label:SetText("Object information off.") end end})
+		group:AddToggle("ResonanceHeldHUD",{Text="Held object HUD",Default=false,Callback=function(on) hudOn=on;if on then Hub.sampleHeldInformation() else clearHUD() end;Hub.requestSave() end})
 		group:AddButton({Text="Copy held-object path",Func=function()
 			local model=Workspace:FindFirstChild("GrabParts")
 			local grab=model and model:FindFirstChild("GrabPart",true)
@@ -15842,7 +15940,7 @@ do
 		end})
 		local elapsed=0
 		Hub.connect(RunService.Heartbeat,function(dt) elapsed+=dt;if elapsed>=0.25 then elapsed=0;Hub.sampleHeldInformation() end end)
-		Hub.cleanup(function() enabled=false;Hub.sampleHeldInformation=nil end)
+		Hub.cleanup(function() enabled=false;hudOn=false;clearHUD();Hub.sampleHeldInformation=nil end)
 	end)()
 end
 -- End line and object feature pack
@@ -18017,6 +18115,7 @@ do
 			if game.JobId=="" then notify("Rejoin unavailable","This session has no live server ID.",4,"warning");return end
 			local saved,reason=Hub.flushSettings(false)
 			if not saved then notify("Rejoin paused",tostring(reason),6,"warning");return end
+			if Hub.queueReloadForTeleport then local ready,err=Hub.queueReloadForTeleport();if not ready then notify("Rejoin paused",tostring(err),6,"warning");return end end
 			teleporting=true
 			local ok,err=pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId,game.JobId,Player) end)
 			if not ok then teleporting=false;notify("Rejoin failed",tostring(err),6,"warning") end
@@ -18507,6 +18606,446 @@ do
 	end)()
 end
 -- END LOOP SELECTOR UI
+
+-- BEGIN RESONANCE TRANSFER PACK
+-- Missing presentation/session tools; existing gameplay controllers remain shared.
+do
+ (function()
+  local group=Tabs.Visual:AddRightGroupbox("Camera zoom & stretch")
+  local zoomOn,stretchOn=false,false
+  local zoomFOV,smoothness,stretch=25,14,1
+  local lastView,lastCamera,lastUnscaled,lastScaled
+  local tween
+  local baselines=setmetatable({},{__mode="k"})
+  local service=game:GetService("TweenService")
+  local function cancelTween() if tween then tween:Cancel();tween=nil end end
+  local function setFOV(camera,value,instant)
+   cancelTween();if not camera then return end
+   if instant then camera.FieldOfView=value
+   else tween=service:Create(camera,TweenInfo.new(0.35,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{FieldOfView=value});tween:Play() end
+  end
+  local function base(camera) return baselines[camera] or (Options.FOVSlider and Options.FOVSlider.Value) or camera.FieldOfView end
+  function Hub.applyCameraFOV(value)
+   local camera=Workspace.CurrentCamera;if not camera then return end
+   baselines[camera]=value
+   if not zoomOn then cancelTween();camera.FieldOfView=value end
+  end
+  local function restoreStretch()
+   if lastCamera and lastScaled and lastCamera.CFrame==lastScaled then lastCamera.CFrame=lastUnscaled end
+   lastCamera,lastUnscaled,lastScaled=nil,nil,nil
+  end
+  local function render(dt)
+   local camera=Workspace.CurrentCamera
+   restoreStretch()
+   if not camera or camera.CameraType==Enum.CameraType.Scriptable then lastView=nil;return end
+   if zoomOn then
+    lastView=lastView and lastView:Lerp(camera.CFrame,math.clamp(1-math.exp(-smoothness*dt),0,1)) or camera.CFrame
+    camera.CFrame=lastView
+   else lastView=nil end
+   if stretchOn and stretch~=1 then
+    -- Undo our previous matrix if no other camera controller updated this frame.
+    lastCamera=camera;lastUnscaled=camera.CFrame
+    lastScaled=lastUnscaled*CFrame.new(0,0,0,1,0,0,0,stretch,0,0,0,1);camera.CFrame=lastScaled
+   end
+  end
+  local function bind()
+   RunService:UnbindFromRenderStep("ArrivaZoomStretch")
+   if zoomOn or stretchOn then RunService:BindToRenderStep("ArrivaZoomStretch",Enum.RenderPriority.Camera.Value+2,render) end
+  end
+  group:AddToggle("ResonanceZoom",{Text="Camera zoom",Default=false,Callback=function(on)
+   local camera=Workspace.CurrentCamera
+   if on and camera and not zoomOn then baselines[camera]=camera.FieldOfView end
+   zoomOn=on;lastView=nil
+   if camera then setFOV(camera,on and zoomFOV or base(camera)) end
+   bind();Hub.requestSave()
+  end})
+  group:AddSlider("ResonanceZoomFOV",{Text="Zoom FOV",Default=25,Min=1,Max=90,Rounding=0,Callback=function(v) zoomFOV=v;if zoomOn then setFOV(Workspace.CurrentCamera,v) end;Hub.requestSave() end})
+  group:AddSlider("ResonanceZoomSmoothing",{Text="Zoom camera smoothness",Default=14,Min=1,Max=40,Rounding=1,Callback=function(v) smoothness=v;Hub.requestSave() end})
+  Hub.keybindGroups.actions:AddLabel("Camera zoom"):AddKeyPicker("ResonanceZoomKey",{Text="Camera zoom",Default="None",Callback=function(value)
+   if type(value)~="string" and Toggles.ResonanceZoom then Toggles.ResonanceZoom:SetValue(not Toggles.ResonanceZoom.Value) end
+  end})
+  group:AddToggle("ResonanceCameraStretch",{Text="Camera stretch",Default=false,Callback=function(on) restoreStretch();stretchOn=on;bind();Hub.requestSave() end})
+  group:AddSlider("ResonanceAspectRatio",{Text="Camera stretch ratio",Default=1,Min=0.5,Max=2,Rounding=2,Callback=function(v) restoreStretch();stretch=v;Hub.requestSave() end})
+  Hub.connect(Workspace:GetPropertyChangedSignal("CurrentCamera"),function()
+   cancelTween();restoreStretch();lastView=nil
+   local camera=Workspace.CurrentCamera
+   if camera and zoomOn then baselines[camera]=camera.FieldOfView;setFOV(camera,zoomFOV,true) end
+  end)
+  Hub.cleanup(function()
+   zoomOn=false;stretchOn=false;cancelTween();RunService:UnbindFromRenderStep("ArrivaZoomStretch");restoreStretch()
+   for camera,value in pairs(baselines) do pcall(function() camera.FieldOfView=value end) end
+   Hub.applyCameraFOV=nil
+  end)
+ end)();
+
+ -- BEGIN AMBIENT PARTICLES
+ (function()
+  local group=Tabs.Visual:AddRightGroupbox("Ambient particles")
+  local enabled=false
+  local volume,emitter
+  local count,size,speed,boxSize,life,alpha=2500,1,2,500,10,0
+  local textureMode,custom="Circles","rbxassetid://242109931"
+  local color=Color3.new(1,1,1)
+  local textures={Circles="rbxassetid://242109931",Snowflakes="rbxassetid://14443362047",Resonance="rbxassetid://79685990879972"}
+  local function clear()
+   RunService:UnbindFromRenderStep("ArrivaAmbientParticles")
+   if volume then
+    for _,object in ipairs(volume:GetDescendants()) do Hub.instances[object]=nil end
+    Hub.instances[volume]=nil;volume:Destroy()
+   end
+   volume,emitter=nil,nil
+  end
+  local function apply()
+   if not enabled then clear();return end
+   local camera=Workspace.CurrentCamera;if not camera then clear();return end
+   if not volume or not volume.Parent then
+    clear();volume=Hub.new("Part",camera);volume.Name="ArrivaAmbientParticles"
+    volume.Anchored=true;volume.CanCollide=false;volume.CanTouch=false;volume.CanQuery=false;volume.CastShadow=false;volume.Transparency=1
+    emitter=Hub.new("ParticleEmitter",volume);emitter.Name="AmbientParticles"
+    emitter.Shape=Enum.ParticleEmitterShape.Box;emitter.ShapeStyle=Enum.ParticleEmitterShapeStyle.Volume
+    emitter.SpreadAngle=Vector2.new(180,180);emitter.LockedToPart=false
+    RunService:BindToRenderStep("ArrivaAmbientParticles",Enum.RenderPriority.Camera.Value+4,function()
+     local current=Workspace.CurrentCamera
+     if volume and current then volume.CFrame=current.CFrame end
+    end)
+   end
+   volume.CFrame=camera.CFrame;volume.Size=Vector3.new(boxSize,boxSize,boxSize)
+   emitter.Texture=textures[textureMode] or custom;emitter.Rate=count;emitter.Lifetime=NumberRange.new(life)
+   emitter.Speed=NumberRange.new(math.min(0.5,speed),speed);emitter.Color=ColorSequence.new(color);emitter.Transparency=NumberSequence.new(alpha)
+   emitter.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(0.1,size),NumberSequenceKeypoint.new(0.9,size),NumberSequenceKeypoint.new(1,0)})
+  end
+  local function saveApply() apply();Hub.requestSave() end
+  group:AddToggle("ResonanceParticles",{Text="Ambient particles",Default=false,Callback=function(on) enabled=on;saveApply() end})
+  group:AddDropdown("ResonanceParticleTexture",{Text="Particle texture",Values={"Circles","Snowflakes","Resonance","Custom"},Default=1,Callback=function(v) textureMode=v;saveApply() end})
+  group:AddInput("ResonanceParticleCustom",{Text="Custom particle image",Default="242109931",Finished=true,Callback=function(value)
+   local resolved=Hub.resolveAsset and Hub.resolveAsset(value,"image")
+   local id=tostring(value):match("^%s*(%d+)%s*$") or tostring(value):match("rbxassetid://(%d+)") or tostring(value):match("[?&]id=(%d+)") or tostring(value):match("/library/(%d+)")
+   if type(resolved)=="string" then custom=resolved elseif id then custom="rbxassetid://"..id else return end
+   saveApply()
+  end})
+  group:AddSlider("ResonanceParticleCount",{Text="Particles per second",Default=2500,Min=100,Max=5000,Rounding=0,Callback=function(v) count=v;saveApply() end})
+  group:AddSlider("ResonanceParticleSize",{Text="Ambient particle size",Default=1,Min=0.1,Max=5,Rounding=1,Callback=function(v) size=v;saveApply() end})
+  group:AddSlider("ResonanceParticleSpeed",{Text="Ambient particle speed",Default=2,Min=0,Max=10,Rounding=1,Callback=function(v) speed=v;saveApply() end})
+  group:AddSlider("ResonanceParticleBox",{Text="Particle volume size",Default=500,Min=50,Max=2000,Rounding=0,Callback=function(v) boxSize=v;saveApply() end})
+  group:AddSlider("ResonanceParticleLife",{Text="Particle lifetime",Default=10,Min=1,Max=15,Rounding=1,Callback=function(v) life=v;saveApply() end})
+  group:AddSlider("ResonanceParticleAlpha",{Text="Particle transparency",Default=0,Min=0,Max=1,Rounding=2,Callback=function(v) alpha=v;saveApply() end})
+  group:AddInput("ResonanceParticleColor",{Text="Particle colour hex",Default="FFFFFF",Finished=true,Callback=function(value)
+   local hex=tostring(value):gsub("#",""):gsub("%s","");if #hex~=6 or not hex:match("^%x+$") then return end
+   color=Color3.fromRGB(tonumber(hex:sub(1,2),16),tonumber(hex:sub(3,4),16),tonumber(hex:sub(5,6),16));saveApply()
+  end})
+  Hub.connect(Workspace:GetPropertyChangedSignal("CurrentCamera"),function() clear();if enabled then apply() end end)
+  Hub.cleanup(function() enabled=false;clear() end)
+ end)();
+ -- END AMBIENT PARTICLES
+
+ -- BEGIN SELECTIVE FPS BOOST
+ (function()
+  local group=Tabs.Visual:AddRightGroupbox("FPS settings")
+  local enabled=false
+  local selected={Materials=true,Textures=true,Reflections=true,Shadows=true}
+  local previous={}
+  local records={}
+  local revision=0
+  local mappings={Materials={"PrivateSimpleMaterials"},Textures={"PrivateHideDecals"},Shadows={"PrivateNoShadows"},Particles={"PrivateHideParticles","PrivateHideTrails"},Blur={"PrivateDisableBlur"}}
+  local function releaseControls()
+   for id,record in pairs(previous) do
+    local control=Toggles[id]
+    if control and control.Value==true and control.revision==record.revision and control.Value~=record.value then control:SetValue(record.value) end
+    previous[id]=nil
+   end
+  end
+  local function restore(object)
+   local record=records[object];if not record then return end;records[object]=nil
+   if object.Parent then for property,pair in pairs(record) do pcall(function() if object[property]==pair.applied then object[property]=pair.original end end) end end
+  end
+  local function set(object,property,value)
+   if object[property]==value then return end
+   local record=records[object] or {};records[object]=record
+   if not record[property] then record[property]={original=object[property],applied=value} else record[property].applied=value end
+   object[property]=value
+  end
+  local function inspect(object)
+   if not enabled or Hub.instances[object] then return end
+   if object:IsA("BasePart") and not object:IsA("Terrain") then
+    if selected.Reflections then set(object,"Reflectance",0) end
+    if selected.Textures and object:IsA("MeshPart") then set(object,"TextureID","") end
+   elseif selected.Textures and object:IsA("SpecialMesh") then set(object,"TextureId","") end
+  end
+  local function apply()
+   revision+=1;local ticket=revision
+   releaseControls()
+   if enabled then
+    for name,ids in pairs(mappings) do if selected[name] then for _,id in ipairs(ids) do
+     local control=Toggles[id]
+     if control then local old=control.Value;if not old then control:SetValue(true) end;previous[id]={value=old,revision=control.revision} end
+    end end end
+   end
+   task.spawn(function()
+    local i=0
+    for object in pairs(records) do
+     if revision~=ticket then return end
+     restore(object);i+=1;if i%128==0 then task.wait() end
+    end
+    if enabled and revision==ticket then Hub.scanDescendants(Workspace,inspect,function() return enabled and revision==ticket end) end
+   end)
+   Hub.requestSave()
+  end
+  group:AddToggle("ResonanceFPSBoost",{Text="Boost FPS",Default=false,Callback=function(on) enabled=on;apply() end})
+  group:AddDropdown("ResonanceFPSOptions",{Text="Simplify",Values={"Materials","Textures","Reflections","Shadows","Particles","Blur"},Default={"Materials","Textures","Reflections","Shadows"},Multi=true,Callback=function(values)
+   selected={};for key,value in pairs(values or {}) do if type(key)=="number" then selected[value]=true elseif value then selected[key]=true end end
+   apply()
+  end})
+  Hub.connect(Workspace.DescendantAdded,function(object) if enabled then inspect(object) end end)
+  Hub.connect(Workspace.DescendantRemoving,function(object) records[object]=nil end)
+  Hub.cleanup(function() enabled=false;revision+=1;releaseControls();for object in pairs(records) do restore(object) end end)
+ end)();
+ -- END SELECTIVE FPS BOOST
+
+ -- BEGIN SERVER SESSION TOOLS
+ (function()
+  local group=Tabs.Misc:AddRightGroupbox("Server browser & reconnect")
+  local http=game:GetService("HttpService")
+  local teleport=game:GetService("TeleportService")
+  local guiService=game:GetService("GuiService")
+  local status=group:AddLabel("Refresh to list public servers with room.")
+  local servers,labels,orderedIds={},{},{}
+  local chosen,busy,refreshing=nil,false,false
+  local selection
+  local reloadOn,queued=false,false
+  function Hub.queueReloadForTeleport()
+   if not reloadOn or queued then return true end
+   local queue=queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+   if type(queue)~="function" then return false,"Teleport execution queue is unavailable." end
+   local ok,err=pcall(queue,[=[loadstring(game:HttpGet("https://raw.githubusercontent.com/arrivaassistantappeals-sys/huhwahtwhen/Version-2.5/dist/Arriva%20Core%20Hub%202.5.lua"))()]=])
+   if not ok then return false,tostring(err) end
+   queued=true;return true
+  end
+  local join
+  local pendingHop=false
+  local sort="Lowest population"
+  local hopOn,hopMinutes,nextHop=false,30,0
+  local rejoinOn,rejoinDelay,rejoinTicket=false,5,0
+  local function refresh()
+   if refreshing then return end;refreshing=true;status:SetText("Loading public servers…")
+   task.spawn(function()
+    local ok,result=pcall(function()
+     local data=http:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..tostring(game.PlaceId).."/servers/Public?sortOrder=Asc&limit=100"))
+     if type(data)~="table" or type(data.data)~="table" then error("Server list unavailable.") end
+     local list={}
+     for _,server in ipairs(data.data) do
+      if type(server.id)=="string" and server.id~=game.JobId and type(server.playing)=="number" and type(server.maxPlayers)=="number" and server.playing<server.maxPlayers then table.insert(list,server) end
+     end
+     table.sort(list,function(a,b)
+      if sort=="Lowest ping" then return (tonumber(a.ping) or math.huge)<(tonumber(b.ping) or math.huge) end
+      return a.playing<b.playing
+     end)
+     return list
+    end)
+    refreshing=false;if not Hub.alive then return end
+    if not ok then pendingHop=false;status:SetText("Could not load servers: "..tostring(result):sub(1,160));return end
+    servers,labels,orderedIds={},{},{};local values={}
+    for _,server in ipairs(result) do
+     local label=string.format("%d/%d players · %s ms · %s",server.playing,server.maxPlayers,tostring(server.ping or "?"),server.id)
+     table.insert(values,label);table.insert(orderedIds,server.id);servers[server.id]=server;labels[label]=server.id
+    end
+    chosen=nil
+    if #values==0 then values={"No available public servers"} end
+    selection:SetValues(values);selection:SetValue(values[1]);status:SetText(tostring(#result).." servers available.")
+    if pendingHop then pendingHop=false;if orderedIds[1] then join(orderedIds[1]) end end
+   end)
+  end
+  join=function(id)
+   if busy or not id or id=="" then return false end
+   local saved,reason=Hub.flushSettings(false)
+   if not saved then status:SetText("Travel paused: "..tostring(reason));return false end
+   local prepared,queueError=Hub.queueReloadForTeleport()
+   if not prepared then status:SetText("Travel paused: "..tostring(queueError));return false end
+   busy=true
+   local ok,err=pcall(function() teleport:TeleportToPlaceInstance(game.PlaceId,id,Player) end)
+   if not ok then busy=false;status:SetText("Travel failed: "..tostring(err):sub(1,160));return false end
+   status:SetText("Joining server…");return true
+  end
+  selection=group:AddDropdown("ResonancePublicServer",{Text="Public server",Values={"Refresh servers first"},Default=1,Callback=function(value) chosen=labels[value] end})
+  if SaveManager.ignored then SaveManager.ignored.ResonancePublicServer=true end
+  group:AddDropdown("ResonanceServerSort",{Text="Sort public servers",Values={"Lowest population","Lowest ping"},Default=1,Callback=function(value) sort=value;Hub.requestSave() end})
+  group:AddButton("Refresh public servers",refresh)
+  group:AddButton("Join selected server",function() if chosen then join(chosen) else status:SetText("Choose a server after refreshing.") end end)
+  group:AddButton("Copy selected server ID",function() if chosen and setclipboard then setclipboard(chosen) end end)
+  local function hop()
+   if busy then return end
+   if orderedIds[1] then join(orderedIds[1]);return end
+   pendingHop=true;refresh()
+  end
+  group:AddButton("Join another server",hop)
+  group:AddToggle("ResonanceReloadAfterTeleport",{Text="Reload hub after teleport",Default=false,Callback=function(on) reloadOn=on;Hub.requestSave() end})
+  group:AddToggle("ResonanceAutoHop",{Text="Timed server hop",Default=false,Callback=function(on) hopOn=on;nextHop=os.clock()+hopMinutes*60;Hub.requestSave() end})
+  group:AddSlider("ResonanceHopMinutes",{Text="Server hop interval (minutes)",Default=30,Min=5,Max=180,Rounding=0,Callback=function(value) hopMinutes=value;nextHop=os.clock()+value*60;Hub.requestSave() end})
+  group:AddToggle("ResonanceAutoRejoin",{Text="Rejoin after disconnect",Default=false,Callback=function(on) rejoinOn=on;rejoinTicket+=1;Hub.requestSave() end})
+  group:AddSlider("ResonanceRejoinDelay",{Text="Reconnect delay (seconds)",Default=5,Min=2,Max=30,Rounding=0,Callback=function(value) rejoinDelay=value;Hub.requestSave() end})
+  local function terminal(message)
+   local ok,result=pcall(function() return guiService:GetErrorCode() end)
+   if not ok then ok,result=pcall(function() return guiService:GetErrorType() end) end
+   local code=ok and (typeof(result)=="EnumItem" and result.Value or tonumber(result))
+   if code and Enum.ConnectionError then
+    return code>=Enum.ConnectionError.DisconnectErrors.Value and code<Enum.ConnectionError.PlacelaunchErrors.Value
+   end
+   local text=tostring(message):lower()
+   return text:find("disconnected",1,true) or text:find("lost connection",1,true) or text:find("connection was lost",1,true) or text:find("error code: 277",1,true) or text:find("error code: 279",1,true)
+  end
+  Hub.connect(guiService.ErrorMessageChanged,function(message)
+   if not rejoinOn or busy or not terminal(message) or game.JobId=="" then return end
+   rejoinTicket+=1;local ticket=rejoinTicket
+   task.delay(rejoinDelay,function() if Hub.alive and rejoinOn and ticket==rejoinTicket and not busy then join(game.JobId) end end)
+  end)
+  Hub.connect(teleport.TeleportInitFailed,function(person,_,message)
+   if person==Player and busy then busy=false;status:SetText("Travel failed: "..tostring(message):sub(1,160)) end
+  end)
+  local elapsed=0
+  Hub.connect(RunService.Heartbeat,function(dt)
+   if not hopOn or busy then return end;elapsed+=dt;if elapsed<1 then return end;elapsed=0
+   if os.clock()>=nextHop then nextHop=os.clock()+hopMinutes*60;hop() end
+  end)
+  Hub.cleanup(function() rejoinOn=false;hopOn=false;pendingHop=false;rejoinTicket+=1;Hub.queueReloadForTeleport=nil end)
+ end)();
+ -- END SERVER SESSION TOOLS
+ -- BEGIN FASTER ESCAPE TIMER
+ (function()
+  local group=Tabs.Defense:AddRightGroupbox("Escape timer")
+  local enabled=false
+  local seconds=3
+  local record
+  local function restore()
+   local old=record;record=nil;if not old then return end
+   if old.timer and old.timer.Parent and old.timer.Value==old.appliedTimer then old.timer.Value=old.timerValue end
+   if old.button and old.button.Parent and old.button.Visible==old.appliedVisible then old.button.Visible=old.buttonVisible end
+  end
+  local function held()
+   local value=Player:FindFirstChild("IsHeld");return value and value.Value
+  end
+  local function struggle()
+   if not held() then return end
+   local events=ReplicatedStorage:FindFirstChild("CharacterEvents");local remote=events and events:FindFirstChild("Struggle")
+   if remote then Hub.fire(remote) end
+  end
+  group:AddToggle("ResonanceFasterEscape",{Text="Faster escape timer",Default=false,Callback=function(on) restore();enabled=on;Hub.requestSave() end})
+  group:AddSlider("ResonanceEscapeSeconds",{Text="Escape delay (seconds)",Default=3,Min=0,Max=12,Rounding=0,Callback=function(value) seconds=value;restore();Hub.requestSave() end})
+  group:AddButton("Attempt escape now",struggle)
+  local elapsed=0
+  Hub.connect(RunService.Heartbeat,function(dt)
+   if not enabled then return end;elapsed+=dt;if elapsed<0.1 then return end;elapsed=0
+   local char=Player.Character
+   if not held() or not char then restore();return end
+   if record and record.char~=char then restore() end
+   if not record then record={char=char,deadline=os.clock()+seconds+1} end
+   local timer=Player:FindFirstChild("HeldTimer")
+   local gui=Player:FindFirstChildOfClass("PlayerGui");local controls=gui and gui:FindFirstChild("ControlsGui")
+   local pc=controls and controls:FindFirstChild("PCFrame");local button=pc and pc:FindFirstChild("Escape")
+   if timer and record.timer~=timer then
+    if record.timer and record.timer.Parent and record.timer.Value==record.appliedTimer then record.timer.Value=record.timerValue end
+    record.timer=timer;record.timerValue=timer.Value
+   end
+   if button and record.button~=button then
+    if record.button and record.button.Parent and record.button.Visible==record.appliedVisible then record.button.Visible=record.buttonVisible end
+    record.button=button;record.buttonVisible=button.Visible
+   end
+   local remaining=math.max(0,math.floor(record.deadline-os.clock()))
+   if timer and typeof(timer.Value)=="number" then record.appliedTimer=remaining;timer.Value=remaining end
+   if button and remaining==0 then record.appliedVisible=true;button.Visible=true end
+   if remaining==0 and not UserInputService:GetFocusedTextBox() and UserInputService:IsKeyDown(Enum.KeyCode.Space) then struggle() end
+  end)
+  Hub.connect(UserInputService.JumpRequest,function() if enabled and record and math.floor(record.deadline-os.clock())<=0 then struggle() end end)
+  Hub.connect(Player.CharacterRemoving,restore)
+  Hub.cleanup(function() enabled=false;restore() end)
+ end)();
+ -- END FASTER ESCAPE TIMER
+
+ -- BEGIN BLACKHOLE KEEPSAKES
+ (function()
+  local group=Tabs.Visual:AddRightGroupbox("Blackhole keepsakes")
+  local enabled=false
+  local generation=0
+  local cap=15
+  local displays={}
+  local pending=setmetatable({},{__mode="k"})
+  local function remove(display)
+   Hub.instances[display]=nil;display:Destroy()
+  end
+  local function trim()
+   while #displays>cap do remove(table.remove(displays,1)) end
+  end
+  local function clear()
+   generation+=1;table.clear(pending)
+   for _,display in ipairs(displays) do remove(display) end;table.clear(displays)
+  end
+  local function capture(object)
+   if not enabled or object.Name~="BlackHoleKick" or object.Parent~=Workspace or pending[object]
+    or not (object:IsA("Model") or object:IsA("BasePart")) then return end
+   pending[object]=true;local ticket=generation
+   task.delay(4.75,function()
+    pending[object]=nil
+    if not Hub.alive or not enabled or generation~=ticket or not object.Parent then return end
+    local archivable=object.Archivable;object.Archivable=true
+    local ok,copy=pcall(function() return object:Clone() end);object.Archivable=archivable
+    if not ok or not copy then return end
+    for _,child in ipairs(copy:GetDescendants()) do
+     if child:IsA("LuaSourceContainer") or child:IsA("Sound") or child:IsA("BodyMover") or child:IsA("Constraint") then child:Destroy()
+     elseif child:IsA("BasePart") then child.Anchored=true;child.CanCollide=false;child.CanQuery=false;child.CanTouch=false end
+    end
+    if copy:IsA("BasePart") then copy.Anchored=true;copy.CanCollide=false;copy.CanQuery=false;copy.CanTouch=false end
+    copy.Name="ArrivaBlackholeDisplay";copy.Parent=Workspace;Hub.instances[copy]=true
+    table.insert(displays,copy);trim()
+   end)
+  end
+  group:AddToggle("ResonanceKeepBlackholes",{Text="Keep blackhole visuals",Default=false,Callback=function(on)
+   clear();enabled=on
+   if on then for _,object in ipairs(Workspace:GetChildren()) do capture(object) end end
+   Hub.requestSave()
+  end})
+  group:AddSlider("ResonanceBlackholeLimit",{Text="Saved blackhole limit",Default=15,Min=1,Max=50,Rounding=0,Callback=function(value) cap=value;trim();Hub.requestSave() end})
+  group:AddButton("Clear saved blackholes",clear)
+  Hub.connect(Workspace.ChildAdded,capture)
+  Hub.cleanup(function() enabled=false;clear() end)
+ end)();
+ -- END BLACKHOLE KEEPSAKES
+
+ -- BEGIN RESONANCE MOUSE LOCK
+ (function()
+  local group=Tabs.KeyBinds:AddRightGroupbox("Mouse lock")
+  local enabled=false
+  local target,original,applied,owned
+  local function restore()
+   if target and target.Parent then
+    if owned then Hub.instances[target]=nil;target:Destroy()
+    elseif target.Value==applied then target.Value=original end
+   end
+   target,original,applied,owned=nil,nil,nil,nil
+  end
+  local function apply()
+   if not enabled then restore();return end
+   local scripts=Player:FindFirstChild("PlayerScripts")
+   local module=scripts and scripts:FindFirstChild("PlayerModule")
+   local camera=module and module:FindFirstChild("CameraModule")
+   local controller=camera and camera:FindFirstChild("MouseLockController")
+   if not controller then restore();return end
+   local value=controller:FindFirstChild("BoundKeys")
+   if target and target~=value then restore() end
+   if not value then value=Hub.new("StringValue",controller);value.Name="BoundKeys";owned=true end
+   if not value:IsA("StringValue") then return end
+   if target~=value then target=value;original=value.Value end
+   local key=Options.ResonanceMouseLockKey and Options.ResonanceMouseLockKey.Value or "LeftAlt"
+   if key=="None" then key="" end
+   applied=key;value.Value=key
+  end
+  group:AddToggle("ResonanceMouseLock",{Text="Enable mouse lock key",Default=false,Callback=function(on) enabled=on;apply();Hub.requestSave() end})
+  group:AddLabel("Mouse lock key"):AddKeyPicker("ResonanceMouseLockKey",{Text="Mouse lock key",Default="LeftAlt",Callback=function() end})
+  local elapsed=0
+  Hub.connect(RunService.Heartbeat,function(dt) if not enabled then return end;elapsed+=dt;if elapsed>=1 then elapsed=0;apply() end end)
+  Hub.cleanup(function() enabled=false;restore() end)
+ end)();
+ -- END RESONANCE MOUSE LOCK
+
+end
+-- END RESONANCE TRANSFER PACK
 
 -- Keep sidebar order fixed; arrange existing rows by purpose after construction.
 do
