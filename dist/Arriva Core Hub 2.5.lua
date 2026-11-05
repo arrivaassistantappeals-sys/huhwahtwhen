@@ -344,67 +344,116 @@ local Workspace = workspace
 local LocalPlayer = Players.LocalPlayer
 
 -- BEGIN SHARED TELEPORT MASK
--- Script-owned teleport writes go through here; ordinary movement and Z stay native.
+-- Only explicit teleports move the real rig. A local stand-in keeps the old view.
 do
-	local state
+	local state,pendingDisplay,pendingClone
 	local enabled=true
+	local renderName="ArrivaSharedTeleportMask"
 	Hub.teleportMaskCancelers={}
 	function Hub.teleportMaskEnabled() return enabled end
 	function Hub.cancelNativeTeleportMasks() for _,cancel in pairs(Hub.teleportMaskCancelers) do pcall(cancel) end end
-	local renderName="ArrivaSharedTeleportMask"
 	local function current(record)
 		return record and LocalPlayer.Character==record.char and record.root.Parent==record.char
-			and record.head.Parent==record.char and record.hum.Parent==record.char and record.hum.Health>0
+			and record.hum.Parent==record.char and record.hum.Health>0
 	end
 	function Hub.clearTeleportMask(commit)
 		local old=state;state=nil;Hub.teleportMaskState=nil
 		RunService:UnbindFromRenderStep(renderName)
-		if old and old.physics then old.physics:Disconnect();Hub.connections[old.physics]=nil end
-		if current(old) then
-			local frame=commit and old.destination or old.visualRoot
-			old.root.CFrame=frame;old.head.CFrame=frame*old.headOffset
-		end
+		if not old then return end
+		if old.added then old.added:Disconnect();Hub.connections[old.added]=nil end
+		for part,value in pairs(old.transparency) do if part.Parent then part.LocalTransparencyModifier=value end end
+		local camera=Workspace.CurrentCamera
+		if camera and camera.CameraSubject==old.displaySubject then camera.CameraSubject=(current(old) and old.hum) or old.cameraSubject end
+		if old.display then Hub.instances[old.display]=nil;old.display:Destroy() end
+		if not commit and current(old) then old.root.CFrame=old.visualRoot end
 	end
-	function Hub.teleportFrame(part)
-		if state and current(state) and part==state.root then return state.destination end
-		return part.CFrame
+	function Hub.teleportFrame(part) return part.CFrame end
+	function Hub.visibleCharacterTransparency(part)
+		if state and state.transparency[part]~=nil then return state.transparency[part] end
+		return part.LocalTransparencyModifier
+	end
+	local function beginDisplay(char,root,hum,frame)
+		local original=char.Archivable;local rootArchivable=root.Archivable
+		char.Archivable=true;root.Archivable=true
+		local ok,display=pcall(function() return char:Clone() end)
+		char.Archivable=original;root.Archivable=rootArchivable
+		if not ok or not display then return nil end
+		pendingClone=display
+		local displayRoot=display:FindFirstChild(root.Name)
+		local displayHum=display:FindFirstChildOfClass("Humanoid")
+		if not displayRoot or not displayHum then display:Destroy();return nil end
+		-- Anchor the actual cloned body joint, including realHrp-based characters.
+		for _,joint in ipairs(display:GetDescendants()) do
+			if joint:IsA("Motor6D") and (joint.Name=="RootJoint" or joint.Name=="Root") and joint.Part0 and joint.Part0:IsDescendantOf(display) then displayRoot=joint.Part0;break end
+		end
+		local joints={};local sourceJoints={}
+		local function path(object,model)
+			local names={}
+			while object and object~=model do table.insert(names,1,object.Name);object=object.Parent end
+			return table.concat(names,"/")
+		end
+		for _,object in ipairs(char:GetDescendants()) do if object:IsA("Motor6D") then sourceJoints[path(object,char)]=object end end
+		for _,object in ipairs(display:GetDescendants()) do
+			if object:IsA("LuaSourceContainer") or object:IsA("BodyMover") or object:IsA("AlignPosition") or object:IsA("AlignOrientation")
+				or object:IsA("LinearVelocity") or object:IsA("AngularVelocity") or object:IsA("VectorForce") or object:IsA("Torque") then object:Destroy()
+			elseif object:IsA("BasePart") then
+				object.Anchored=object==displayRoot;object.CanCollide=false;object.CanTouch=false;object.CanQuery=false;object.LocalTransparencyModifier=0
+			elseif object:IsA("Weld") or object:IsA("WeldConstraint") then
+				if (object.Part0 and not object.Part0:IsDescendantOf(display)) or (object.Part1 and not object.Part1:IsDescendantOf(display)) then object:Destroy() end
+			elseif object:IsA("Motor6D") then
+				local source=sourceJoints[path(object,display)];if source then table.insert(joints,{copy=object,source=source}) end
+			end
+		end
+		display.Name="ArrivaTeleportDisplay";displayHum.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+		displayHum.BreakJointsOnDeath=false
+		local pivotOffset=displayRoot.CFrame:ToObjectSpace(display:GetPivot())
+		display:PivotTo(root.CFrame*pivotOffset);display.Parent=Workspace;Hub.instances[display]=true
+		local camera=Workspace.CurrentCamera
+		local record={char=char,root=root,hum=hum,origin=root.CFrame,visualRoot=root.CFrame,lastPhysical=frame,destination=frame,
+			display=display,displayHum=displayHum,displaySubject=displayRoot.Name=="HumanoidRootPart" and displayHum or displayRoot,pivotOffset=pivotOffset,joints=joints,transparency={},cameraSubject=camera and camera.CameraSubject}
+		pendingDisplay=record
+		local function hide(part)
+			if part:IsA("BasePart") then if record.transparency[part]==nil then record.transparency[part]=part.LocalTransparencyModifier end;part.LocalTransparencyModifier=1 end
+		end
+		for _,part in ipairs(char:GetDescendants()) do hide(part) end
+		record.added=Hub.connect(char.DescendantAdded,hide)
+		if camera and (camera.CameraSubject==hum or camera.CameraSubject==root or (camera.CameraSubject and camera.CameraSubject:IsDescendantOf(char))) then camera.CameraSubject=record.displaySubject end
+		return record
 	end
 	function Hub.teleportPart(part,frame)
 		if not part then return end
 		local char=LocalPlayer.Character
 		local root=char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
-		local head=char and char:FindFirstChild("Head")
 		local hum=char and char:FindFirstChildOfClass("Humanoid")
-		if not enabled or part~=root or not head or not hum or hum.Health<=0 then part.CFrame=frame;return end
-		if state and not current(state) then Hub.clearTeleportMask(false) end
-		if state and (frame.Position-state.origin.Position).Magnitude<0.05 then Hub.clearTeleportMask(false);part.CFrame=frame;return end
+		if part~=root then part.CFrame=frame;return end
+		Hub.lastSelfTeleport={char=char,frame=frame,at=os.clock()}
+		if not enabled or not hum or hum.Health<=0 then part.CFrame=frame;return end
+		if state and not current(state) then Hub.clearTeleportMask(true) end
+		if state and (frame.Position-state.origin.Position).Magnitude<0.05 then Hub.clearTeleportMask(true);part.CFrame=frame;return end
 		if not state and (frame.Position-root.Position).Magnitude<0.05 then part.CFrame=frame;return end
 		if not state then
-			local record={char=char,root=root,head=head,hum=hum,origin=root.CFrame,visualRoot=root.CFrame,
-				visualHead=head.CFrame,headOffset=root.CFrame:ToObjectSpace(head.CFrame),destination=frame}
+			local ok,record=pcall(beginDisplay,char,root,hum,frame)
+			if not ok or not record then
+				if pendingDisplay then state=pendingDisplay;Hub.clearTeleportMask(true)
+				elseif pendingClone then Hub.instances[pendingClone]=nil;pendingClone:Destroy() end
+				pendingDisplay,pendingClone=nil,nil
+				Hub.lastTeleportMaskError=tostring(record or "Could not clone current character.");part.CFrame=frame;return
+			end
+			pendingDisplay,pendingClone=nil,nil
 			state=record;Hub.teleportMaskState=record
-			RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value-1,function()
+			RunService:BindToRenderStep(renderName,Enum.RenderPriority.Camera.Value+1,function()
 				if state~=record then return end
-				if not current(record) then Hub.clearTeleportMask(false);return end
-				if Hub.gucciAcquiring==record.char then return end
-				record.root.CFrame=record.visualRoot;record.head.CFrame=record.visualHead
-			end)
-			record.physics=Hub.connect(RunService.Heartbeat,function()
-				if state~=record then return end
-				if not current(record) then Hub.clearTeleportMask(false);return end
-				if Hub.gucciAcquiring==record.char then return end
-				-- Preserve ordinary walking while separating it from explicit teleports.
-				if not record.pendingWrite and (record.root.Position-record.visualRoot.Position).Magnitude<10 then
-					local delta=record.visualRoot:ToObjectSpace(record.root.CFrame)
-					record.destination=record.destination*delta
-					record.visualRoot=record.root.CFrame;record.visualHead=record.head.CFrame
-				end
-				record.pendingWrite=false
-				-- Same heartbeat/render split as Resonance's ownership helper.
-				record.root.CFrame=record.destination;record.head.CFrame=record.destination*record.headOffset
+				if not current(record) or not record.display.Parent then Hub.clearTeleportMask(true);return end
+				local actual=record.root.CFrame
+				local delta=record.lastPhysical:ToObjectSpace(actual)
+				if (actual.Position-record.lastPhysical.Position).Magnitude<10 then record.visualRoot=record.visualRoot*delta end
+				record.lastPhysical=actual;record.destination=actual
+				record.display:PivotTo(record.visualRoot*record.pivotOffset)
+				for _,joint in ipairs(record.joints) do if joint.copy.Parent and joint.source.Parent then joint.copy.Transform=joint.source.Transform end end
+				for real in pairs(record.transparency) do if real.Parent then real.LocalTransparencyModifier=1 end end
 			end)
 		end
-		state.destination=frame;state.pendingWrite=true
+		state.destination=frame;state.lastPhysical=frame
 		part.CFrame=frame
 	end
 	function Hub.teleportModel(model,frame)
@@ -415,8 +464,8 @@ do
 		Hub.teleportPart(root,destination);model:PivotTo(frame)
 	end
 	function Hub.setTeleportMaskEnabled(on) enabled=on==true;if not enabled then Hub.clearTeleportMask(true) end end
-	Hub.connect(LocalPlayer.CharacterRemoving,function() Hub.clearTeleportMask(false) end)
-	Hub.cleanup(function() Hub.clearTeleportMask(false);Hub.teleportPart=nil;Hub.teleportModel=nil;Hub.teleportFrame=nil end)
+	Hub.connect(LocalPlayer.CharacterRemoving,function() Hub.clearTeleportMask(true) end)
+	Hub.cleanup(function() Hub.clearTeleportMask(true);Hub.teleportPart=nil;Hub.teleportModel=nil;Hub.teleportFrame=nil end)
 end
 -- END SHARED TELEPORT MASK
 
@@ -1510,7 +1559,7 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH RE
 				minimized=not minimized;body.Visible=not minimized;grip.Visible=not minimized
 				root.Size=UDim2.fromOffset(width,minimized and 66 or height)
 			end)
-			Hub.connect(close.Activated,function() if self.onClose then self.onClose() else self:Destroy() end end)
+			Hub.connect(close.Activated,function() self:SetVisibility(false);if self.onVisibilityChanged then self.onVisibilityChanged(false) end end)
 			Hub.connect(header.InputBegan,function(event)
 				if event.UserInputType==Enum.UserInputType.MouseButton1 or event.UserInputType==Enum.UserInputType.Touch then
 					local start,position=event.Position,Hub.teleportFrame(root).Position
@@ -5251,7 +5300,9 @@ function Hub.beginTargetLoop(key, enabled)
 	if previous then cleanupActionRun(previous) end
 	local run=enabled and {enabled=true,cleanups={}} or previous or {enabled=false,cleanups={}}
 	Hub.targetLoopRuns[key]=run
-	if Hub.loopNotice then
+	run.assist=key=="DestroyAntiKickToggle" or key=="AntiAntiInputLag"
+	run.resumeAfterRespawn=nil
+	if Hub.loopNotice and not run.assist then
 		local control=Toggles[key] or Options[key];local label=control and control.Text or "Selected loop"
 		Hub.loopNotice("loops",enabled and "Loop enabled" or "Loop disabled",label,key..tostring(enabled))
 	end
@@ -5262,7 +5313,7 @@ function Hub.beginTargetLoop(key, enabled)
 end
 Hub.connect(RunService.Heartbeat,function()
 	for key,run in pairs(Hub.targetLoopRuns) do
-		if not run.enabled or (run.worker and coroutine.status(run.worker)=="dead") then
+		if not run.resumeAfterRespawn and (not run.enabled or (run.worker and coroutine.status(run.worker)=="dead")) then
 			cleanupActionRun(run)
 			if run.worker and Toggles[key] and Toggles[key].Value then Toggles[key]:SetValue(false) end
 		end
@@ -5270,10 +5321,20 @@ Hub.connect(RunService.Heartbeat,function()
 end)
 Hub.connect(Player.CharacterRemoving,function()
 	for key,run in pairs(Hub.targetLoopRuns) do if run.enabled and (#run.cleanups>0 or run.worker) then
-		cleanupActionRun(run);if Toggles[key] and Toggles[key].Value then Toggles[key]:SetValue(false) end
+		if run.assist then run.resumeAfterRespawn=Toggles[key] and Toggles[key].Value;cleanupActionRun(run)
+		else cleanupActionRun(run);if Toggles[key] and Toggles[key].Value then Toggles[key]:SetValue(false) end end
 	end end
 end)
+Hub.connect(Player.CharacterAdded,function(char) task.spawn(function()
+	local root=char:WaitForChild("HumanoidRootPart",5)
+	if not root or not Hub.alive or Player.Character~=char then return end
+	for key,run in pairs(Hub.targetLoopRuns) do if run.resumeAfterRespawn and Toggles[key] and Toggles[key].Value then Toggles[key]:SetValue(true) end end
+end) end)
 Hub.cleanup(function() for _,run in pairs(Hub.targetLoopRuns) do cleanupActionRun(run) end end)
+function Hub.playerActionLoopActive()
+	for key,run in pairs(Hub.targetLoopRuns) do if run.enabled and not run.assist and key~="LoopOwnToyRecovery" then return true end end
+	return false
+end
 function Hub.loopTargetReady(player, character)
 	if not player or player.Parent ~= Players or not Hub.canHarm(player) then return false end
 	local char = player.Character
@@ -5492,44 +5553,29 @@ do
 		end
 		return false
 	end
-	local hold, attachment, heldRoot, holdPosition, lastSeat
-	local nextAttempt, elapsed = 0, 0
-	local hadSeat, waiting = false, false
-	local status = BlobGroup:AddLabel("Blobman loops are idle.")
+	local hold,heldRoot,holdPosition,lastSeat,wasMoving,lastTeleport
+	local nextAttempt,elapsed=0,0
+	local hadSeat,waiting=false,false
+	local status=BlobGroup:AddLabel("Blobman loops are idle.")
 	local function clearHeavy()
-		for _, object in pairs({hold, attachment}) do
-			Hub.instances[object] = nil
-			Hub.assetTargets[object] = nil
-			object:Destroy()
-		end
-		hold, attachment, heldRoot, holdPosition, lastSeat = nil, nil, nil, nil, nil
+		if hold then Hub.instances[hold]=nil;Hub.assetTargets[hold]=nil;hold:Destroy() end
+		hold,heldRoot,holdPosition,lastSeat,wasMoving,lastTeleport=nil,nil,nil,nil,nil,nil
 	end
 	function Hub.updateHeavyBlobman()
-		local char = Player.Character
-		local root = char and char:FindFirstChild("HumanoidRootPart")
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		local seat = Hub.getBlobSeat()
-		if not Hub.heavyBlobEnabled or not seat or not root or not hum or hum.Health <= 0
-			or Hub.blobFlightActive or Hub.characterFlightActive or (Hub.isBlobFlightActive and Hub.isBlobFlightActive()) then clearHeavy(); return end
-		if heldRoot ~= root or lastSeat ~= seat or not hold or not hold.Parent then
-			clearHeavy()
-			heldRoot, lastSeat, holdPosition = root, seat, Hub.teleportFrame(root).Position
-			attachment = Hub.new("Attachment", root)
-			attachment.Name = "ArrivaHeavyBlobAttachment"
-			hold = Hub.new("AlignPosition", root)
-			hold.Name = "ArrivaHeavyBlobHold"
-			hold.Mode = Enum.PositionAlignmentMode.OneAttachment
-			hold.Attachment0 = attachment
-			hold.ApplyAtCenterOfMass = true
-			hold.MaxForce = 500000
-			hold.MaxVelocity = 50
-			hold.Responsiveness = 40
+		local char=Player.Character;local root=char and char:FindFirstChild("HumanoidRootPart")
+		local hum=char and char:FindFirstChildOfClass("Humanoid");local seat=Hub.getBlobSeat()
+		if not Hub.heavyBlobEnabled or not root or not hum or hum.Health<=0 or not seat or hum.SeatPart~=seat
+			or Hub.blobFlightActive or Hub.characterFlightActive or (Hub.isBlobFlightActive and Hub.isBlobFlightActive()) then clearHeavy();return end
+		local position=Hub.teleportFrame(root).Position
+		local moving=hum.MoveDirection.Magnitude>0.05
+		if heldRoot~=root or lastSeat~=seat or not hold or not hold.Parent then
+			clearHeavy();heldRoot,lastSeat,holdPosition=root,seat,position
+			hold=Hub.new("BodyPosition",root);hold.Name="ArrivaHeavyBlobHold";hold.MaxForce=Vector3.zero
 		end
-		local moving = hum.MoveDirection.Magnitude > 0.05
-		-- Deliberate hub teleports establish a new idle position.
-		if moving or (Hub.teleportFrame(root).Position - holdPosition).Magnitude > 8 then holdPosition = Hub.teleportFrame(root).Position end
-		hold.Enabled = not moving
-		hold.Position = holdPosition
+		if moving or wasMoving or (Hub.lastSelfTeleport and Hub.lastSelfTeleport~=lastTeleport and Hub.lastSelfTeleport.char==char) then holdPosition=position end
+		lastTeleport=Hub.lastSelfTeleport;wasMoving=moving
+		hold.Position=holdPosition
+		hold.MaxForce=moving and Vector3.zero or Vector3.new(math.huge,math.huge,math.huge)
 	end
 	function Hub.sampleBlobController()
 		if not Hub.alive then return end
@@ -5562,7 +5608,7 @@ do
 			end
 		end)
 	end
-	BlobGroup:AddToggle("HeavyBlobman", {Text = "Heavy Blobman (idle hold)", Default = false,
+	BlobGroup:AddToggle("HeavyBlobman", {Text = "Heavy Blobman", Default = false,
 		Callback = function(on) Hub.heavyBlobEnabled = on; if not on then clearHeavy() end end})
 	BlobGroup:AddToggle("AutoReseatBlobLoops", {Text = "Auto reseat for Blobman loops", Default = true,
 		Callback = function(on) Hub.autoReseatBlob = on; nextAttempt = 0 end})
@@ -6799,6 +6845,7 @@ TargetGroup:AddToggle("DestroyAntiKickToggle", {
 				end
 
 				while running() do
+					if not Hub.playerActionLoopActive() then task.wait(0.2);continue end
 					local target = Hub.nextLoopTarget("antiKick")
 					if not target then task.wait(0.2); continue end
 					if Hub.canHarm(target) then
@@ -6835,7 +6882,7 @@ TargetGroup:AddToggle("DestroyAntiKickToggle", {
 })
 
 -- Anti Anti Input Lag: only holdables attached to the current selected character.
-TargetGroup:AddToggle("AntiAntiInputLag",{Text="Anti Anti Input Lag",Default=false,Callback=function(on)
+TargetGroup:AddToggle("AntiAntiInputLag",{Text="Grab Anti Input",Default=false,Callback=function(on)
 	local running,_,onCleanup,bindWorker=Hub.beginTargetLoop("AntiAntiInputLag",on);Hub.requestSave()
 	if not on then return end
 	local char=Player.Character;local root=char and char:FindFirstChild("HumanoidRootPart")
@@ -6844,6 +6891,7 @@ TargetGroup:AddToggle("AntiAntiInputLag",{Text="Anti Anti Input Lag",Default=fal
 	onCleanup(function() if pending and pending~=coroutine.running() and coroutine.status(pending)~="dead" then pcall(Hub.nativeTask.cancel,pending);Hub.threads[pending]=nil end end)
 	local worker=task.spawn(function()
 		while running() and Player.Character==char and root.Parent==char do
+			if not Hub.playerActionLoopActive() then task.wait(0.2);continue end
 			local target=Hub.nextLoopTarget("antiInputItem");local targetChar=target and target.Character
 			if not targetChar or not Hub.loopTargetReady(target,targetChar) then task.wait(0.2);continue end
 			local seen={};local own=Workspace:FindFirstChild(Player.Name.."SpawnedInToys")
@@ -6858,9 +6906,9 @@ TargetGroup:AddToggle("AntiAntiInputLag",{Text="Anti Anti Input Lag",Default=fal
 						if hold and drop then
 							local done=false
 							pending=task.spawn(function()
-								if not running() or target.Character~=targetChar or not Hub.isSelectedTarget(target) or not Hub.canAffect(model) then done=true;return end
+								if not running() or not Hub.playerActionLoopActive() or target.Character~=targetChar or not Hub.isSelectedTarget(target) or not Hub.canAffect(model) then done=true;return end
 								pcall(Hub.invoke,hold,model,char)
-								if running() and Player.Character==char and target.Character==targetChar and Hub.isSelectedTarget(target) and Hub.loopTargetReady(target,targetChar) and Hub.canAffect(model) then pcall(Hub.invoke,drop,model,CFrame.new(Hub.teleportFrame(root).Position+Vector3.new(0,-2000,0)),Vector3.zero) end
+								if running() and Hub.playerActionLoopActive() and Player.Character==char and target.Character==targetChar and Hub.isSelectedTarget(target) and Hub.loopTargetReady(target,targetChar) and Hub.canAffect(model) then pcall(Hub.invoke,drop,model,CFrame.new(Hub.teleportFrame(root).Position+Vector3.new(0,-2000,0)),Vector3.zero) end
 								done=true
 							end)
 							local deadline=os.clock()+0.75
@@ -8529,17 +8577,22 @@ Hub.clickTeleport=function()
 	filter.FilterDescendantsInstances={char}
 	filter.RespectCanCollide=true
 	filter.IgnoreWater=true
-	local hit=Workspace:Raycast(ray.Origin,ray.Direction*512,filter)
+	local hit=Workspace:Raycast(ray.Origin,ray.Direction*15000,filter)
 	if not hit then return end
 	local position=hit.Position
 	for _,value in ipairs({position.X,position.Y,position.Z}) do
 		if value~=value or math.abs(value)==math.huge then return end
 	end
-	if (position-root.Position).Magnitude>512 or position.Y<=Workspace.FallenPartsDestroyHeight+8 then return end
+	local voidHeight=Workspace.FallenPartsDestroyHeight
+	if voidHeight~=voidHeight or math.abs(voidHeight)==math.huge then voidHeight=-500 end
+	voidHeight=math.max(-500,voidHeight)
+	if position.Y<=voidHeight+8 then return end
 	-- Any real collidable surface is valid, including walls and ceilings.
 	-- Offset toward the exposed side of the hit so the character stays outside it.
 	local clearance=math.max(3,hum.HipHeight+root.Size.Y/2+0.5)
 	local destination=CFrame.new(position+hit.Normal*clearance)*root.CFrame.Rotation
+	for _,value in ipairs({destination.Position.X,destination.Position.Y,destination.Position.Z}) do if value~=value or math.abs(value)==math.huge then return end end
+	if destination.Position.Y<=voidHeight+8 then return end
 	if Hub.smoothTeleport and Hub.smoothTeleport(root,destination) then return end
 	root.CFrame=destination
 	root.AssemblyLinearVelocity=Vector3.zero
@@ -8916,7 +8969,7 @@ do
 				local holePosition=hole.object.Parent and getBHPosition(hole.object) or hole.position
 				if holePosition and (position-holePosition).Magnitude<=100 then
 					if Hub.blackholeNoticeEnabled~=false then
-						notify("Blackhole detected",person.Name .. " left near a blackhole.",6,"blackhole",person.Name)
+						notify("Player kicked","@"..person.Name.." has been kicked from the server.",6,"blackhole",person.Name)
 					end
 					return
 				end
@@ -9205,7 +9258,7 @@ function Hub.freeCharacterForTools(allowedLoop)
 		or (held and held.Value) or Hub.interactionVisitLock or Hub.safeZoneLoopActive or Hub.characterFlightActive or Hub.blobFlightActive then
 		return nil,"Your character is busy, held, seated or not ready."
 	end
-	for key,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and not (allowedLoop=="LoopOwnToyRecovery" and key==allowedLoop) then return nil,"Stop player action loops first." end end
+	for key,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and not run.assist and not (allowedLoop=="LoopOwnToyRecovery" and key==allowedLoop) then return nil,"Stop player action loops first." end end
 	return root,char,hum
 end
 
@@ -10290,7 +10343,7 @@ do
 			local held=Player:FindFirstChild("IsHeld")
 			if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored
 				or (held and held.Value) or Hub.safeZoneLoopActive or Hub.blobFlightActive or Hub.characterFlightActive then return end
-			for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
+			for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and not run.assist then return end end
 			return root,char,hum
 		end
 		local function ownerIsSelf(owner) return owner.Value==Player.Name or owner.Value==Player end
@@ -10949,13 +11002,26 @@ do
 		end
 		sunGroup:AddToggle("PrettyLatitudeOverride",{Text="Override sun latitude",Default=false,Callback=function(on) latitudeOn=on;updateLatitude() end})
 		slider(sunGroup,"PrettySunLatitude","Sun latitude",41.733,0,360,1,function(v) latitude=v;updateLatitude() end)
+		local waterObjects={}
 		-- BEGIN TERRAIN REALISTIC WATER
 		-- Resonance replaces the flat ocean surfaces with Terrain water at a -4 offset.
 		do
 			local enabled,offset=false,-4
 			local revision=0
 			local worker
+			local observedModel
 			local regions,surfaces={},{}
+			local originalTerrainTransparency
+			local function waterVisibility()
+				if enabled and terrain and not waterOn then
+					if originalTerrainTransparency==nil then originalTerrainTransparency=terrain.WaterTransparency end
+					terrain.WaterTransparency=water.WaterTransparency
+				elseif not enabled and originalTerrainTransparency~=nil then
+					if not waterOn then terrain.WaterTransparency=originalTerrainTransparency
+					elseif savedWater then savedWater.WaterTransparency=originalTerrainTransparency end
+					originalTerrainTransparency=nil
+				end
+			end
 			local status=waterGroup:AddLabel("Realistic water: off.")
 			local function oceanModel()
 				local map=Workspace:FindFirstChild("Map")
@@ -10964,23 +11030,38 @@ do
 				local object=ocean and ocean:FindFirstChild("Object")
 				return object and object:FindFirstChild("ObjectModel")
 			end
-			local function restore()
+			local function restore(yielding)
 				for part,saved in pairs(surfaces) do
 					if saved.connection then saved.connection:Disconnect();Hub.connections[saved.connection]=nil end
-					if part.Parent then part.Transparency=saved.transparency end
+					if part.Parent then part.Transparency=waterOn and water.WaterTransparency or saved.baseOpacity end
 					surfaces[part]=nil
 				end
 				for i=#regions,1,-1 do
 					local record=regions[i]
-					terrain:PasteRegion(record.copy,record.corner,true)
-					record.copy:Destroy();regions[i]=nil
+					if record.empty then terrain:FillRegion(record.region,4,Enum.Material.Air)
+					else terrain:WriteVoxels(record.region,4,record.materials,record.occupancy) end
+					regions[i]=nil
+					if yielding and i%8==0 then task.wait() end
 				end
 			end
 			local function build(ticket)
-				local model=oceanModel();if not terrain or not model then error("Ocean surface has not loaded.",0) end
-				local count=0
+				local model=oceanModel()
+				local deadline=os.clock()+5
+				while not model and enabled and revision==ticket and Hub.alive and os.clock()<deadline do task.wait(0.1);model=oceanModel() end
+				if not enabled or revision~=ticket or not Hub.alive then return end
+				if not terrain or not model then error("Ocean surface has not loaded.",0) end
+				observedModel=model
+				local count=0;local lastYield=os.clock()
 				for _,part in ipairs(model:GetDescendants()) do
-					if part:IsA("BasePart") and part.Transparency<1 then
+					local originalOpacity=waterObjects[part] and waterObjects[part].Transparency
+					if part:IsA("BasePart") and (originalOpacity or part.Transparency)<1 then
+						if not surfaces[part] then
+							local saved={baseOpacity=originalOpacity or part.Transparency};surfaces[part]=saved
+							saved.connection=Hub.connect(part:GetPropertyChangedSignal("Transparency"),function()
+								if enabled and surfaces[part] and part.Transparency~=1 then part.Transparency=1 end
+							end)
+						end
+						part.Transparency=1
 						local shift=Vector3.new(0,offset,0)
 						local region=Region3.new(part.Position-part.Size/2+shift,part.Position+part.Size/2+shift):ExpandToGrid(4)
 						local low=region.CFrame.Position-region.Size/2;local high=region.CFrame.Position+region.Size/2
@@ -10988,21 +11069,15 @@ do
 							if revision~=ticket or not enabled or not Hub.alive then return end
 							count+=1
 							local upper=Vector3.new(math.min(x+128,high.X),math.min(y+128,high.Y),math.min(z+128,high.Z))
-							if math.min(x/4,y/4,z/4)<-32768 or math.max(upper.X/4-1,upper.Y/4-1,upper.Z/4-1)>32767 then error("Ocean extends outside Terrain backup bounds.",0) end
-							local corner=Vector3int16.new(x/4,y/4,z/4)
-							local cellEnd=Vector3int16.new(upper.X/4-1,upper.Y/4-1,upper.Z/4-1)
-							local copy=terrain:CopyRegion(Region3int16.new(corner,cellEnd))
-							table.insert(regions,{copy=copy,corner=corner})
-							terrain:FillRegion(Region3.new(Vector3.new(x,y,z),upper),4,Enum.Material.Water)
-							if count%8==0 then task.wait() end
+							local chunk=Region3.new(Vector3.new(x,y,z),upper)
+							local materials,occupancy=terrain:ReadVoxels(chunk,4)
+							local empty=true
+							for _,plane in ipairs(occupancy) do for _,row in ipairs(plane) do for _,value in ipairs(row) do if value>0 then empty=false;break end end;if not empty then break end end;if not empty then break end end
+							table.insert(regions,{region=chunk,empty=empty,materials=not empty and materials or nil,occupancy=not empty and occupancy or nil})
+							terrain:FillRegion(chunk,4,Enum.Material.Water)
+							if count%8==0 or os.clock()-lastYield>0.003 then task.wait();lastYield=os.clock() end
 						end end end
-						if not surfaces[part] then
-							local saved={transparency=part.Transparency};surfaces[part]=saved
-							saved.connection=Hub.connect(part:GetPropertyChangedSignal("Transparency"),function()
-								if enabled and surfaces[part] and part.Transparency~=1 then part.Transparency=1 end
-							end)
-						end
-						part.Transparency=1
+
 					end
 				end
 				status:SetText("Realistic water: Terrain water active ("..#regions.." regions).")
@@ -11013,30 +11088,35 @@ do
 				worker=task.defer(function()
 					repeat
 						local ticket=revision
-						restore()
+						restore(true)
 						if enabled then
 							status:SetText("Realistic water: converting ocean surfaces.")
 							local ok,message=pcall(build,ticket)
-							if not ok then restore();status:SetText("Realistic water: "..tostring(message));break end
+							if not ok then restore(true);status:SetText("Realistic water: "..tostring(message));break end
 						else status:SetText("Realistic water: off.") end
 					until ticket==revision or not Hub.alive
 					worker=nil
 				end)
 			end
-			waterGroup:AddToggle("SourceRealisticWater",{Text="Realistic Water",Default=false,Callback=function(on) enabled=on;request();Hub.requestSave() end})
+			waterGroup:AddToggle("SourceRealisticWater",{Text="Realistic Water",Default=false,Callback=function(on) enabled=on;waterVisibility();request();Hub.requestSave() end})
 			waterGroup:AddSlider("SourceRealisticWaterOffset",{Text="Water height offset",Default=-4,Min=-20,Max=20,Rounding=1,Callback=function(value) offset=value;if enabled then request() end;Hub.requestSave() end})
 			Hub.connect(Workspace.DescendantAdded,function(part)
 				local model=enabled and oceanModel()
 				if model and part:IsA("BasePart") and part:IsDescendantOf(model) then request() end
 			end)
+			local elapsed=0
+			Hub.connect(RunService.Heartbeat,function(dt)
+				if not enabled then return end;elapsed+=dt;if elapsed<1 then return end;elapsed=0
+				waterVisibility()
+				local model=oceanModel();if model and model~=observedModel then observedModel=model;request() end
+			end)
 			Hub.cleanup(function()
-				enabled=false;revision+=1
+				enabled=false;revision+=1;waterVisibility()
 				if worker then pcall(Hub.nativeTask.cancel,worker);worker=nil end
 				restore()
 			end)
 		end
 		-- END TERRAIN REALISTIC WATER
-		local waterObjects={}
 		local hideOverlay=true
 		local waterEpoch=0
 		local function waterRoot()
@@ -11212,7 +11292,7 @@ do
 			local first=(cam.CFrame.Position-cam.Focus.Position).Magnitude<=1.5
 			for _,part in ipairs(char:GetChildren()) do
 				if part:IsA("BasePart") and part.Name~="Head" and part.Name~="HumanoidRootPart" and part.Name~="Torso" and part.Name~="UpperTorso" and part.Name~="LowerTorso" then
-					if savedLimbs[part]==nil then savedLimbs[part]=part.LocalTransparencyModifier end
+					if savedLimbs[part]==nil then savedLimbs[part]=Hub.visibleCharacterTransparency(part) end
 					part.LocalTransparencyModifier=first and transparency or 0
 				end
 			end
@@ -15876,7 +15956,7 @@ do
 		end
 		local function modify(hide)
 			if not allowed(selected) then return end
-			if not saved[selected] then saved[selected]={CanCollide=selected.CanCollide,CanTouch=selected.CanTouch,CanQuery=selected.CanQuery,LocalTransparencyModifier=selected.LocalTransparencyModifier} end
+			if not saved[selected] then saved[selected]={CanCollide=selected.CanCollide,CanTouch=selected.CanTouch,CanQuery=selected.CanQuery,LocalTransparencyModifier=Hub.visibleCharacterTransparency(selected)} end
 			selected.CanCollide=false
 			if hide then selected.CanTouch=false;selected.CanQuery=false;selected.LocalTransparencyModifier=1 end
 		end
@@ -16401,7 +16481,7 @@ do
 			if build then build.paused=true;enabledControllers(false) end
 			local function valid(model)
 				local held=Player:FindFirstChild("IsHeld")
-				for key,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and key~=allowedLoop then return false end end
+				for key,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and not run.assist and key~=allowedLoop then return false end end
 				return (not active or active()) and (not model or recoveryModels()[model]) and Hub.alive and ticket==recoveryGeneration and Player.Character==char and ownRoot.Parent==char
 					and hum.Parent==char and hum.Health>0 and not hum.SeatPart and not ownRoot.Anchored
 					and not (held and held.Value) and not Hub.interactionVisitLock and not Hub.safeZoneLoopActive
@@ -17370,7 +17450,7 @@ do
 			local held=me:FindFirstChild("IsHeld")
 			if not root or not hum or hum.Health<=0 or hum.SeatPart or root.Anchored or (held and held.Value)
 				or Hub.safeZoneLoopActive or Hub.characterFlightActive or Hub.blobFlightActive then return end
-			for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
+			for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and not run.assist then return end end
 			return root,char
 		end
 		local function finishVisit()
@@ -17833,7 +17913,7 @@ do
 		local function readyRoot(char)
 			if not Hub.alive or Player.Character~=char or Hub.interactionVisitLock or Hub.safeZoneLoopActive
 				or Hub.blobFlightActive or Hub.characterFlightActive then return end
-			for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then return end end
+			for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and not run.assist then return end end
 			local root,hum
 			if Toggles.AutoGucciBlobToggle and Toggles.AutoGucciBlobToggle.Value then
 				local proof=Hub.gucciVerifiedRun
@@ -17951,7 +18031,7 @@ do
 			if not model or not model.Parent or not model:IsA("Model") or not model:IsDescendantOf(Workspace) then return end
 			local ancestor=model
 			while ancestor and ancestor~=Workspace do
-				if ancestor:IsA("Model") and Players:GetPlayerFromCharacter(ancestor) then return end
+				if (Hub.teleportMaskState and ancestor==Hub.teleportMaskState.display) or (ancestor:IsA("Model") and Players:GetPlayerFromCharacter(ancestor)) then return end
 				ancestor=ancestor.Parent
 			end
 			local hum=model:FindFirstChildOfClass("Humanoid")
@@ -18243,7 +18323,6 @@ do
 			{"Blob kick (dual hand)","DualHandLoopKick"}, {"Fling","PlayerFlingBtn"},
 			{"Remove Gucci","DestroyTargetGucci"}, {"Bring selected","LoopBringSelected"}, {"Bring all","BringAllGrab"},
 			{"Own toy ownership recovery","LoopOwnToyRecovery"},
-			{"Grab Anti Kick","DestroyAntiKickToggle"}, {"Anti Anti Input Lag","AntiAntiInputLag"},
 		}
 		local names,byName,hidden={},{},{}
 		for _,choice in ipairs(choices) do
@@ -18360,7 +18439,7 @@ do
 				["Gucci Settings"]={"AutoGucciBlobToggle","SourceGucciVehicle","GucciAutoDeleteBlob","AutoGucciTrainToggle","SourceRagdollOnRemoveGucci"},
 				["Recovery Settings"]={"AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","LocalMotionLinearLimit","LocalMotionAngularLimit","LoopTP"},
 			}},
-		Target={sections={"Target Interaction","Loop Controls","Aim Assist"},controls={TargetLoopType="Loop Controls",TargetLoopEnabled="Loop Controls"}},
+		Target={sections={"Target Interaction","Loop Controls","Loop assistance","Aim Assist"},controls={TargetLoopType="Loop Controls",TargetLoopEnabled="Loop Controls",DestroyAntiKickToggle="Loop assistance",AntiAntiInputLag="Loop assistance"}},
 		AntiLag={sections={"Manual Line Protection","Automatic Line Protection","Low FPS Protection","Connection & Client Health","Incoming Payload Monitor","Frame Spike Diagnostics","Runtime diagnostics"}},
 		Blob={sections={"Controls","Seating","Flight"},
 			controls={AutoReseatBlobLoops="Seating",BlobReseatInterval="Seating",AutoSitZ="Seating",BlobFlySpeed="Flight"}},
@@ -18784,7 +18863,7 @@ end
 	commands.status=function()
 		local progress=Hub.restoreProgress;local pending,loops=0,0
 		for _ in pairs(Hub.protectionStartupJobs) do pending+=1 end
-		for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled then loops+=1 end end
+		for _,run in pairs(Hub.targetLoopRuns or {}) do if run.enabled and not run.assist then loops+=1 end end
 		message(string.format("Gucci: %s\nProtection setup jobs: %d | Active action loops: %d\nSettings restore: %s | Storage: %s%s",
 			tostring(Hub.gucciStage or "off")..(Hub.gucciLastInterruption and " | Last interruption: "..Hub.gucciLastInterruption or ""),pending,loops,progress and (progress.completed.."/"..progress.total) or "none",
 			Hub.storage and "available" or "unavailable",(Hub.gucciWaitingReason and ("\n"..Hub.gucciWaitingReason) or "")
