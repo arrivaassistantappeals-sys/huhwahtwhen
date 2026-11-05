@@ -5693,26 +5693,10 @@ TargetGroup:AddToggle("LoopKickToggle", {
 -- Shared lifecycle for selected/all kill modes: bounded attempts and immediate cleanup.
 do
 	local activeRun
-	local killCooldown=setmetatable({}, {__mode="k"})
 	local function cleanupAttempt(run)
 		if not run or not run.attempt then return end
 		local attempt = run.attempt
 		run.attempt = nil
-		local victim=attempt.victim
-		if victim then
-			pcall(function()
-				-- Failed/cancelled removal must not leave a surviving character below the map.
-				if victim.player.Character==victim.character and victim.root.Parent==victim.character and victim.hum.Parent==victim.character and victim.hum.Health>0 then
-					victim.character:PivotTo(victim.position)
-					victim.hum.BreakJointsOnDeath=victim.breakJoints
-					for _,part in ipairs(victim.character:GetDescendants()) do if part:IsA("BasePart") then part.AssemblyLinearVelocity=Vector3.zero;part.AssemblyAngularVelocity=Vector3.zero end end
-				end
-			end)
-			local events=ReplicatedStorage:FindFirstChild("GrabEvents")
-			local drop=events and events:FindFirstChild("DestroyGrabLine")
-			if drop and victim.root.Parent then pcall(Hub.fire,drop,victim.root) end
-		end
-		if attempt.destroyHeight~=nil and Workspace.FallenPartsDestroyHeight==-10000 then Workspace.FallenPartsDestroyHeight=attempt.destroyHeight end
 		for part, original in pairs(attempt.collisions) do
 			pcall(function()
 				if part.Parent then
@@ -5776,7 +5760,7 @@ do
 						and targetRoot and targetRoot.Parent == targetChar and Hub.loopTargetReady(target, targetChar)
 						and (all or Hub.isSelectedTarget(target))
 				end
-				if not valid() or os.clock()<(killCooldown[targetChar] or 0) then task.wait(0.2); continue end
+				if not valid() then task.wait(0.2); continue end
 				local attempt = {character = char, root = root, position = root.CFrame, collisions = {}}
 				run.attempt = attempt
 				local ok, err = xpcall(function()
@@ -5795,31 +5779,19 @@ do
 						root.AssemblyLinearVelocity = Vector3.zero
 						SNOWship(targetRoot)
 						if not valid() then break end
-						local marker=targetRoot:FindFirstChild("PartOwner")
-						local owned=(CheckNetworkOwnerShipOnPlayer and CheckNetworkOwnerShipOnPlayer(target))
-							or (marker and marker.Value==Player.Name)
-						if owned then
+						if (CheckNetworkOwnerShipOnPlayer and CheckNetworkOwnerShipOnPlayer(target))
+							or targetRoot.AssemblyLinearVelocity.Magnitude > 500 then
 							if not valid() then break end
-							local spawn=Workspace:FindFirstChild("SpawnLocation")
-							if not spawn or (targetRoot.Position-spawn.Position).Magnitude>=15000 then break end
-							-- Resonance Kill: no sky force; one attempt per character per second.
-							killCooldown[targetChar]=os.clock()+1
-							attempt.victim={player=target,character=targetChar,root=targetRoot,hum=targetHum,
-								position=targetChar:GetPivot(),breakJoints=targetHum.BreakJointsOnDeath}
-							targetHum.BreakJointsOnDeath=false
-							targetHum:ChangeState(Enum.HumanoidStateType.Dead)
-							-- Death may complete immediately. Otherwise use the original below-map path.
-							if targetHum.Health>0 and valid() then
-								attempt.destroyHeight=Workspace.FallenPartsDestroyHeight
-								Workspace.FallenPartsDestroyHeight=-10000
-								targetChar:PivotTo(CFrame.new(0,-11111,0))
-								for _,part in ipairs(targetChar:GetDescendants()) do
-									if part:IsA("BasePart") then part.AssemblyLinearVelocity=Vector3.zero;part.AssemblyAngularVelocity=Vector3.zero end
-								end
-								local untilTime=os.clock()+math.clamp(Player:GetNetworkPing()+0.05,0.08,0.25)
-								repeat task.wait() until not valid() or os.clock()>=untilTime
-							end
+							local events = ReplicatedStorage:FindFirstChild("GrabEvents")
+							local drop = events and events:FindFirstChild("DestroyGrabLine")
+							if drop then Hub.fire(drop, targetRoot) end
+							if valid() then CreateSkyVelocity(targetRoot) end
 							break
+						end
+						if not valid() then break end
+						if Hub.canAffect(targetHum) then
+							targetHum:ChangeState(Enum.HumanoidStateType.Dead)
+							targetHum.Jump, targetHum.Sit = true, false
 						end
 						task.wait(0.05)
 					end
