@@ -374,6 +374,7 @@ do
   local hum=char and char:FindFirstChildOfClass("Humanoid")
   if part~=root then part.CFrame=frame;return end
   Hub.lastSelfTeleport={char=char,frame=frame,at=os.clock()}
+  if Hub.antiGrabIsRecovering and Hub.antiGrabIsRecovering() then Hub.antiGrabRequestedFrame=frame end
   if state and not current(state) then Hub.clearTeleportMask(true) end
   if state and (frame.Position-state.origin.Position).Magnitude<0.05 then Hub.clearTeleportMask(true);part.CFrame=frame;return end
   if not enabled or not hum or hum.Health<=0 then part.CFrame=frame;return end
@@ -3059,6 +3060,7 @@ do
 		return connection
 	end
 	local function release()
+		if Hub.stopResonanceAntiGrab then Hub.stopResonanceAntiGrab() end
 		generation += 1
 		if freezeConnection then freezeConnection:Disconnect(); Hub.connections[freezeConnection] = nil; freezeConnection = nil end
 		for part, anchored in pairs(savedAnchors) do
@@ -3094,6 +3096,7 @@ do
 		-- Keep deliberate seating and the safe-zone controller independent.
 		if hum.SeatPart or Hub.safeZoneLoopActive or Hub.gucciCharacterBusy(char) then return end
 		nextAttempt = os.clock() + 0.25
+		if Hub.startResonanceAntiGrab and Hub.startResonanceAntiGrab() then return end
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
 		-- Resolve optional remotes at use time; map loading can replace them.
@@ -3175,6 +3178,13 @@ do
 		if previous then detect() end
 	end
 
+	Hub.antiGrabMode="Normal"
+	DefenseGroup:AddDropdown("AntiGrabType",{Text="Anti Grab type",Values={"Normal","No Ragdoll","Anti-Kill","Escapes Anything, but buggy"},Default=1,Callback=function(value)
+		Hub.antiGrabMode=value
+		release();nextAttempt=0
+		if enabled and heldValue and heldValue.Value then detect() end
+		Hub.requestSave()
+	end})
 	DefenseGroup:AddToggle("AntiGrabObsidian", {Text = "Anti Grab", Default = false, Callback = function(on)
 		enabled = on
 		nextAttempt = 0
@@ -3206,7 +3216,10 @@ do
 	end})
 	DefenseGroup:AddToggle("RecoverMovementAfterGrab", {Text = "Recover movement after Anti Grab releases", Default = false,
 		Callback = function(on) recoverMovement = on end})
-	DefenseGroup:AddButton({Text = "Release local grab freeze", Func = function() freezeUsed = true; releasedCharacter, releasedUntil = nil, nil; release() end})
+	DefenseGroup:AddButton({Text = "Stop Anti Grab recovery", Func = function()
+		if Toggles.AntiGrabObsidian then Toggles.AntiGrabObsidian:SetValue(false) end
+		freezeUsed=true;releasedCharacter,releasedUntil=nil,nil;release()
+	end})
 	Hub.cleanup(function()
 		enabled, recoverMovement = false, false
 		disconnect(featureConnections)
@@ -13987,48 +14000,36 @@ do
 				end
 			end
 		end
-		tbl12.ExtraEscape = function()
-			local v22, v23, v24 = tbl12.Char()
-			if not v23 or not v24 or v24.Health == 0 or tbl7.States.Escaping or localPlayer.InPlot.Value then
-				return
-			end
-			tbl7.States.Escaping = true
-			local TractorGreen = tbl12.SpawnToy("TractorGreen", workspace.Waypoints.TudorHouse.CFrame)
-			if not TractorGreen then
-				tbl7.States.Escaping = false
-				return
-			end
-			local vehicleSeat = TractorGreen:WaitForChild("VehicleSeat", 1)
-			if not vehicleSeat then
-				tbl7.States.Escaping = false
-				return tbl12.DestroyToy(TractorGreen)
-			end
-			local now3 = tick()
-			local flag12 = false
-			v24.Sit = false
-			vehicleSeat:Sit(v24)
-
-			local connection = vehicleSeat.ChildAdded:Connect(function(child)
-				if child.Name == "SeatWeld" then
-					child.Enabled = false
-					flag12 = true
-					child:Destroy()
-				end
-			end)
-
-			while true do
-				fn20()
-				if not (flag12 or tick() - now3 > 0.7) then
-					continue
-				end
-				break
-			end
-
-			connection:Disconnect()
-			v24.Sit = false
-			tbl7.States.Escaping = false
-			return tbl12.DestroyToy(TractorGreen)
+		tbl12.ExtraEscape = function(active)
+			local char,root,hum=tbl12.Char()
+			local plot=Player:FindFirstChild("InPlot")
+			if not root or not hum or hum.Health<=0 or tbl7.States.Escaping or (plot and plot.Value) then return end
+			local function current() return Hub.alive and not flag11 and Player.Character==char and root.Parent==char and hum.Parent==char and hum.Health>0 and (not active or active()) end
+			if not current() then return end
+			local waypoints=Workspace:FindFirstChild("Waypoints");local destination=waypoints and waypoints:FindFirstChild("TudorHouse")
+			if not destination then return end
+			tbl7.States.Escaping=true
+			local toy,connection
+			local ok,err=xpcall(function()
+				toy=tbl12.SpawnToy("TractorGreen",destination.CFrame)
+				if not toy or not current() then return end
+				local seat=toy:WaitForChild("VehicleSeat",1)
+				if not seat or not current() then return end
+				local weldObserved=false
+				connection=Hub.connect(seat.ChildAdded,function(child)
+					if current() and child.Name=="SeatWeld" then child.Enabled=false;weldObserved=true;child:Destroy() end
+				end)
+				hum.Sit=false;seat:Sit(hum)
+				local deadline=os.clock()+0.7
+				repeat task.wait() until not current() or weldObserved or os.clock()>=deadline
+			end,debug.traceback)
+			if connection then connection:Disconnect();Hub.connections[connection]=nil end
+			if current() and not hum.SeatPart then hum.Sit=false end
+			if toy then pcall(tbl12.DestroyToy,toy) end
+			tbl7.States.Escaping=false
+			if not ok then warn("[Extra Escape] "..tostring(err)) end
 		end
+
 		tbl12.BreakLimb = function(arg, arg2)
 			local flag12 = arg == localPlayer
 			if flag12 and tbl8.GucciAntiGrab then
@@ -14158,8 +14159,88 @@ do
 		tbl12.LightPhysicalProperties=PhysicalProperties.new(0.01,0.01,0.01,0.01,0.01)
 		tbl7.States={}
 		tbl7.LimbOffsetsRL={Head=CFrame.new(0,1.5,0),["Left Arm"]=CFrame.new(-1.5,0,0),["Right Arm"]=CFrame.new(1.5,0,0),["Left Leg"]=CFrame.new(-0.5,-2,0),["Right Leg"]=CFrame.new(0.5,-2,0),Torso=CFrame.new()}
-		-- Anti Grab keeps its lifecycle-aware Defense callback. Do not replace it
-		-- here: imported render loops bypass held-flag replacement and respawn cleanup.
+		-- BEGIN RESONANCE ANTI GRAB MODES
+		-- Original mode behavior, using the existing held/respawn binding and cleanup.
+		do
+			local session
+			local function stop()
+				local old=session;session=nil;tbl7.States["Anti Grab"]=false;Hub.antiGrabRequestedFrame=nil
+				if not old then return end
+				if old.connection then old.connection:Disconnect();Hub.connections[old.connection]=nil end
+				for part,record in pairs(old.parts) do if part.Parent then part.CanCollide=record.collision;part.CustomPhysicalProperties=record.physics end end
+				if old.hum.Parent==old.char then
+					old.hum.AutoRotate=old.autoRotate
+					-- Restoring RequiresNeck without a live Neck would itself kill the rig.
+					if not old.requiresNeck or (old.neck and old.neck.Parent and old.neck.Enabled) then old.hum.RequiresNeck=old.requiresNeck end
+					if not old.hum.SeatPart then old.hum.Sit=old.sit end
+				end
+			end
+			local function escape(record)
+				if record.escaping then return end;record.escaping=true
+				task.spawn(function()
+					local ok,err=pcall(tbl12.ExtraEscape,function() return session==record and Hub.alive and isHeld.Value end)
+					record.escaping=false;if not ok then warn("[Anti Grab escape] "..tostring(err)) end
+				end)
+			end
+			Hub.antiGrabIsRecovering=function() return session~=nil end
+			Hub.stopResonanceAntiGrab=stop
+			Hub.startResonanceAntiGrab=function()
+				if session then return true end
+				if not isHeld.Value or flag11 then return false end
+				local char,root,hum=tbl12.Char()
+				local torso=char and char:FindFirstChild("Torso")
+				if not root or not hum or hum.Health<=0 or not torso then return false end
+				local mode=Hub.antiGrabMode or "Normal"
+				local look=torso.CFrame.LookVector;local flat=Vector3.new(look.X,0,look.Z)
+				local record={char=char,root=root,hum=hum,torso=torso,neck=torso:FindFirstChild("Neck"),parts={},mode=mode,
+					position=torso.Position,direction=flat.Magnitude>0.000001 and flat.Unit or Vector3.new(0,0,-1),
+					autoRotate=hum.AutoRotate,requiresNeck=hum.RequiresNeck,sit=hum.Sit,nextRemote=0,nextEscape=os.clock()+2}
+				session=record;tbl7.States["Anti Grab"]=true
+				hum.RequiresNeck=false;hum.AutoRotate=false;tbl12.ResetVelocity(root)
+				if mode=="Escapes Anything, but buggy" then escape(record) end
+				record.connection=Hub.connect(originalRunService.RenderStepped,function(dt)
+					local ok,err=xpcall(function()
+						local toggle=Toggles.AntiGrabObsidian
+						if session~=record then return end
+						if flag11 or not Hub.alive or not toggle or not toggle.Value or not isHeld.Value or Player.Character~=char
+							or root.Parent~=char or torso.Parent~=char or hum.Parent~=char or hum.Health<=0 or Hub.safeZoneLoopActive then stop();return end
+						local now=os.clock()
+						if now>=record.nextRemote then
+							local events=ReplicatedStorage:FindFirstChild("CharacterEvents")
+							local struggle=events and events:FindFirstChild("Struggle")
+							if struggle then Hub.fire(struggle) end
+							if mode=="Normal" or mode=="Anti-Kill" then tbl11.RagdollRemote:FireServer(root,mode=="Anti-Kill" and 0.11 or 0) end
+							record.nextRemote=now+1/30
+						end
+						if mode=="Escapes Anything, but buggy" and now>=record.nextEscape then record.nextEscape=now+2;escape(record) end
+						local movement=hum.MoveDirection
+						if movement.Magnitude>0 then record.position+=movement*math.max(16,hum.WalkSpeed)*dt end
+						local camera=Workspace.CurrentCamera
+						if camera and (camera.CFrame.Position-camera.Focus.Position).Magnitude<1 then movement=camera.CFrame.LookVector end
+						local facing=Vector3.new(movement.X,0,movement.Z)
+						if facing.Magnitude>0.000001 then
+							local blended=record.direction:Lerp(facing.Unit,math.min(dt*12,1));if blended.Magnitude>0.000001 then record.direction=blended.Unit end
+						end
+						tbl12.ResetVelocity(root)
+						local requested=Hub.antiGrabRequestedFrame
+						if requested then record.position=requested.Position;torso.CFrame=requested;Hub.antiGrabRequestedFrame=nil
+						else torso.CFrame=CFrame.lookAt(record.position,record.position+record.direction) end
+						hum.Sit=mode=="Anti-Kill"
+						if not record.neck or not record.neck.Enabled then
+							for _,part in ipairs(char:GetDescendants()) do if part:IsA("BasePart") and not record.parts[part] then record.parts[part]={collision=part.CanCollide,physics=part.CustomPhysicalProperties} end end
+							tbl12.ToggleCollisions(char,false);tbl12.RepositionLimbs(char,true)
+						end
+						for _,track in ipairs(hum:GetPlayingAnimationTracks()) do if track.Animation and track.Animation.AnimationId=="rbxassetid://7047322890" then track:Stop() end end
+						local scream=root:FindFirstChild("Scream");if scream and scream:IsA("Sound") then scream.Playing=false end
+					end,debug.traceback)
+					if not ok then stop();warn("[Anti Grab] "..tostring(err)) end
+				end)
+				return true
+			end
+			if Hub.releaseGrabProtection then Hub.releaseGrabProtection() end
+			Hub.cleanup(function() stop();Hub.startResonanceAntiGrab=nil;Hub.stopResonanceAntiGrab=nil;Hub.antiGrabIsRecovering=nil;Hub.antiGrabRequestedFrame=nil end)
+		end
+		-- END RESONANCE ANTI GRAB MODES
 
 		-- RootAttachment replacement and root mass repair, as used by the supplied Anti Blobman.
 		local removedAttachment,attachmentRoot,replacement
@@ -18451,7 +18532,7 @@ do
 			rename={["Defense Main"]="Grab & Seat Settings",["Extra Defense"]="Advanced & Countermeasures",["Local hazard filters"]="World Hazard Notes"},
 			controls={
 				PrivatePoisonTouch="Protection Toggles",
-				AntiGrabObsidian="Protection Toggles",RecoverMovementAfterGrab="Protection Toggles",AntiBlobmanToggle="Protection Toggles",LocalUnwantedSeatProtection="Protection Toggles",AntiStickyToggle="Protection Toggles",
+				AntiGrabType="Grab & Seat Settings",AntiGrabObsidian="Protection Toggles",RecoverMovementAfterGrab="Protection Toggles",AntiBlobmanToggle="Protection Toggles",LocalUnwantedSeatProtection="Protection Toggles",AntiStickyToggle="Protection Toggles",
 				AutoGucciBlobToggle="Protection Toggles",AutoGucciTrainToggle="Protection Toggles",GucciAutoDeleteBlob="Gucci Settings",SourceGucciVehicle="Gucci Settings",SourceRagdollOnRemoveGucci="Gucci Settings",
 				ShurikenAntiKick="Protection Toggles",SourceBreakPCLD="Protection Toggles",
 				AntiVoidToggle="Protection Toggles",SourceDisableVoid="Protection Toggles",LocalMotionProtection="Protection Toggles",LocalMotionLinearLimit="Recovery Settings",LocalMotionAngularLimit="Recovery Settings",LoopTP="Protection Toggles",
@@ -18475,7 +18556,7 @@ do
 			},
 			order={
 				["Protection Toggles"]={"AntiGrabObsidian","RecoverMovementAfterGrab","AutoGucciBlobToggle","AutoGucciTrainToggle","AntiBlobmanToggle","ShurikenAntiKick","SourceBreakPCLD","AntiStickyToggle","LocalUnwantedSeatProtection","AntiExplosionToggle","AntiBurnToggle","PaintDeleteToggle","PrivatePoisonTouch","AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","SourceAntiObjectFling","AntiInputLag","SourceAntiBanana","SourceAntiSnowball","SourceNoclipBarrier","SourceAntiInvis","LoopTP","AutoResetToggle"},
-				["Grab & Seat Settings"]={"AntiGrabObsidian","RecoverMovementAfterGrab","AntiBlobmanToggle","LocalUnwantedSeatProtection","AntiStickyToggle"},
+				["Grab & Seat Settings"]={"AntiGrabType","AntiGrabObsidian","RecoverMovementAfterGrab","AntiBlobmanToggle","LocalUnwantedSeatProtection","AntiStickyToggle"},
 				["Gucci Settings"]={"AutoGucciBlobToggle","SourceGucciVehicle","GucciAutoDeleteBlob","AutoGucciTrainToggle","SourceRagdollOnRemoveGucci"},
 				["Recovery Settings"]={"AntiVoidToggle","SourceDisableVoid","LocalMotionProtection","LocalMotionLinearLimit","LocalMotionAngularLimit","LoopTP"},
 			}},
