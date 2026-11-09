@@ -673,6 +673,7 @@ local WHITELIST = {
 	[1325117607] = "arrivabus415",
 	[115211703] = "00FSwedish",
 	[9225934804] = "imagine2v1_L",
+	[1485161889] = "noirofknights",
 }
 
 --// Whitelist check
