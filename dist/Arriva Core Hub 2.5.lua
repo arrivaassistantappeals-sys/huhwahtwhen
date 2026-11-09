@@ -495,16 +495,23 @@ function Hub.queueSafetySave()
 	Hub.safetySaveThread = task.delay(0.5, function() Hub.safetySaveThread = nil; Hub.saveSafety() end)
 end
 function Hub.checkFriend(player)
-	if not player or player == LocalPlayer or Hub.friendChecks[player.UserId] then return end
+	if not player or player == LocalPlayer or player.Parent ~= Players or Hub.friendChecks[player.UserId] then return end
 	local userId = player.UserId
-	Hub.friendChecks[userId] = true
-	task.spawn(function()
-		local ok, result = pcall(function() return LocalPlayer:IsFriendsWithAsync(userId) end)
-		if player.Parent~=Players then Hub.friendChecks[userId]=nil;return end
-		Hub.friendCache[userId] = {friend = ok and result == true, failed = not ok, expires = os.clock() + (ok and 60 or 15)}
+	local request = {}
+	local cache = Hub.friendCache
+	Hub.friendChecks[userId] = request
+	local function finish(ok, result)
+		if Hub.friendChecks[userId] ~= request then return end
 		Hub.friendChecks[userId] = nil
+		if player.Parent ~= Players or Hub.friendCache ~= cache then return end
+		cache[userId] = {friend = ok and result == true, failed = not ok, expires = os.clock() + (ok and 60 or 15)}
 		if Hub.reconcileProtection then Hub.reconcileProtection() end
 		if not ok then warn("[Arriva whitelist] Friend lookup failed; target stays protected: " .. tostring(result)) end
+	end
+	task.delay(10, function() finish(false, "lookup timed out") end)
+	task.spawn(function()
+		local ok, result = pcall(function() return LocalPlayer:IsFriendsWithAsync(userId) end)
+		finish(ok, result)
 	end)
 end
 function Hub.isProtected(player)
@@ -649,6 +656,7 @@ Hub.connect(Players.PlayerRemoving,function(player)
 	if Hub.playerNames[player.Name]==player then Hub.playerNames[player.Name]=nil end
 	if player.Character then Hub.characterOwners[player.Character]=nil end
 	Hub.friendCache[player.UserId]=nil
+	Hub.friendChecks[player.UserId]=nil
 	if Hub.refreshWhitelistUI then Hub.queueRefresh("whitelist",Hub.refreshWhitelistUI) end
 end)
 -- END SAFETY WHITELIST CORE
@@ -17733,8 +17741,13 @@ do
 			if not person or person==me or person.Parent~=Players then return false end
 			local manual=Hub.manualWhitelist or {}
 			if manual[tostring(person.UserId)] or manual["name:"..person.Name:lower()] then return true end
+			if not Hub.whitelistFriends then return false end
 			local friend=(Hub.friendCache or {})[person.UserId]
-			return Hub.whitelistFriends and friend and friend.friend==true and not friend.failed
+			if not friend or (friend.expires or 0)<=os.clock() then
+				Hub.checkFriend(person)
+				friend=(Hub.friendCache or {})[person.UserId]
+			end
+			return friend and friend.friend==true and not friend.failed
 				and (friend.expires or 0)>os.clock() or false
 		end
 		local function character(person)
