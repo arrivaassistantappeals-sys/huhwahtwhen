@@ -11196,57 +11196,74 @@ do
 			return arg4, true
 		end
 
-		local function fn24(arg)
-			n36 += 1
-			local v20 = n36
-
-			task.spawn(function()
-				if not fn22(v20) or not arg then
-					return
-				end
-				local objectModel = Workspace.Map.AlwaysHereTweenedObjects.Ocean.Object.ObjectModel
-				local vector = Vector3.new(0, tbl9.WaterYOffset, 0)
-				local tbl16 = {}
-
-				for _, v21 in ipairs(objectModel:QueryDescendants("BasePart")) do
-					local tbl17 = tbl7.WaterPartStates[v21]
-
-					if not tbl17 then
-						if v21.Transparency == 1 then
-							continue
-						end
-						tbl17 = { v21.CanCollide, v21.Transparency }
-						tbl7.WaterPartStates[v21] = tbl17
-					end
-
-					if tbl17[2] ~= 1 then
-						tbl16[#tbl16 + 1] = { v21, tbl17[2], v21.Position - v21.Size / 2 + vector, v21.Position + v21.Size / 2 + vector }
-					end
-				end
-
-				for _, v21 in ipairs(tbl16) do
-					local v22 = v21[1]
-
-					if v22.Parent then
-						tbl7.WaterParts[#tbl7.WaterParts + 1] = { v22, v21[2] }
-						v22.Transparency = 1
-					end
-				end
-
-				local now2 = os.clock()
-
-				for _, v21 in ipairs(tbl16) do
-					if v20 ~= n36 then
-						return
-					end
-					local v22, v23 = fn23(v21[3], v21[4], v20, now2)
-					if not v23 then
-						return
-					end
-					now2 = v22
-				end
-			end)
-		end
+  local waterStatus=waterGroup:AddLabel("Realistic water: off.")
+  local function oceanModel()
+   local node=Workspace
+   for _,name in ipairs({"Map","AlwaysHereTweenedObjects","Ocean","Object","ObjectModel"}) do
+    node=node and node:FindFirstChild(name)
+    if not node then return end
+   end
+   return node
+  end
+  local function surfaceParts(model)
+   local ok,parts=pcall(function() return model:QueryDescendants("BasePart") end)
+   if ok then return parts end
+   parts={}
+   for _,part in ipairs(model:GetDescendants()) do
+    if part:IsA("BasePart") then parts[#parts+1]=part end
+   end
+   return parts
+  end
+  local function fn24(on)
+   n36+=1
+   local generation=n36
+   task.spawn(function()
+    local ok,err=pcall(function()
+     if not fn22(generation) or generation~=n36 then return end
+     if not on then waterStatus:SetText("Realistic water: off.");return end
+     local surfaces
+     while Hub.alive and generation==n36 do
+      local model=oceanModel()
+      surfaces={}
+      if model then
+       for _,part in ipairs(surfaceParts(model)) do
+        if part.Parent and part.Transparency<1 then surfaces[#surfaces+1]=part end
+       end
+      end
+      if #surfaces>0 then break end
+      waterStatus:SetText("Realistic water: waiting for ocean surfaces to load.")
+      task.wait(0.5)
+     end
+     if not Hub.alive or generation~=n36 then return end
+     waterStatus:SetText("Realistic water: generating…")
+     local offset=Vector3.new(0,tbl9.WaterYOffset,0)
+     local budget=os.clock()
+     for _,part in ipairs(surfaces) do
+      if generation~=n36 then return end
+      if part.Parent then
+       local original=part.Transparency
+       local nextBudget,completed=fn23(part.Position-part.Size/2+offset,part.Position+part.Size/2+offset,generation,budget)
+       if not completed or generation~=n36 then return end
+       budget=nextBudget
+       -- Keep the original surface visible until its terrain replacement succeeds.
+       if part.Parent then
+        tbl7.WaterPartStates[part]={part.CanCollide,original}
+        tbl7.WaterParts[#tbl7.WaterParts+1]={part,original}
+        part.Transparency=1
+       end
+      end
+     end
+     waterStatus:SetText("Realistic water: generated.")
+    end)
+    if not ok and generation==n36 then
+     local restored,restoreError=pcall(fn22,generation)
+     waterStatus:SetText("Realistic water: generation failed; toggle off/on to retry.")
+     warn("[Realistic water] "..tostring(err))
+     Hub.lastWorkerError="[Realistic water] "..tostring(err)
+     if not restored then warn("[Realistic water cleanup] "..tostring(restoreError)) end
+    end
+   end)
+  end
 
   waterGroup:AddToggle("SourceRealisticWater",{Text="Realistic Water",Default=false,Callback=function(on)
    active=on;fn24(on);Hub.requestSave()

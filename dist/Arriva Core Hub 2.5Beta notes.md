@@ -41,3 +41,17 @@ low-FPS behavior previously enabled it unintentionally.
 
 `node tests/anti-lag-sources-beta.mjs` compiles the beta and mocks source overlap,
 manual preservation, activation/recovery timing and automatic transitions without saves.
+
+## Realistic Water loading follow-up
+
+The generator waits for the ocean hierarchy and visible surfaces to load instead of
+indexing a missing hierarchy once and stopping. If `QueryDescendants` is unavailable,
+it filters `GetDescendants` for BaseParts. Each original surface remains visible until
+its terrain replacement finishes. Failed generation attempts report an inline status,
+record the error in runtime diagnostics, and attempt to restore surfaces/generated regions.
+Toggle off/on to retry an actual generation failure. The 128-unit chunks and 4ms yield
+budget remain unchanged; there is no repeated full-map conversion loop.
+
+`node tests/realistic-water-beta.mjs` mocks delayed loading, unavailable query support,
+failed terrain filling, retry, cancellation and yielding. Live generation/rendering and
+performance in Roblox/Xeno remain unverified.
