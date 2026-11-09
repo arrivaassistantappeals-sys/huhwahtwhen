@@ -29,3 +29,15 @@ and action-loop implementations are unchanged.
 No live Roblox/Xeno session was available. Test an ordinary temporary travel-and-return,
 a permanent travel, masking off, Z travel, respawn, and camera movement at low FPS.
 This build does not establish that every return path or in-game timing issue is fixed.
+
+## Automatic Anti Lag follow-up
+
+Low-FPS activation is independent of Force Anti Lag and line-burst activation.
+It activates after two seconds continuously below the configured FPS threshold,
+then releases after eight seconds of recovery. Disabling low-FPS Auto releases only
+its own request. Automatic transitions do not change/save the manual checkbox.
+An existing saved Force setting remains respected; switch it off once if the old
+low-FPS behavior previously enabled it unintentionally.
+
+`node tests/anti-lag-sources-beta.mjs` compiles the beta and mocks source overlap,
+manual preservation, activation/recovery timing and automatic transitions without saves.

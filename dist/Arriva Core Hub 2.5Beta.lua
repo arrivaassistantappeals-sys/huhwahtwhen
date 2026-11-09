@@ -3874,15 +3874,24 @@ do
 	local AutoLagGroup = Tabs.AntiLag:AddLeftGroupbox("Automatic Line Protection")
 	-- Automatic local mitigation; manual Anti Lag always takes priority.
 	local autoOn,manualOn,autoActive=false,false,false
+	local automaticSources={}
 	local threshold,windowSeconds,quietSeconds=40,1,8
 	local count,windowStart,lastLine=0,0,-math.huge
 	local burstConnection,quietConnection
 	local pending=false
 	local autoEpoch=0
 	local function applyAntiLag()
-		local wanted=manualOn or autoActive
+		local wanted=manualOn or autoActive or next(automaticSources)~=nil
 		if wanted and not state.on then enable()
 		elseif not wanted and state.on then restore() end
+	end
+	-- Automatic sources never mutate the saved manual checkbox.
+	function Hub.setAutoAntiLag(source,on)
+		local active=on==true
+		if (automaticSources[source]==true)==active then return false end
+		automaticSources[source]=active and true or nil
+		applyAntiLag()
+		return true
 	end
 	local function stopAuto()
 		autoEpoch+=1
@@ -3924,7 +3933,8 @@ do
 				autoActive=false;count=0
 				applyAntiLag()
 				notify("Auto Anti Lag",manualOn and "Line burst settled, manual Anti Lag remains enabled."
-					or "Line burst settled, previous Anti Lag setting restored.",4)
+					or (next(automaticSources) and "Line burst settled; another automatic Anti Lag source remains active."
+					or "Line burst settled, previous Anti Lag setting restored."),4)
 			end
 		end)
 	end
@@ -3943,7 +3953,8 @@ do
 		autoOn=false
 		if burstConnection then burstConnection:Disconnect();burstConnection=nil end
 		if quietConnection then quietConnection:Disconnect();quietConnection=nil end
-		Hub.setManualAntiLag=nil
+		Hub.setManualAntiLag=nil;Hub.setAutoAntiLag=nil
+		table.clear(automaticSources)
 	end)
 
 	DefenseGroup:AddToggle("AntiLagToggle", {
@@ -14489,18 +14500,35 @@ do
 		end)
 		-- END BREAK PCLD
 
-		-- Supplied low-FPS auto anti-lag supplements the existing line-burst detector.
+		-- Low-FPS mitigation is a temporary source, independent of the manual checkbox.
 		local lowFps=false
 		local fpsThreshold=3
 		local lowFpsStarted=os.clock()
+		local belowSince,recoveredSince
 		Hub.connect(originalRunService.Heartbeat,function(dt)
-			if lowFps and os.clock()-lowFpsStarted>=2.5 and dt>0 and math.floor(1/dt)<fpsThreshold then
-				local toggle=Toggles.AntiLagToggle
-				if toggle and not toggle.Value then toggle:SetValue(true);fn18("Anti Lag enabled, FPS below threshold.","Auto Anti Lag") end
+			if not lowFps or os.clock()-lowFpsStarted<2.5 or dt<=0 then return end
+			local now=os.clock()
+			if 1/dt<fpsThreshold then
+				recoveredSince=nil;belowSince=belowSince or now
+				if now-belowSince>=2 and Hub.setAutoAntiLag and Hub.setAutoAntiLag("lowFps",true) then
+					fn18("Low FPS detected; temporary Anti Lag enabled.","Auto Anti Lag")
+				end
+			else
+				belowSince=nil;recoveredSince=recoveredSince or now
+				if now-recoveredSince>=8 and Hub.setAutoAntiLag and Hub.setAutoAntiLag("lowFps",false) then
+					fn18("FPS recovered; temporary Anti Lag released.","Auto Anti Lag")
+				end
 			end
 		end)
-		defenseGroup:AddToggle("SourceLowFpsAntiLag",{Text="Auto Anti Lag (low FPS)",Default=false,Callback=function(on) lowFps=on;Hub.requestSave() end})
-		settings:AddSlider("SourceLowFpsThreshold",{Text="Auto Anti Lag FPS threshold",Default=3,Min=1,Max=20,Rounding=0,Callback=function(value) fpsThreshold=value;Hub.requestSave() end})
+		defenseGroup:AddToggle("SourceLowFpsAntiLag",{Text="Auto Anti Lag (low FPS)",Default=false,Callback=function(on)
+			lowFps=on;belowSince=nil;recoveredSince=nil;lowFpsStarted=os.clock()
+			if not on and Hub.setAutoAntiLag then Hub.setAutoAntiLag("lowFps",false) end
+			Hub.requestSave()
+		end})
+		settings:AddSlider("SourceLowFpsThreshold",{Text="Auto Anti Lag FPS threshold",Default=3,Min=1,Max=20,Rounding=0,Callback=function(value)
+			fpsThreshold=value;belowSince=nil;recoveredSince=nil;Hub.requestSave()
+		end})
+		Hub.cleanup(function() lowFps=false;if Hub.setAutoAntiLag then Hub.setAutoAntiLag("lowFps",false) end end)
 
 		-- Supplied anti-invisibility is included by the adjoining module.
 		-- Supplied correction-event auto reset, independent from the old periodic reset option.
