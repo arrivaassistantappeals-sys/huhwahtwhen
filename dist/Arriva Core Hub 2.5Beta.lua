@@ -3335,7 +3335,7 @@ Hub.cleanup(function()
 end)
 
 DefenseGroup:AddToggle("AntiExplosionToggle", {
-	Text="Anti Explosion", 
+	Text="Anti Explosion",
 	Default=false,
 	Callback=function(on)
 		Hub.requestSave()
