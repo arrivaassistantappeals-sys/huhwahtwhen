@@ -252,8 +252,7 @@ function Hub.persistSettings(explicit)
 	if Hub.configLoading then
 		return false,"Settings are still loading. Wait for loading to finish, then try again."
 	end
-	if explicit then Hub.configLoadFailed=false end
-	if Hub.configLoadFailed then
+	if Hub.configLoadFailed and explicit ~= true then
 		Hub.lastSaveError="Autosave paused to protect an unreadable settings file. Use Save settings to replace it deliberately."
 		return false,Hub.lastSaveError
 	end
@@ -266,6 +265,7 @@ function Hub.persistSettings(explicit)
 		Hub.lastSaveError = tostring(ok and err or success)
 		return false, Hub.lastSaveError
 	end
+	if explicit == true then Hub.configLoadFailed = false end
 	Hub.lastSaveError = nil
 	Hub.lastSaveAt = os.date("%H:%M:%S")
 	Hub.lastSettings = Hub.captureSettings()
@@ -7032,6 +7032,7 @@ do
 		Callback = function(on)
 			Hub.whitelistFriends = on
 			table.clear(Hub.friendCache)
+			table.clear(Hub.friendChecks)
 			Hub.reconcileProtection()
 			if on then for _, player in ipairs(Players:GetPlayers()) do Hub.checkFriend(player) end end
 			Hub.requestSave()
@@ -7039,6 +7040,7 @@ do
 	})
 	WhitelistGroup:AddButton({Text = "Refresh list / friend checks", Func = function()
 		table.clear(Hub.friendCache)
+		table.clear(Hub.friendChecks)
 		Hub.refreshWhitelistUI()
 		if Hub.whitelistFriends then for _, player in ipairs(Players:GetPlayers()) do Hub.checkFriend(player) end end
 	end})
