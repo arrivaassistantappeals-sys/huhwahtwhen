@@ -73,3 +73,21 @@ ownership-acquisition helper is unchanged.
 `node tests/anti-input-beta.mjs` (requires luau-web) compiles the complete beta and
 mocks replication waits, pending-call timeout, disable/re-enable, repeated calls
 and disabling during loading. These pass; live Roblox behavior is unverified.
+
+## Spam Grab lifecycle
+
+The acquisition-to-drag transition now requires an unanchored assembly with
+ReceiveAge zero as well as the existing timer. Losing that local signal returns
+to acquisition. ReceiveAge is local simulation evidence, not authoritative server
+ownership or proof that a player disconnected.
+
+Target humanoid Sit/PlatformStand snapshots and grab-line cleanup now follow
+deselection, target/character replacement, disable and hub lifecycle cleanup.
+Deselecting restores the local starting position immediately. Remote lookups
+are bounded instead of waiting indefinitely. Existing target/whitelist checks
+and target rotation remain.
+
+`node tests/spam-grab-beta.mjs` (requires luau-web) compiles the full beta and
+mocks timer-only rejection, ownership-signal loss, deselection, disable, target
+respawn and original humanoid state restoration. Live Roblox verification remains
+required.

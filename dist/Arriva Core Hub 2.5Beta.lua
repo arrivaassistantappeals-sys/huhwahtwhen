@@ -5808,12 +5808,34 @@ TargetGroup:AddToggle("LoopKickToggle", {
 			return
 		end
 
+		local activeTarget
+		local function clearTarget()
+			local record=activeTarget;activeTarget=nil
+			if not record then return end
+			pcall(function()
+				if record.hum.Parent==record.char then
+					record.hum.PlatformStand=record.platformStand
+					record.hum.Sit=record.sit
+				end
+			end)
+			pcall(function()
+				local events=ReplicatedStorage:FindFirstChild("GrabEvents")
+				local release=events and events:FindFirstChild("DestroyGrabLine")
+				if release and record.root.Parent then Hub.fire(release,record.root) end
+			end)
+		end
+		onCleanup(clearTarget)
 		local bound=Player.Character;local returnRoot=bound and bound:FindFirstChild("HumanoidRootPart");local saved=returnRoot and Hub.teleportFrame(returnRoot)
 		onCleanup(function() if Player.Character==bound and returnRoot and returnRoot.Parent==bound and saved then Hub.teleportPart(returnRoot,saved);returnRoot.AssemblyLinearVelocity=Vector3.zero end end)
 		local worker=task.spawn(function()
 			local RS = ReplicatedStorage
 			local RunService = game:GetService("RunService")
-			local GE = RS:WaitForChild("GrabEvents")
+			local GE = RS:WaitForChild("GrabEvents",5)
+			if not GE or not running() then return end
+			local ownerRemote=GE:WaitForChild("SetNetworkOwner",5)
+			local lineRemote=GE:WaitForChild("CreateGrabLine",5)
+			local releaseRemote=GE:WaitForChild("DestroyGrabLine",5)
+			if not running() or not ownerRemote or not lineRemote or not releaseRemote then return end
 
 			local myChar = Player.Character
 			local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -5823,11 +5845,14 @@ TargetGroup:AddToggle("LoopKickToggle", {
 			local dragging = false
 			local grabStartTime = 0
 
-			while running() do
+			while running() and Player.Character==bound do
 				local nextTarget = Hub.nextLoopTarget("spamGrab", 1)
-				if nextTarget ~= target then dragging = false; grabStartTime = 0 end
+				if nextTarget ~= target then clearTarget();dragging = false; grabStartTime = 0 end
 				target = nextTarget
-				if not target then task.wait(0.2); continue end
+				if not target then
+					if myRoot and myRoot.Parent==bound then Hub.teleportPart(myRoot,savedPos);myRoot.AssemblyLinearVelocity=Vector3.zero end
+					task.wait(0.2);continue
+				end
 
 				local tChar = Hub.canHarm(target) and target.Character or nil
 				local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
@@ -5836,7 +5861,15 @@ TargetGroup:AddToggle("LoopKickToggle", {
 				myChar = Player.Character
 				myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
-				if tRoot and tHum and tHum.Health > 0 and myRoot then
+				if activeTarget and (activeTarget.char~=tChar or activeTarget.hum~=tHum or activeTarget.root~=tRoot) then
+					clearTarget();dragging=false;grabStartTime=0
+				end
+				if tRoot and tHum and tHum.Health > 0 and myRoot and Hub.canAffect(tRoot) then
+					if not activeTarget then activeTarget={char=tChar,root=tRoot,hum=tHum,platformStand=tHum.PlatformStand,sit=tHum.Sit} end
+					-- ReceiveAge is local simulation evidence, not server confirmation.
+					local assembly=tRoot.AssemblyRootPart or tRoot
+					local locallyOwned=not assembly.Anchored and assembly.ReceiveAge==0
+					if dragging and not locallyOwned then dragging=false;grabStartTime=0 end
 
 					if Hub.canAffect(tRoot) then tRoot.AssemblyLinearVelocity = Vector3.zero end
 					if Hub.canAffect(tRoot) then tRoot.AssemblyAngularVelocity = Vector3.zero end
@@ -5849,12 +5882,12 @@ TargetGroup:AddToggle("LoopKickToggle", {
 						pcall(function()
 							if Hub.canAffect(tHum) then tHum.PlatformStand = true end
 							if Hub.canAffect(tHum) then tHum.Sit = true end
-							Hub.fire(GE.SetNetworkOwner, tRoot, Hub.teleportFrame(myRoot))
-							Hub.fire(GE.CreateGrabLine, tRoot, Vector3.zero, tRoot.Position, false)
+							Hub.fire(ownerRemote, tRoot, Hub.teleportFrame(myRoot))
+							Hub.fire(lineRemote, tRoot, Vector3.zero, tRoot.Position, false)
 						end)
 
 						if grabStartTime == 0 then grabStartTime = tick() end
-						if tick() - grabStartTime > 0.5 then
+						if tick() - grabStartTime > 0.5 and locallyOwned then
 							dragging = true
 							grabStartTime = 0
 						end
@@ -5872,12 +5905,13 @@ TargetGroup:AddToggle("LoopKickToggle", {
 						if Hub.canAffect(tHum) then tHum.Sit = false end
 
 						pcall(function()
-							Hub.fire(GE.SetNetworkOwner, tRoot, lockPos)
-							Hub.fire(GE.CreateGrabLine, tRoot, Vector3.zero, tRoot.Position, false)
-							Hub.fire(GE.DestroyGrabLine, tRoot)
+							Hub.fire(ownerRemote, tRoot, lockPos)
+							Hub.fire(lineRemote, tRoot, Vector3.zero, tRoot.Position, false)
+							Hub.fire(releaseRemote, tRoot)
 						end)
 					end
 				else
+					clearTarget()
 					dragging = false
 					grabStartTime = 0
 					if myRoot then
@@ -5889,7 +5923,8 @@ TargetGroup:AddToggle("LoopKickToggle", {
 				RunService.Heartbeat:Wait()
 			end
 
-			if not ownsRun() then return end
+			clearTarget()
+			if not ownsRun() or Player.Character~=bound then return end
 			if myRoot then
 				Hub.teleportPart(myRoot, savedPos)
 				myRoot.Velocity = Vector3.zero
