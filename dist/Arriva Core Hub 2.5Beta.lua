@@ -6491,7 +6491,6 @@ TargetGroup:AddToggle("DestroyTargetGucci", {
 
 			task.spawn(function()
 				while running() do
-					if not Hub.playerActionLoopActive() then task.wait(0.2);continue end
 					local target = Hub.nextLoopTarget("destroyGucci")
 					if not target then task.wait(0.2); continue end
 					local folderName = target.Name .. "SpawnedInToys"
@@ -15616,7 +15615,6 @@ do
 				end)
 				local worker=task.spawn(function()
 					while running() and not flag11 do
-						if not Hub.playerActionLoopActive() then task.wait(0.2);continue end
 						local target=Hub.nextLoopTarget("destroyGucci")
 						if target and Hub.canHarm(target) then
 							local ok,message=pcall(tbl12.RemoveGucci,target)
