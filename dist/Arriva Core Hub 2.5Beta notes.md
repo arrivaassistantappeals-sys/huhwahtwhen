@@ -101,3 +101,21 @@ avoids restarting on every isolated missing sample. Cleanup clears deferred
 release state. The regression explicitly rejects same-Heartbeat release and
 checks brief versus sustained ownership loss. These are source/mocked fixes,
 not evidence of a successful server kick or full Resonance equivalence.
+
+## Hold release / cleanup audit
+
+Blobman's grab-loop cleanup now restores prior targets' Sit/PlatformStand values
+on selection changes, deselection and character replacement instead of keeping
+them until the complete toggle is disabled. Explicit cleanup releases the Blobman
+handle and grab line, clears references and is idempotent. Returning the toy is
+restricted to the original local character and the same active seat, preventing
+a stale cleanup from repositioning a later toy/session. Grab-event lookup is
+bounded so a missing folder cannot wait forever.
+
+The Spam Grab lifecycle regression still passes. This pass changes release and
+cleanup only; it does not port Target Kick, strengthen acquisition or establish
+in-game hold stability.
+
+`node tests/hold-cleanup-beta.mjs` requires luau-web and covers full compilation,
+previous-target state restoration, explicit release, idempotency and stale
+character/seat restoration rejection. Live Roblox verification remains required.

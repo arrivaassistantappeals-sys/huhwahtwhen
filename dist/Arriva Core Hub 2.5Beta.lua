@@ -6104,25 +6104,45 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 		Hub.requestSave()
 
 		if not on then return end
+		local boundCharacter=Player.Character
 		local changed={}
+		local heldRoot,heldDrop,heldWeld
 		local blobReturn
-		onCleanup(function()
-			if blobReturn and blobReturn.root.Parent then blobReturn.root.CFrame=blobReturn.frame;blobReturn.root.AssemblyLinearVelocity=Vector3.zero end
-			for hum,saved in pairs(changed) do
-				if hum.Parent==saved.char and hum.Health>0 then hum.PlatformStand=saved.platform;hum.Sit=saved.sit end
+		local function releaseTarget(keepHumanoid)
+			for hum,saved in pairs(changed) do if hum~=keepHumanoid then
+				changed[hum]=nil
+				pcall(function() if hum.Parent==saved.char then hum.PlatformStand=saved.platform;hum.Sit=saved.sit end end)
+			end end
+			if not keepHumanoid then
+				local root,drop,weld=heldRoot,heldDrop,heldWeld
+				heldRoot,heldDrop,heldWeld=nil,nil,nil
+				pcall(function() if drop and drop.Parent and weld and weld.Parent then Hub.fire(drop,weld) end end)
+				pcall(function()
+					local events=ReplicatedStorage:FindFirstChild("GrabEvents")
+					local remote=events and events:FindFirstChild("DestroyGrabLine")
+					if remote and root and root.Parent then Hub.fire(remote,root) end
+				end)
 			end
-		end)
+		end
+		local function restoreBlobPosition()
+			local saved=blobReturn;blobReturn=nil
+			if saved and Player.Character==boundCharacter and saved.root.Parent and Hub.getLoopBlobSeat()==saved.seat then
+				saved.root.CFrame=saved.frame;saved.root.AssemblyLinearVelocity=Vector3.zero
+			end
+		end
+		onCleanup(function() releaseTarget();restoreBlobPosition() end)
 		autoblob(running)
 		if not running() then return end
 
 		local worker=task.spawn(function()
-			while running() do
+			while running() and Player.Character==boundCharacter do
 				local seat = Hub.getLoopBlobSeat()
-				if not seat then task.wait(0.2); continue end
+				if not seat then releaseTarget();blobReturn=nil;task.wait(0.2); continue end
 				local target = Hub.nextLoopTarget("grabBlob", 1)
-				if not target then task.wait(0.2); continue end
+				if not target then releaseTarget();restoreBlobPosition();task.wait(0.2); continue end
 				local RS = ReplicatedStorage
-				local GE = RS:WaitForChild("GrabEvents")
+				local GE = RS:WaitForChild("GrabEvents",5)
+				if not GE or not running() or Player.Character~=boundCharacter then releaseTarget();return end
 				local RunService = game:GetService("RunService")
 
 				local blob = seat.Parent
@@ -6142,12 +6162,13 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 				end
 
 				local SavedPos = blobRoot.CFrame
-				blobReturn={root=blobRoot,frame=SavedPos}
+				blobReturn={root=blobRoot,frame=SavedPos,seat=seat}
 
 				local tChar = Hub.canHarm(target) and target.Character or nil
 				local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
 
 				if tRoot and blobRoot then
+					heldRoot,heldDrop,heldWeld=tRoot,CD,R_Weld
 					local bringStart = tick()
 					while running() and tick() - bringStart < 0.35 do
 						if not running() or not Hub.isSelectedTarget(target) or not Hub.loopTargetReady(target, tChar) or Hub.getLoopBlobSeat() ~= seat or not blobRoot.Parent then break end
@@ -6173,16 +6194,21 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 
 				local packetTimer = 0
 
-				while running() do
-					if Hub.getLoopBlobSeat() ~= seat or not blobRoot.Parent then break end
-					target = Hub.nextLoopTarget("grabBlob", 1)
-					if not target then task.wait(0.2); continue end
+				while running() and Player.Character==boundCharacter do
+					if Hub.getLoopBlobSeat() ~= seat or not blobRoot.Parent then releaseTarget();blobReturn=nil;break end
+					local nextTarget=Hub.nextLoopTarget("grabBlob",1)
+					if nextTarget~=target then releaseTarget() end
+					target=nextTarget
+					if not target then releaseTarget();restoreBlobPosition();task.wait(0.2); continue end
 
 					local tChar = Hub.canHarm(target) and target.Character or nil
 					local tRoot = tChar and tChar:FindFirstChild("HumanoidRootPart")
 					local tHum = tChar and tChar:FindFirstChild("Humanoid")
 
+					releaseTarget(tHum)
+					if heldRoot and heldRoot~=tRoot then releaseTarget() end
 					if tRoot and tHum and tHum.Health > 0 and blobRoot then
+						heldRoot,heldDrop,heldWeld=tRoot,CD,R_Weld
 
 						blobRoot.CFrame = SavedPos
 						blobRoot.Velocity = Vector3.zero
@@ -6215,6 +6241,7 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 							end)
 						end
 					else
+						releaseTarget()
 						blobRoot.CFrame = SavedPos
 						blobRoot.Velocity = Vector3.zero
 					end
@@ -6223,7 +6250,8 @@ TargetGroup:AddToggle("LoopKickToggle2", {
 					RunService.Heartbeat:Wait()
 				end
 
-				if not ownsRun() then return end
+				releaseTarget()
+				if not ownsRun() or Player.Character~=boundCharacter then return end
 				if blobRoot and blobRoot.Parent and Hub.getLoopBlobSeat() == seat then
 					blobRoot.CFrame = SavedPos
 					blobRoot.Velocity = Vector3.zero
