@@ -91,3 +91,13 @@ and target rotation remain.
 mocks timer-only rejection, ownership-signal loss, deselection, disable, target
 respawn and original humanoid state restoration. Live Roblox verification remains
 required.
+
+### Spam Grab follow-up: brief grabs
+
+The grab line is now released on the following Heartbeat instead of immediately
+after creation. A missing local ownership sample pauses target movement for up
+to 0.2 seconds before restarting acquisition; sustained loss still retries. This
+avoids restarting on every isolated missing sample. Cleanup clears deferred
+release state. The regression explicitly rejects same-Heartbeat release and
+checks brief versus sustained ownership loss. These are source/mocked fixes,
+not evidence of a successful server kick or full Resonance equivalence.

@@ -37,9 +37,13 @@ ${block}
 callback(true)
 step(1);step(2);assert(myRoot.CFrame.value==100,'timer alone must not drag')
 tRoot.ReceiveAge=0;step(2.1);step(2.2);assert(myRoot.CFrame.value==10 and tRoot.CFrame.value==27,'local signal allows drag phase')
-tRoot.ReceiveAge=1;step(2.3);assert(myRoot.CFrame.value==27,'ownership loss returns to acquisition')
-selected=nil;step(2.4);assert(not tHum.PlatformStand and not tHum.Sit and releases>0,'deselection restores target and releases line')
-selected=target;step(2.5);assert(tHum.PlatformStand,'new attempt changes target state')
+assert(releases==0,'grab must not be released in the same Heartbeat')
+local beforeRelease=releases
+step(2.25);assert(releases>beforeRelease,'grab release deferred to the next Heartbeat')
+tRoot.ReceiveAge=1;step(2.3);assert(myRoot.CFrame.value==10,'brief ownership loss pauses without teleporting')
+step(2.6);assert(myRoot.CFrame.value==27,'sustained ownership loss returns to acquisition')
+selected=nil;step(2.7);assert(not tHum.PlatformStand and not tHum.Sit and releases>0,'deselection restores target and releases line')
+selected=target;step(2.8);assert(tHum.PlatformStand,'new attempt changes target state')
 callback(false);assert(not tHum.PlatformStand and not tHum.Sit and myRoot.CFrame.value==10,'disable restores target and local position')
 callback(true);local replacementHum={Health=100,PlatformStand=false,Sit=true};local replacementChar={FindFirstChild=function(_,n) return n=='Humanoid' and replacementHum or tRoot end};replacementHum.Parent=replacementChar
 target.Character=replacementChar;step(3);assert(not tHum.PlatformStand,'target respawn releases old humanoid')

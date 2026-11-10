@@ -5809,8 +5809,9 @@ TargetGroup:AddToggle("LoopKickToggle", {
 		end
 
 		local activeTarget
+		local pendingRelease
 		local function clearTarget()
-			local record=activeTarget;activeTarget=nil
+			local record=activeTarget;activeTarget=nil;pendingRelease=nil
 			if not record then return end
 			pcall(function()
 				if record.hum.Parent==record.char then
@@ -5844,10 +5845,17 @@ TargetGroup:AddToggle("LoopKickToggle", {
 			local savedPos = Hub.teleportFrame(myRoot)
 			local dragging = false
 			local grabStartTime = 0
+			local ownershipLostAt
 
 			while running() and Player.Character==bound do
+				-- Release the previous grab only after it has survived a Heartbeat.
+				local release=pendingRelease;pendingRelease=nil
+				if release and release.Parent then
+					local ok,err=pcall(Hub.fire,releaseRemote,release)
+					if not ok then warn("[Spam Grab release] "..tostring(err)) end
+				end
 				local nextTarget = Hub.nextLoopTarget("spamGrab", 1)
-				if nextTarget ~= target then clearTarget();dragging = false; grabStartTime = 0 end
+				if nextTarget ~= target then clearTarget();dragging = false; grabStartTime = 0;ownershipLostAt=nil end
 				target = nextTarget
 				if not target then
 					if myRoot and myRoot.Parent==bound then Hub.teleportPart(myRoot,savedPos);myRoot.AssemblyLinearVelocity=Vector3.zero end
@@ -5862,14 +5870,20 @@ TargetGroup:AddToggle("LoopKickToggle", {
 				myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
 				if activeTarget and (activeTarget.char~=tChar or activeTarget.hum~=tHum or activeTarget.root~=tRoot) then
-					clearTarget();dragging=false;grabStartTime=0
+					clearTarget();dragging=false;grabStartTime=0;ownershipLostAt=nil
 				end
 				if tRoot and tHum and tHum.Health > 0 and myRoot and Hub.canAffect(tRoot) then
 					if not activeTarget then activeTarget={char=tChar,root=tRoot,hum=tHum,platformStand=tHum.PlatformStand,sit=tHum.Sit} end
 					-- ReceiveAge is local simulation evidence, not server confirmation.
 					local assembly=tRoot.AssemblyRootPart or tRoot
 					local locallyOwned=not assembly.Anchored and assembly.ReceiveAge==0
-					if dragging and not locallyOwned then dragging=false;grabStartTime=0 end
+					if locallyOwned then ownershipLostAt=nil
+					elseif dragging then
+						ownershipLostAt=ownershipLostAt or tick()
+						-- Do not move the foreign root during a brief ownership gap.
+						if tick()-ownershipLostAt<0.2 then RunService.Heartbeat:Wait();continue end
+						dragging=false;grabStartTime=0;ownershipLostAt=nil
+					end
 
 					if Hub.canAffect(tRoot) then tRoot.AssemblyLinearVelocity = Vector3.zero end
 					if Hub.canAffect(tRoot) then tRoot.AssemblyAngularVelocity = Vector3.zero end
@@ -5907,7 +5921,7 @@ TargetGroup:AddToggle("LoopKickToggle", {
 						pcall(function()
 							Hub.fire(ownerRemote, tRoot, lockPos)
 							Hub.fire(lineRemote, tRoot, Vector3.zero, tRoot.Position, false)
-							Hub.fire(releaseRemote, tRoot)
+							pendingRelease=tRoot
 						end)
 					end
 				else
