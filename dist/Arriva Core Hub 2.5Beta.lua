@@ -13948,18 +13948,6 @@ do
 		local workers={}
 		local workerControls={}
 		local stopActions={}
-		local ownedProperties={}
-		local function remember(instance,property)
-			local record=ownedProperties[instance]
-			if not record then record={};ownedProperties[instance]=record end
-			if record[property]==nil then record[property]=instance[property] end
-		end
-		local function restoreProperties()
-			for instance,record in pairs(ownedProperties) do
-				for property,value in pairs(record) do pcall(function() instance[property]=value end) end
-				ownedProperties[instance]=nil
-			end
-		end
 		local function charAlive()
 			local char,root,hum=tbl12.Char()
 			return char,root,hum,root and hum and hum.Health>0
@@ -14355,7 +14343,10 @@ do
 
 		-- RootAttachment replacement and root mass repair, as used by the supplied Anti Blobman.
 		local removedAttachment,attachmentRoot,replacement
+		local blobRoot,blobMassless
 		local function restoreBlob()
+			if blobRoot then pcall(function() if blobRoot.Parent then blobRoot.Massless=blobMassless end end) end
+			blobRoot,blobMassless=nil,nil
 			if replacement then replacement:Destroy();replacement=nil end
 			if removedAttachment and attachmentRoot and attachmentRoot.Parent then removedAttachment.Parent=attachmentRoot end
 			removedAttachment,attachmentRoot=nil,nil
@@ -14363,7 +14354,7 @@ do
 		bind("AntiBlobmanToggle","AntiBlobman",0.05,function()
 			local char,root,hum,alive=charAlive()
 			if not alive then restoreBlob();return end
-			if attachmentRoot and attachmentRoot~=root then restoreBlob() end
+			if blobRoot and blobRoot~=root then restoreBlob() end
 			if not removedAttachment then
 				local attachment=root:FindFirstChild("RootAttachment")
 				if attachment and attachment:IsA("Attachment") then
@@ -14372,11 +14363,34 @@ do
 					replacement=Hub.new("BoolValue",root);replacement.Name="RootAttachment"
 				end
 			end
-			remember(root,"Massless");root.Massless=false
+			if not blobRoot then blobRoot,blobMassless=root,root.Massless end
+			root.Massless=false
 		end,restoreBlob)
 
-		-- Hold/drop based anti-network-ownership. At most one outstanding call per remote.
-		local inputToy,dropPending,holdPending
+		-- Resonance hold/drop flow with replication waits and bounded remote workers.
+		local inputToy
+		local inputCalls={}
+		local function cancelInputCalls()
+			for key,call in pairs(inputCalls) do
+				if call.thread and coroutine.status(call.thread)~="dead" then pcall(Hub.nativeTask.cancel,call.thread) end
+				inputCalls[key]=nil
+			end
+		end
+		local function inputCall(key,toy,char,remote,...)
+			local previous=inputCalls[key]
+			if previous then
+				if os.clock()-previous.started<2 then return end
+				if previous.thread and coroutine.status(previous.thread)~="dead" then pcall(Hub.nativeTask.cancel,previous.thread) end
+			end
+			local call={started=os.clock()};inputCalls[key]=call
+			local args=table.pack(...)
+			call.thread=task.spawn(function()
+				pcall(function()
+					if toy.Parent and tbl8.AntiInputLag and Player.Character==char then Hub.invoke(remote,table.unpack(args,1,args.n)) end
+				end)
+				if inputCalls[key]==call then inputCalls[key]=nil end
+			end)
+		end
 		local earlyOriginal,earlyReplacement
 		local function restoreEarly()
 			if earlyReplacement then earlyReplacement:Destroy();earlyReplacement=nil end
@@ -14390,6 +14404,7 @@ do
 			earlyReplacement=Hub.new("RemoteEvent",grabEventsFolder);earlyReplacement.Name="EndGrabEarly"
 		end
 		local function clearInput()
+			cancelInputCalls()
 			if inputToy then tbl12.DestroyToy(inputToy);inputToy=nil end
 			restoreEarly()
 		end
@@ -14398,24 +14413,32 @@ do
 			local char,root,hum,alive=charAlive()
 			if not alive then clearInput();return end
 			disableEarly()
-			if inputToy and (not inputToy.Parent or inputToy.Name~=tbl9.AntiInputType) then tbl12.DestroyToy(inputToy);inputToy=nil end
+			if inputToy and (not inputToy.Parent or inputToy.Name~=tbl9.AntiInputType) then cancelInputCalls();tbl12.DestroyToy(inputToy);inputToy=nil end
 			if not inputToy then inputToy=tbl12.SpawnToy(tbl9.AntiInputType,CFrame.new(0,1e20,0),2,true) end
 			if not tbl8.AntiInputLag then clearInput();return end
 			if not inputToy then return end
 			local toy=inputToy
-			local holdPart=toy:FindFirstChild("HoldPart")
-			local holdRemote=holdPart and holdPart:FindFirstChild("HoldItemRemoteFunction")
-			local dropRemote=holdPart and holdPart:FindFirstChild("DropItemRemoteFunction")
-			if not holdRemote or not dropRemote then tbl12.DestroyToy(toy);inputToy=nil;return end
+			local function current()
+				local _,_,currentHum=tbl12.Char()
+				return inputToy==toy and toy.Parent and tbl8.AntiInputLag and Player.Character==char and currentHum and currentHum.Health>0
+			end
+			-- A spawned model can arrive before its hold components replicate.
+			local holdPart=toy:WaitForChild("HoldPart",2)
+			if not current() then return end
+			local holdRemote=holdPart and holdPart:WaitForChild("HoldItemRemoteFunction",2)
+			if not current() then return end
+			local dropRemote=holdRemote and holdPart:WaitForChild("DropItemRemoteFunction",2)
+			if not current() then return end
+			if not holdRemote or not dropRemote then clearInput();return end
 			local constraint=holdPart:FindFirstChild("RigidConstraint")
 			local link=constraint and constraint.Attachment1
 			local left=char:FindFirstChild("Left Arm");local right=char:FindFirstChild("Right Arm")
 			if link and link~=(left and left:FindFirstChild("LeftGripAttachment")) and link~=(right and right:FindFirstChild("RightGripAttachment")) then
-				tbl12.DestroyToy(toy);inputToy=nil;return
+				clearInput();return
 			end
 			for _,part in ipairs(toy:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide=false;if part:IsA("MeshPart") or part.Name=="Part" then part.Transparency=tbl9.AILTransparency end end end
-			if not dropPending then dropPending=true;task.spawn(function() pcall(function() if toy.Parent and tbl8.AntiInputLag then Hub.invoke(dropRemote,toy,CFrame.new(0,1e20,0),Vector3.zero) end end);dropPending=false end) end
-			if not holdPending then holdPending=true;task.spawn(function() pcall(function() if toy.Parent and tbl8.AntiInputLag and Player.Character==char then Hub.invoke(holdRemote,toy,char) end end);holdPending=false end) end
+			inputCall("drop",toy,char,dropRemote,toy,CFrame.new(0,1e20,0),Vector3.zero)
+			inputCall("hold",toy,char,holdRemote,toy,char)
 		end,clearInput)
 		settings:AddDropdown("SourceInputToy",{Text="Anti Input, interactable toy",Values={"FoodHamburger","InstrumentDrumBongos","InstrumentBrassTrumpet","InstrumentBrassBugle","InstrumentVoiceMicrophone","InstrumentWoodwindOcarina","InstrumentGuitarUkulele","InstrumentGuitarLyre","InstrumentGuitarBanjo","InstrumentGuitarAcoustic","CupMugBrown","CupMugWhite","FoodBanana","FoodBread","FoodBroccoli","FoodCakePink","FoodCoconut","FoodDippyEgg","FoodDonut","FoodFrenchFries","FoodHotdog","FoodMayonnaise","FoodMeatStick","FoodMushroomPoison","FoodPizzaCheese","FoodPizzaPepperoni","FoodSodaCan","PoopPile","PoopPileSparkle"},Default=1,Callback=function(value) tbl9.AntiInputType=value;Hub.requestSave() end})
 		settings:AddSlider("SourceInputDelay",{Text="Anti Input, hold/drop delay",Default=0.05,Min=0.05,Max=0.3,Rounding=2,Callback=function(value) tbl9.InputLgDelay=value;Hub.requestSave() end})
@@ -14470,24 +14493,48 @@ do
 		end,restoreBanana)
 		defenseGroup:AddLabel("Anti Banana breaks character legs; respawn restores missing limbs.")
 
+		-- Snowball owns its snapshots; the movement noclip cache belongs to another toggle.
+		local snowCharacter,snowHum,snowAutoRotate,snowJump
+		local snowParts={}
+		local function restoreSnowball()
+			if snowHum then pcall(function()
+				if snowHum.Parent then
+					snowHum.AutoRotate=snowAutoRotate
+					if snowJump~=nil then snowHum:SetStateEnabled(Enum.HumanoidStateType.Jumping,snowJump) end
+				end
+			end) end
+			for part,record in pairs(snowParts) do
+				pcall(function() if part.Parent then part.CanCollide=record.collision;part.CustomPhysicalProperties=record.physics end end)
+				snowParts[part]=nil
+			end
+			snowCharacter,snowHum,snowAutoRotate,snowJump=nil,nil,nil,nil
+		end
 		add("SourceAntiSnowball","Anti Snowball","AntiSnowball",0.03,function()
 			if tbl8.GucciAntiGrab then return end
 			local char,root,hum,alive=charAlive()
-			if not alive then return end
+			if not alive then restoreSnowball();return end
 			if tbl8.AntiBanana and char:FindFirstChild("Right Leg") then return end
 			local weld=root:FindFirstChild("WeldHRP")
 			if not weld then return end
-			remember(hum,"AutoRotate")
+			if snowCharacter~=char then
+				restoreSnowball();snowCharacter,snowHum,snowAutoRotate=char,hum,hum.AutoRotate
+			end
 			tbl11.RagdollRemote:FireServer(root,0.5)
 			if not hum.SeatPart then hum.Sit=false end
 			hum.AutoRotate=true
 			if weld.Enabled then
+				if snowJump==nil then snowJump=hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) end
+				for _,part in ipairs(char:GetChildren()) do if part:IsA("BasePart") then
+					if not snowParts[part] then snowParts[part]={collision=part.CanCollide,physics=part.CustomPhysicalProperties} end
+					local limb=part:FindFirstChild("RagdollLimbPart")
+					if limb and not snowParts[limb] then snowParts[limb]={collision=limb.CanCollide,physics=limb.CustomPhysicalProperties} end
+				end end
 				game:GetService("ContextActionService"):UnbindAction("JumpRemover")
 				hum:SetStateEnabled(Enum.HumanoidStateType.Jumping,true)
 				tbl12.RepositionLimbs(char)
 				tbl12.ToggleCollisions(char,false,false,true)
 			end
-		end,restoreCollision)
+		end,restoreSnowball)
 
 
 		-- BEGIN BREAK PCLD
@@ -14585,7 +14632,7 @@ do
 		end})
 		Hub.cleanup(function()
 			for key in pairs(workers) do stopWorker(key) end
-			restoreCollision();restoreProperties();restoreBlob();clearInput();restoreBanana()
+			restoreSnowball();restoreBlob();clearInput();restoreBanana()
 			if originalVoid~=nil then Workspace.FallenPartsDestroyHeight=originalVoid end
 		end)
 		local sourceRespawnEpoch=0
@@ -14595,7 +14642,7 @@ do
 			for key in pairs(workers) do if key~="AntiKick2" then stopWorker(key) end end
 			Hub.protectionStartupJobs.SourceRespawn=nil
 			tbl7.States["Anti Grab"]=false
-			restoreCollision();restoreProperties();restoreBlob();clearInput();restoreBanana()
+			restoreSnowball();restoreBlob();clearInput();restoreBanana()
 		end)
 		Hub.connect(Player.CharacterAdded,function(char)
 			sourceRespawnEpoch+=1;local ticket=sourceRespawnEpoch;local token={char=char}

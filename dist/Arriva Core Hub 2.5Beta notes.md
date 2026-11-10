@@ -55,3 +55,21 @@ budget remain unchanged; there is no repeated full-map conversion loop.
 `node tests/realistic-water-beta.mjs` mocks delayed loading, unavailable query support,
 failed terrain filling, retry, cancellation and yielding. Live generation/rendering and
 performance in Roblox/Xeno remain unverified.
+
+## Anti Input / Network Ownership protection
+
+The hold/drop protection now waits up to two seconds for each required hold
+component, following the supplied Resonance flow. Character/toggle checks after
+each wait prevent stale work from issuing calls. Missing components and foreign
+grip attachments still discard the toy.
+
+Arriva retains one outstanding call per hold/drop remote, with a two-second local
+worker timeout so a stalled call cannot block subsequent attempts indefinitely.
+Disable, unload and toy replacement cancel tracked calls. Local cancellation does
+not undo a request already received by the server. Original EndGrabEarly restoration
+is retained. This is an adaptation, not verbatim Resonance parity; the shared SNO
+ownership-acquisition helper is unchanged.
+
+`node tests/anti-input-beta.mjs` (requires luau-web) compiles the complete beta and
+mocks replication waits, pending-call timeout, disable/re-enable, repeated calls
+and disabling during loading. These pass; live Roblox behavior is unverified.
