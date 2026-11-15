@@ -1,4 +1,4 @@
---Resonance v2.9 crack 
+--Resonance v2.9 
 local sources = {}
 sources.Intro = [====[
 local Intro = {}
@@ -17339,7 +17339,7 @@ do
 										Title = arg or "Resonance",
 										Text = arg2 or "Notification",
 										Duration = arg3 or 5,
-										Icon = "rbxassetid://79685990879972",
+										Icon = "rbxassetid://11382080197",
 									})
 								end
 
@@ -17552,7 +17552,7 @@ do
 								Description = arg,
 								Time = arg4 or 5,
 								SoundId = arg3 or n34,
-								BigIcon = "rbxassetid://79685990879972",
+								BigIcon = "rbxassetid://11382080197",
 								Volume = n35,
 								IconColor = Color3.new(1, 1, 1),
 							})
@@ -31126,7 +31126,7 @@ end
 				Description = "Attempting to serverhop..",
 				Persist = true,
 				SoundId = n34,
-				BigIcon = "rbxassetid://79685990879972",
+				BigIcon = "rbxassetid://11382080197",
 				Volume = n35,
 				IconColor = Color3.new(1, 1, 1),
 			})
@@ -35111,7 +35111,7 @@ Escape Timer: %*]]
 			Center = true,
 			AutoShow = true,
 			EnableSidebarResize = true,
-			Icon = 79685990879972,
+			Icon = 11382080197,
 			IconSize = UDim2.fromOffset(32, 32),
 			CornerRadius = 6,
 			Compact = true,
@@ -35188,7 +35188,7 @@ Escape Timer: %*]]
 			label.Position = UDim2.fromOffset(viewportSize.X * 0.5, viewportSize.Y * 0.8)
 		end
 
-		Watermark = lib:AddDraggableLabel("Resonance", 79685990879972)
+		Watermark = lib:AddDraggableLabel("Resonance", 11382080197)
 		Watermark:SetVisible(true)
 
 		task.spawn(function()
@@ -38507,7 +38507,7 @@ Escape Timer: %*]]
 					Description = "Destroyed 0/" .. #tbl16 .. " toys",
 					Persist = true,
 					SoundId = n34,
-					BigIcon = "rbxassetid://79685990879972",
+					BigIcon = "rbxassetid://11382080197",
 					Volume = n35,
 					IconColor = Color3.new(1, 1, 1),
 				})
@@ -39749,7 +39749,7 @@ Escape Timer: %*]]
 			Text = "Texture",
 			Callback = function(arg)
 				if arg == "Resonance" then
-					fn27("Texture", "rbxassetid://79685990879972")
+					fn27("Texture", "rbxassetid://11382080197")
 				elseif arg == "Snowflakes" then
 					fn27("Texture", "rbxassetid://14443362047")
 				elseif arg == "Circles" then
@@ -43173,7 +43173,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 	lib2:SetDefaultTheme({
 		BackgroundColor = Color3.fromRGB(15, 15, 15),
 		MainColor = Color3.fromRGB(25, 25, 25),
-		AccentColor = Color3.fromRGB(255, 255, 0),
+		AccentColor = Color3.fromRGB(255, 170, 255),
 		OutlineColor = Color3.fromRGB(70, 70, 70),
 		FontColor = Color3.fromRGB(255, 255, 255),
 		FontFace = "Code",
