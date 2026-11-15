@@ -35274,7 +35274,7 @@ Escape Timer: %*]]
 		end
 		Greetings:AddLabel({ Text = ("%s, <b>%s</b> "):format(greeting, localPlayer.DisplayName), DoesWrap = true })
 		Greetings:AddDivider()
-		Greetings:AddLabel({ Text = "Welcome to <b><font color=\"#fffb00\">Resonance 2.9!</font></b>", DoesWrap = true })
+		Greetings:AddLabel({ Text = "Welcome to <b><font color=\"#ffaaff\">Resonance 2.9!</font></b>", DoesWrap = true })
 		Greetings:AddLabel({ Text = "Modified by <b><font color=\"#00bfff\">arrivabus415!</font></b>", DoesWrap = true })
 	end
 
