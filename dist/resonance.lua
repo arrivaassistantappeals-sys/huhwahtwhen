@@ -182,7 +182,6 @@ local function revealSelf(speaker)
 end
 
 local function srevealSelf(speaker)
-	-- Client scripts can't whisper; this posts a public whisper-styled line.
 	sysMsg("/w " .. speakerLabel(speaker) .. " I'm using a private script provided by arrivabus415!")
 end
 
