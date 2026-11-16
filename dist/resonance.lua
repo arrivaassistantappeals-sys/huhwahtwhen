@@ -1,8 +1,8 @@
---Meowixa v3.0
+-- Meowixa v3.0
 local sources = {}
---=====================================================
+-- =====================================================
 -- ARRIVA OWNER COMMAND CORE (STANDALONE)
---=====================================================
+-- =====================================================
 
 local Players = game:GetService("Players")
 local TextChatService = game:GetService("TextChatService")
@@ -14,265 +14,363 @@ local LocalPlayer = Players.LocalPlayer
 local HUB_OWNER_ID = 1325117607
 local ALLOW_OWNER_COMMANDS = true -- set false to disable remote control
 
---=====================================================
+-- =====================================================
 -- SHARED TELEPORT MASK (standalone, no Hub)
---=====================================================
+-- =====================================================
 local TeleportMask = {}
 do
-	local enabled = true
-	local state
-	local renderName = "ArrivaSharedTeleportMask"
-	local connections = setmetatable({}, {__mode = "k"})
+    local enabled = true
+    local state
+    local renderName = "ArrivaSharedTeleportMask"
+    local connections = setmetatable({}, {
+        __mode = "k"
+    })
 
-	local function connect(signal, fn)
-		local c = signal:Connect(fn)
-		connections[c] = true
-		return c
-	end
-	local function disconnect(c)
-		if c then c:Disconnect(); connections[c] = nil end
-	end
+    local function connect(signal, fn)
+        local c = signal:Connect(fn)
+        connections[c] = true
+        return c
+    end
+    local function disconnect(c)
+        if c then
+            c:Disconnect();
+            connections[c] = nil
+        end
+    end
 
-	local function current(record)
-		return record
-			and LocalPlayer.Character == record.char
-			and record.root.Parent == record.char
-			and record.hum.Parent == record.char
-			and record.hum.Health > 0
-	end
+    local function current(record)
+        return record and LocalPlayer.Character == record.char and record.root.Parent == record.char and
+                   record.hum.Parent == record.char and record.hum.Health > 0
+    end
 
-	function TeleportMask.clearTeleportMask(commit)
-		local old = state
-		state = nil
-		RunService:UnbindFromRenderStep(renderName)
-		if not old then return end
-		disconnect(old.physics)
-		if current(old) then
-			old.root.CFrame = commit and old.destination or old.origin
-		end
-	end
+    function TeleportMask.clearTeleportMask(commit)
+        local old = state
+        state = nil
+        RunService:UnbindFromRenderStep(renderName)
+        if not old then
+            return
+        end
+        disconnect(old.physics)
+        if current(old) then
+            old.root.CFrame = commit and old.destination or old.origin
+        end
+    end
 
-	function TeleportMask.teleportFrame(part)
-		if state and current(state) and state.root == part then
-			return state.destination
-		end
-		return part.CFrame
-	end
+    function TeleportMask.teleportFrame(part)
+        if state and current(state) and state.root == part then
+            return state.destination
+        end
+        return part.CFrame
+    end
 
-	function TeleportMask.visibleCharacterTransparency(part)
-		return part.LocalTransparencyModifier
-	end
+    function TeleportMask.visibleCharacterTransparency(part)
+        return part.LocalTransparencyModifier
+    end
 
-	function TeleportMask.teleportPart(part, frame)
-		if not part then return end
-		local char = LocalPlayer.Character
-		local root = char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		if part ~= root then part.CFrame = frame; return end
+    function TeleportMask.teleportPart(part, frame)
+        if not part then
+            return
+        end
+        local char = LocalPlayer.Character
+        local root = char and (char:FindFirstChild("realHrp") or char:FindFirstChild("HumanoidRootPart"))
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if part ~= root then
+            part.CFrame = frame;
+            return
+        end
 
-		if state and not current(state) then TeleportMask.clearTeleportMask(true) end
-		if state and state.root ~= root then TeleportMask.clearTeleportMask(true) end
-		if state and (frame.Position - state.origin.Position).Magnitude < 0.05 then
-			state.destination = frame
-			TeleportMask.clearTeleportMask(true)
-			return
-		end
-		if not enabled or not hum or hum.Health <= 0 then part.CFrame = frame; return end
+        if state and not current(state) then
+            TeleportMask.clearTeleportMask(true)
+        end
+        if state and state.root ~= root then
+            TeleportMask.clearTeleportMask(true)
+        end
+        if state and (frame.Position - state.origin.Position).Magnitude < 0.05 then
+            state.destination = frame
+            TeleportMask.clearTeleportMask(true)
+            return
+        end
+        if not enabled or not hum or hum.Health <= 0 then
+            part.CFrame = frame;
+            return
+        end
 
-		if not state and (frame.Position - root.Position).Magnitude >= 0.05 then
-			local record = {
-				char = char, root = root, hum = hum,
-				origin = root.CFrame, frame = root.CFrame,
-				destination = frame, rendered = true,
-			}
-			state = record
-			RunService:BindToRenderStep(renderName, Enum.RenderPriority.Camera.Value - 1, function()
-				if state ~= record then return end
-				if not current(record) then TeleportMask.clearTeleportMask(true); return end
-				record.root.CFrame = record.frame
-				record.rendered = true
-			end)
-			record.physics = connect(RunService.Heartbeat, function()
-				if state ~= record then return end
-				if not current(record) then TeleportMask.clearTeleportMask(true); return end
-				if record.rendered then record.frame = record.root.CFrame end
-				record.rendered = false
-				record.root.CFrame = record.destination
-			end)
-		end
-		if state then state.destination = frame else part.CFrame = frame end
-	end
+        if not state and (frame.Position - root.Position).Magnitude >= 0.05 then
+            local record = {
+                char = char,
+                root = root,
+                hum = hum,
+                origin = root.CFrame,
+                frame = root.CFrame,
+                destination = frame,
+                rendered = true
+            }
+            state = record
+            RunService:BindToRenderStep(renderName, Enum.RenderPriority.Camera.Value - 1, function()
+                if state ~= record then
+                    return
+                end
+                if not current(record) then
+                    TeleportMask.clearTeleportMask(true);
+                    return
+                end
+                record.root.CFrame = record.frame
+                record.rendered = true
+            end)
+            record.physics = connect(RunService.Heartbeat, function()
+                if state ~= record then
+                    return
+                end
+                if not current(record) then
+                    TeleportMask.clearTeleportMask(true);
+                    return
+                end
+                if record.rendered then
+                    record.frame = record.root.CFrame
+                end
+                record.rendered = false
+                record.root.CFrame = record.destination
+            end)
+        end
+        if state then
+            state.destination = frame
+        else
+            part.CFrame = frame
+        end
+    end
 
-	function TeleportMask.teleportModel(model, frame)
-		if model ~= LocalPlayer.Character then model:PivotTo(frame); return end
-		local root = model:FindFirstChild("realHrp") or model:FindFirstChild("HumanoidRootPart")
-		if not root then return end
-		TeleportMask.teleportPart(root, frame * model:GetPivot():ToObjectSpace(root.CFrame))
-	end
+    function TeleportMask.teleportModel(model, frame)
+        if model ~= LocalPlayer.Character then
+            model:PivotTo(frame);
+            return
+        end
+        local root = model:FindFirstChild("realHrp") or model:FindFirstChild("HumanoidRootPart")
+        if not root then
+            return
+        end
+        TeleportMask.teleportPart(root, frame * model:GetPivot():ToObjectSpace(root.CFrame))
+    end
 
-	function TeleportMask.setEnabled(on)
-		enabled = on == true
-		if not enabled then TeleportMask.clearTeleportMask(true) end
-	end
+    function TeleportMask.setEnabled(on)
+        enabled = on == true
+        if not enabled then
+            TeleportMask.clearTeleportMask(true)
+        end
+    end
 
-	LocalPlayer.CharacterRemoving:Connect(function()
-		TeleportMask.clearTeleportMask(true)
-	end)
+    LocalPlayer.CharacterRemoving:Connect(function()
+        TeleportMask.clearTeleportMask(true)
+    end)
 end
 
---=====================================================
+-- =====================================================
 -- CHAT
---=====================================================
+-- =====================================================
 local lastMessages = {}
 local DEBOUNCE_TIME = 0.5
 
 local function sysMsg(text)
-	local now = tick()
-	if lastMessages[text] and (now - lastMessages[text]) < DEBOUNCE_TIME then return end
-	lastMessages[text] = now
-	pcall(function()
-		if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-			local channels = TextChatService:FindFirstChild("TextChannels")
-			local general = channels and channels:FindFirstChild("RBXGeneral")
-			if general and general:IsA("TextChannel") then
-				general:SendAsync(text)
-			end
-		end
-	end)
+    local now = tick()
+    if lastMessages[text] and (now - lastMessages[text]) < DEBOUNCE_TIME then
+        return
+    end
+    lastMessages[text] = now
+    pcall(function()
+        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+            local channels = TextChatService:FindFirstChild("TextChannels")
+            local general = channels and channels:FindFirstChild("RBXGeneral")
+            if general and general:IsA("TextChannel") then
+                general:SendAsync(text)
+            end
+        end
+    end)
 end
 
 local function speakerLabel(speaker)
-	if not speaker then return "someone" end
-	return (speaker.DisplayName ~= "" and speaker.DisplayName) or speaker.Name
+    if not speaker then
+        return "someone"
+    end
+    return (speaker.DisplayName ~= "" and speaker.DisplayName) or speaker.Name
 end
 
---=====================================================
+-- =====================================================
 -- WHISPER
---=====================================================
+-- =====================================================
 -- Legacy chat exposes SayMessageRequest, which the server parses and routes
 -- to /w <name>. TextChatService has no client-side whisper API, so we fall
 -- back to a public whisper-styled message there.
 local function tryLegacyWhisper(targetPlayer, message)
-	local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-	local sayEvent = chatEvents and chatEvents:FindFirstChild("SayMessageRequest")
-	if not sayEvent then return false end
-	local ok = pcall(function()
-		sayEvent:FireServer("/w " .. targetPlayer.Name .. " " .. message, "All")
-	end)
-	return ok
+    local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+    local sayEvent = chatEvents and chatEvents:FindFirstChild("SayMessageRequest")
+    if not sayEvent then
+        return false
+    end
+    local ok = pcall(function()
+        sayEvent:FireServer("/w " .. targetPlayer.Name .. " " .. message, "All")
+    end)
+    return ok
 end
 
---=====================================================
+-- =====================================================
 -- TARGET FINDING
---=====================================================
+-- =====================================================
 local function findTarget(targetStr)
-	if not targetStr then return nil end
-	targetStr = targetStr:lower():gsub("^@", "")
-	if targetStr == "me" then return {LocalPlayer} end
-	if targetStr == "all" then return Players:GetPlayers() end
-	local matches = {}
-	for _, plr in ipairs(Players:GetPlayers()) do
-		if plr.Name:lower():find(targetStr, 1, true)
-		or plr.DisplayName:lower():find(targetStr, 1, true) then
-			table.insert(matches, plr)
-		end
-	end
-	return #matches > 0 and matches or nil
+    if not targetStr then
+        return nil
+    end
+    targetStr = targetStr:lower():gsub("^@", "")
+    if targetStr == "me" then
+        return {LocalPlayer}
+    end
+    if targetStr == "all" then
+        return Players:GetPlayers()
+    end
+    local matches = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Name:lower():find(targetStr, 1, true) or plr.DisplayName:lower():find(targetStr, 1, true) then
+            table.insert(matches, plr)
+        end
+    end
+    return #matches > 0 and matches or nil
 end
 
---=====================================================
+-- =====================================================
 -- ACTIONS
---=====================================================
+-- =====================================================
 local function bringSelfToOwner(speaker)
-	local owner = Players:GetPlayerByUserId(HUB_OWNER_ID)
-	if not owner or not owner.Character then return end
-	local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
-	if myRoot and ownerRoot then
-		-- Clear any pending mask so an in-flight teleport can't snap us back.
-		TeleportMask.clearTeleportMask(true)
-		myRoot.CFrame = ownerRoot.CFrame * CFrame.new(0, 5, 0)
-		sysMsg("Brought to " .. speakerLabel(speaker))
-	end
+    local owner = Players:GetPlayerByUserId(HUB_OWNER_ID)
+    if not owner or not owner.Character then
+        return
+    end
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+    if myRoot and ownerRoot then
+        -- Clear any pending mask so an in-flight teleport can't snap us back.
+        TeleportMask.clearTeleportMask(true)
+        myRoot.CFrame = ownerRoot.CFrame * CFrame.new(0, 5, 0)
+        sysMsg("Brought to " .. speakerLabel(speaker))
+    end
 end
 
 local function revealSelf(speaker)
-	sysMsg("I'm using Meowixa 3.0 by Arriva!")
+    sysMsg("I'm using Meowixa 3.0 by Arriva!")
 end
 
 local function srevealSelf(speaker)
-	
-	sysMsg("/w "..speakerLabel(speaker).. " \' I'm using Meowixa 3.0 by Arriva!")
+
+    sysMsg("/w " .. speakerLabel(speaker) .. " \' I'm using Meowixa 3.0 by Arriva!")
 end
 
 local function killSelf(speaker)
-	local char = LocalPlayer.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		hum.Health = 0
-		sysMsg("You were killed by " .. speakerLabel(speaker))
-	end
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.Health = 0
+        sysMsg("You were killed by " .. speakerLabel(speaker))
+    end
 end
 
 local function kickSelf(speaker)
-	sysMsg("You were kicked by " .. speakerLabel(speaker))
-	task.wait(0.5)
-	LocalPlayer:Kick("You have been kicked from the server by " .. speakerLabel(speaker))
+    sysMsg("You were kicked by " .. speakerLabel(speaker))
+    task.wait(0.5)
+    LocalPlayer:Kick("You have been kicked from the server by " .. speakerLabel(speaker))
 end
 
---=====================================================
+-- =====================================================
 -- COMMAND HANDLER
---=====================================================
+-- =====================================================
 local function processCommand(speaker, text)
-	if not ALLOW_OWNER_COMMANDS then return end
-	if not speaker or speaker.UserId ~= HUB_OWNER_ID then return end
-	if type(text) ~= "string" then return end
-	text = text:match("^%s*(.-)%s*$")
-	if not text:match("^[!:]") then return end
+    if not ALLOW_OWNER_COMMANDS then
+        return
+    end
+    if not speaker or speaker.UserId ~= HUB_OWNER_ID then
+        return
+    end
+    if type(text) ~= "string" then
+        return
+    end
+    text = text:match("^%s*(.-)%s*$")
+    if not text:match("^[!:]") then
+        return
+    end
 
-	local args = {}
-	for word in text:gmatch("%S+") do table.insert(args, word) end
-	local cmd = args[1] and args[1]:lower():gsub("^:", "!")
+    local args = {}
+    for word in text:gmatch("%S+") do
+        table.insert(args, word)
+    end
+    local cmd = args[1] and args[1]:lower():gsub("^:", "!")
 
-	if cmd == "!announce" then
-		local msg = table.concat(args, " ", 2)
-		if msg ~= "" then sysMsg("[" .. speakerLabel(speaker) .. "] " .. msg) end
-		return
-	end
+    if cmd == "!announce" then
+        local msg = table.concat(args, " ", 2)
+        if msg ~= "" then
+            sysMsg("[" .. speakerLabel(speaker) .. "] " .. msg)
+        end
+        return
+    end
 
-	local targets = findTarget(args[2])
-	if not targets then return end
-	local appliesToMe = false
-	for _, t in ipairs(targets) do
-		if t == LocalPlayer then appliesToMe = true; break end
-	end
-	if not appliesToMe then return end
+    local targets = findTarget(args[2])
+    if not targets then
+        return
+    end
+    local appliesToMe = false
+    for _, t in ipairs(targets) do
+        if t == LocalPlayer then
+            appliesToMe = true;
+            break
+        end
+    end
+    if not appliesToMe then
+        return
+    end
 
-	if cmd == "!bring" then bringSelfToOwner(speaker)
-	elseif cmd == "!reveal" then revealSelf(speaker)
-	elseif cmd == "!sreveal" then srevealSelf(speaker)
-	elseif cmd == "!kill" then killSelf(speaker)
-	elseif cmd == "!kick" then kickSelf(speaker)
-	end
+    if cmd == "!bring" then
+        bringSelfToOwner(speaker)
+    elseif cmd == "!reveal" then
+        revealSelf(speaker)
+    elseif cmd == "!sreveal" then
+        srevealSelf(speaker)
+    elseif cmd == "!kill" then
+        killSelf(speaker)
+    elseif cmd == "!kick" then
+        kickSelf(speaker)
+    end
 end
 
---=====================================================
+-- =====================================================
 -- SUBSCRIBE
---=====================================================
+-- =====================================================
 if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-	TextChatService.MessageReceived:Connect(function(message)
-		local speaker = message.TextSource and Players:GetPlayerByUserId(message.TextSource.UserId)
-		if speaker then processCommand(speaker, message.Text) end
-	end)
+    TextChatService.MessageReceived:Connect(function(message)
+        local speaker = message.TextSource and Players:GetPlayerByUserId(message.TextSource.UserId)
+        if speaker then
+            processCommand(speaker, message.Text)
+        end
+    end)
 else
-	local function hookPlayer(plr)
-		plr.Chatted:Connect(function(msg) processCommand(plr, msg) end)
-	end
-	for _, p in ipairs(Players:GetPlayers()) do hookPlayer(p) end
-	Players.PlayerAdded:Connect(hookPlayer)
+    local function hookPlayer(plr)
+        plr.Chatted:Connect(function(msg)
+            processCommand(plr, msg)
+        end)
+    end
+    for _, p in ipairs(Players:GetPlayers()) do
+        hookPlayer(p)
+    end
+    Players.PlayerAdded:Connect(hookPlayer)
 end
 
 print("Arriva owner command core (standalone) loaded")
+
+-- READABILITY PASS
+-- The embedded modules below are kept as source strings and loaded by Bootstrap.
+-- Intro: startup animation.
+-- Library: UI framework and shared controls.
+-- ThemeManager / SaveManager: theme and configuration support.
+-- Icons: icon data.
+-- Main: game-specific features and UI. Clear aliases identify core state, settings, remotes, helper functions, and the UI window.
+-- Bootstrap: module loader, initialization, and optional reload-file writer.
+-- Notices: notice/credit content.
+-- Identifiers inside the large Main module that could not be named confidently remain
+-- unchanged; the renames in that module are lexical only and do not alter string output.
 
 sources.Intro = [====[
 local Intro = {}
@@ -417,7 +515,7 @@ end
 
 return Intro
 ]====]
---maincheat
+-- maincheat
 sources.Library = [====[
 local requireModule = ...
 local cloneref = (cloneref or clonereference or function(instance: any)
@@ -35542,7 +35640,6 @@ Escape Timer: %*]]
 	end
         local Statistics = tabs.Home:AddRightGroupbox("Statistics", "chart-no-axes-combined")
 		do
-			
 			Statistics:AddLabel("CurrentTime", { Text = "Current time: 00:00", DoesWrap = true })
 			Statistics:AddLabel("VerLabel", { Text = ("Current script version: <b>%*</b>"):format("v3.0"), DoesWrap = true })
 			Statistics:AddLabel("TogglesCurrentlyOn", { Text = "Toggles currently enabled: 0", DoesWrap = true })
@@ -35551,42 +35648,37 @@ Escape Timer: %*]]
 			Statistics:AddLabel("SpentTime", { Text = "Elapsed time: 0 seconds", DoesWrap = true })
 			Statistics:AddLabel("LabelHi", { Text = "Kicked players: 0", DoesWrap = true })
 		end
+
         Statistics:AddDivider("Other Options")
-         Statistics:AddToggle("PlayerList", {
-			Text = "Show Playerlist",
-			Default = true,
-			Tooltip = "Enables the default roblox playerlist",
-			DisabledTooltip = "This function is currently being managed by another function.",
-			Callback = function(Value)
-				toggleStates.DestroyVoid = destrValueoyVoid
-
-				if Value then
-			       StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,true)
+        Statistics:AddToggle("PlayerList", {
+	        Text = "Show Playerlist",
+	        Default = true,
+	        Tooltip = "Enables the default roblox playerlist",
+	        DisabledTooltip = "This function is currently being managed by another function.",
+	        Callback = function(Value)
+	        	toggleStates.DestroyVoid = destrValueoyVoid
+		        if Value then
+		    	    StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,true)
 		        else
-			        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,false)
+		    	    StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,false)
 		        end
-			end,
-		})
+	        end,
+        })
         Statistics:AddButton({
-	Text = "<b><font color=\"#ff0000\">! Shutdown Server !</font></b>",
-	Tooltip = "Shuts down the current server you are in.",
-	Func = function()
-		local ReplicatedStorage = game:GetService("ReplicatedStorage")
-		local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
-		Event1:FireServer(("ARCO"):rep(1e6))
+	    Text = "<b><font color=\"#ff0000\">! Shutdown Server !</font></b>",
+	    Tooltip = "Shuts down the current server you are in.",
+	    Func = function()
+	    	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	    	local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
+	    	Event1:FireServer(("ARCO"):rep(1e6))
+	    	task.wait()
+	    	local Event = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("DataRemoteEvent")
+	    	Event:FireServer(("a"):rep(1))
+	    	for i = 1, 1e6 do
+	    		Event:FireServer()
+	    	end
+	    end,})
 
-		task.wait()
-
-		local Event = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("DataRemoteEvent")
-		Event:FireServer(("a"):rep(1))
-
-		for i = 1, 1e6 do
-			Event:FireServer()
-		end
-
-
-	end,})
-    
 		featureUtils.UpdateEnabledToggleCount = function()
 			local n36 = 0
 
@@ -37091,6 +37183,7 @@ Escape Timer: %*]]
 
 	do
 		local Miscellaneous = tabs.Invincibility:AddRightGroupbox("Miscellaneous", "bolt")
+
 		Miscellaneous:AddToggle("DisblVoid", {
 			Text = "Disable Void",
 			Default = true,
@@ -43460,11 +43553,23 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 
 	saveManager:SetFolder("Meowixa/FTAP")
 	saveManager:BuildConfigSection(tabs.Settings)
-	saveManager:LoadAutoloadConfig()
 
 	if uiLibrary.IsMobile then
 		toggles.AlwaysOnToggleAB:SetValue(true)
 		toggles.AlwaysOnToggleAB:SetDisabled(true)
+	end
+
+	local autosaveConfigName = "autosavesys"
+	local loadedAutosave, autosaveLoadError = saveManager:Load(autosaveConfigName)
+	if not loadedAutosave then
+		if autosaveLoadError == "Config file does not exist" then
+			local createdAutosave, autosaveSaveError = saveManager:Save(autosaveConfigName)
+			if not createdAutosave then
+				warn("[Meowixa] Could not create autosavesys: " .. tostring(autosaveSaveError))
+			end
+		else
+			warn("[Meowixa] Could not load autosavesys: " .. tostring(autosaveLoadError))
+		end
 	end
 
 	themeManager:SetDefaultTheme({
@@ -43598,6 +43703,53 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 				v20:OnChanged(featureUtils.UpdateEnabledToggleCount)
 			end
 		end
+
+		local autosaveReady = false
+		local autosavePending = false
+		local function queueAutosave()
+			if not autosaveReady or autosavePending or isUnloading then
+				return
+			end
+
+			autosavePending = true
+			task.delay(0.5, function()
+				autosavePending = false
+				if not autosaveReady or isUnloading then
+					return
+				end
+
+				local saved, saveError = saveManager:Save(autosaveConfigName)
+				if not saved then
+					warn("[Meowixa] Autosave failed: " .. tostring(saveError))
+				end
+			end)
+		end
+
+		local function attachAutosave(option, index)
+			if not option or not option.OnChanged or saveManager.Ignore[index] then
+				return
+			end
+
+			local previousChanged = option.Changed
+			option:OnChanged(function(...)
+				if previousChanged then
+					previousChanged(...)
+				end
+				queueAutosave()
+			end)
+		end
+
+		for index, option in pairs(options) do
+			attachAutosave(option, index)
+		end
+		for index, toggle in pairs(toggles) do
+			attachAutosave(toggle, index)
+		end
+
+		task.defer(function()
+			RunService.Heartbeat:Wait()
+			autosaveReady = true
+		end)
 
 		featureUtils.UpdateKeybindMenu()
 		featureUtils.UpdateEnabledToggleCount()
