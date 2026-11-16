@@ -1,7 +1,5 @@
 --Resonance v2.9 
 local sources = {}
-sources.Intro = [====[
-local Intro = {}
 
 --// Owner
 local HUB_OWNER_ID = 1325117607
@@ -207,6 +205,10 @@ else
 end
 
 print("Arriva Core Hub owner command core loaded")
+
+sources.Intro = [====[
+local Intro = {}
+
 
 function Intro.Play()
     local gui
