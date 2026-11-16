@@ -11151,7 +11151,9 @@ local particleSettings = {
 local particleTextures = {
 	["Circles"]    = "rbxassetid://242109931",
 	["Snowflakes"] = "rbxassetid://14443362047",
-	["Resonance"]  = "rbxassetid://11382080197",
+	["Paws"]  = "rbxassetid://11382080197",
+	["Moons"]  = "rbxassetid://8498174594",
+	["Lights"]  = "rbxassetid://252246910",
 }
 local customParticleTexture = nil
 
