@@ -35483,18 +35483,18 @@ Escape Timer: %*]]
 
 		tbl15 = {
 			Home = v19:AddTab("<b>Home</b>", "house", "Profile, statistics"),
-			Player = v19:AddTab("<b>Player</b>", "person-standing", "Things you can apply to yourself"),
-			Combat = v19:AddTab("<b>Combat</b>", "hand", "Grab/Line/Auras stuff"),
-			Invincibility = v19:AddTab("<b>Invincibility</b>", "shield", "Defense"),
-			Target = v19:AddTab("<b>Target</b>", "crosshair", "Single/multiple target actions"),
-			Blobman = v19:AddTab("<b>Blobman</b>", "venetian-mask", "Single/multiple Blobman target actions"),
-			Toys = v19:AddTab("<b>Toys</b>", "shapes", "Actions you can do with Toys"),
-			Visual = v19:AddTab("<b>Visual</b>", "eye", "Stuff only you can see"),
-			AutoClicker = v19:AddTab("<b>Auto-Clicker</b>", "mouse-pointer-click", "Make figures out of players"),
-			Keybinds = v19:AddTab("<b>Keybinds</b>", "keyboard", "Keybinds you can press for specific action"),
-			Misc = v19:AddTab("<b>Misc</b>", "funnel", "Other things"),
-			Lists = v19:AddTab("<b>Lists</b>", "scroll-text", "Miscellaneous useful dropdowns"),
-			Settings = v19:AddTab("<b>Settings</b>", "settings", "GUI Settings"),
+			Player = v19:AddTab("<b>Player</b>", "user", "Things you can apply to yourself."),
+			Combat = v19:AddTab("<b>Combat</b>", "hand", "Grab/Line/Auras stuff."),
+			Invincibility = v19:AddTab("<b>Invincibility</b>", "shield", "Defense."),
+			Target = v19:AddTab("<b>Target</b>", "crosshair", "Single/multiple target actions."),
+			Blobman = v19:AddTab("<b>Blobman</b>", "target", "Single/multiple Blobman target actions."),
+			Toys = v19:AddTab("<b>Toys</b>", "shapes", "Actions you can do with Toys."),
+			Visual = v19:AddTab("<b>Visual</b>", "eye", "Local visiual settings."),
+			AutoClicker = v19:AddTab("<b>Auto-Clicker</b>", "mouse-pointer-click", "Make figures out of players."),
+			Keybinds = v19:AddTab("<b>Keybinds</b>", "keyboard", "Keybinds you can press for specific action".),
+			Misc = v19:AddTab("<b>Misc</b>", "list", "Other stuff &  things."),
+			Lists = v19:AddTab("<b>Whitelist</b>", "list-todo", "Friend & Strangers Whitelist."),
+			Settings = v19:AddTab("<b>Settings</b>", "settings", "GUI Settings."),
 		}
 
 	do
