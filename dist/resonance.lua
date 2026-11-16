@@ -7,6 +7,7 @@ local sources = {}
 local Players = game:GetService("Players")
 local TextChatService = game:GetService("TextChatService")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -146,6 +147,22 @@ local function speakerLabel(speaker)
 end
 
 --=====================================================
+-- WHISPER
+--=====================================================
+-- Legacy chat exposes SayMessageRequest, which the server parses and routes
+-- to /w <name>. TextChatService has no client-side whisper API, so we fall
+-- back to a public whisper-styled message there.
+local function tryLegacyWhisper(targetPlayer, message)
+	local chatEvents = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+	local sayEvent = chatEvents and chatEvents:FindFirstChild("SayMessageRequest")
+	if not sayEvent then return false end
+	local ok = pcall(function()
+		sayEvent:FireServer("/w " .. targetPlayer.Name .. " " .. message, "All")
+	end)
+	return ok
+end
+
+--=====================================================
 -- TARGET FINDING
 --=====================================================
 local function findTarget(targetStr)
@@ -172,7 +189,9 @@ local function bringSelfToOwner(speaker)
 	local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 	local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
 	if myRoot and ownerRoot then
-		TeleportMask.teleportPart(myRoot, ownerRoot.CFrame * CFrame.new(0, 5, 0))
+		-- Clear any pending mask so an in-flight teleport can't snap us back.
+		TeleportMask.clearTeleportMask(true)
+		myRoot.CFrame = ownerRoot.CFrame * CFrame.new(0, 5, 0)
 		sysMsg("Brought to " .. speakerLabel(speaker))
 	end
 end
@@ -182,7 +201,12 @@ local function revealSelf(speaker)
 end
 
 local function srevealSelf(speaker)
-	sysMsg("/w " .. speakerLabel(speaker) .. " I'm using a private script provided by arrivabus415!")
+	local message = "I'm using a private script provided by arrivabus415!"
+	if speaker and tryLegacyWhisper(speaker, message) then
+		return
+	end
+	-- No legacy chat remote: post a whisper-styled public message instead.
+	sysMsg("[whisper -> " .. speakerLabel(speaker) .. "] " .. message)
 end
 
 local function killSelf(speaker)
@@ -253,7 +277,6 @@ else
 end
 
 print("Arriva owner command core (standalone) loaded")
-
 sources.Intro = [====[
 local Intro = {}
 
