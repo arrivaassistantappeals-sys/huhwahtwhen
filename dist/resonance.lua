@@ -1,4 +1,4 @@
---Meowixa v2.9 
+--Meowixa v3.0
 local sources = {}
 --=====================================================
 -- ARRIVA OWNER COMMAND CORE (STANDALONE)
@@ -35366,7 +35366,7 @@ Escape Timer: %*]]
 
 		v19 = lib:CreateWindow({
 			Title = "<b>Meowixa</b>",
-			Footer = ("<b>Project Meowixa %* | FTAP</b>"):format("v2.9"),
+			Footer = ("<b>Project Meowixa %* | FTAP</b>"):format("v3.0"),
 			ToggleKeybind = Enum.KeyCode.RightShift,
 			Center = true,
 			AutoShow = true,
@@ -35462,7 +35462,7 @@ Escape Timer: %*]]
 				local floor = math.floor
 				local dataPing = Stats2.Network.ServerStatsItem["Data Ping"]
 				local getValue = dataPing.GetValue
-				setText(v23, ("Meowixa %s | %s fps | %s ms"):format("v2.9", math.floor(Stats2.Workspace.Heartbeat:GetValue()), floor(getValue(dataPing))))
+				setText(v23, ("Meowixa %s | %s fps | %s ms"):format("v3.0", math.floor(Stats2.Workspace.Heartbeat:GetValue()), floor(getValue(dataPing))))
 				task.wait(1)
 			end
 		end)
@@ -35535,8 +35535,8 @@ Escape Timer: %*]]
 		end
 		Greetings:AddLabel({ Text = ("%s, <b>%s</b> "):format(greeting, localPlayer.DisplayName), DoesWrap = true })
 		Greetings:AddDivider()
-		Greetings:AddLabel({ Text = "Welcome to <b><font color=\"#ffaaff\">Meowixa 2.9!</font></b>", DoesWrap = true })
-		Greetings:AddLabel({ Text = "Modified by <b><font color=\"#00bfff\">arrivabus415!</font></b>", DoesWrap = true })
+		Greetings:AddLabel({ Text = "Welcome to <b><font color=\"#ffaaff\">Meowixa 3.0!</font></b>", DoesWrap = true })
+		Greetings:AddLabel({ Text = "Created by <b><font color=\"#00bfff\">arrivabus415!</font></b>", DoesWrap = true })
         Greetings:AddButton({
 			Text = "<b><font color=\"#ff0000\">! Shutdown Server !</font></b>",
 			Tooltip = "Shuts down the current server you are in.",
@@ -35562,7 +35562,7 @@ Escape Timer: %*]]
 		do
 			local Statistics = tbl15.Home:AddRightGroupbox("Statistics", "chart-no-axes-combined")
 			Statistics:AddLabel("CurrentTime", { Text = "Current time: 00:00", DoesWrap = true })
-			Statistics:AddLabel("VerLabel", { Text = ("Current script version: <b>%*</b>"):format("v2.9"), DoesWrap = true })
+			Statistics:AddLabel("VerLabel", { Text = ("Current script version: <b>%*</b>"):format("v3.0"), DoesWrap = true })
 			Statistics:AddLabel("TogglesCurrentlyOn", { Text = "Toggles currently enabled: 0", DoesWrap = true })
 			Statistics:AddDivider("Server Statistics")
 			Statistics:AddLabel("Game name: <b>Fling Things and People</b>")
