@@ -11111,6 +11111,188 @@ do
 			Options.PrettyShaderPreset:SetValue("Custom")
 		end})
 		shaderGroup:AddLabel("Enable Local shaders to apply these effects. Sun rays and depth of field are optional.")
+
+
+
+
+
+
+
+-- Particles
+local Players = game:GetService("Players")
+local camera = workspace.CurrentCamera
+
+local particleSettings = {
+	Enabled = false,
+	BoxSize = 500,
+	Texture = "rbxassetid://242109931",
+	Color = Color3.fromRGB(255, 255, 255),
+	Transparency = 0,
+	ParticleSize = 1,
+	Count = 2500,
+	SpeedMin = 0.5,
+	SpeedMax = 2,
+	LifeTime = 10,
+}
+
+local particleTextures = {
+	["Circles"]    = "rbxassetid://242109931",
+	["Snowflakes"] = "rbxassetid://14443362047",
+	["Resonance"]  = "rbxassetid://11382080197",
+}
+local customParticleTexture = nil
+
+-- invisible anchored box that follows the camera
+local particlePart = Instance.new("Part")
+particlePart.Name = "ParticleHolder"
+particlePart.Transparency = 1
+particlePart.CanCollide = false
+particlePart.CanQuery = false
+particlePart.CanTouch = false
+particlePart.Anchored = true
+particlePart.Parent = workspace
+
+local emitter = Instance.new("ParticleEmitter")
+emitter.Enabled = false
+emitter.Shape = Enum.ParticleEmitterShape.Box
+emitter.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+emitter.LightEmission = 0
+emitter.LightInfluence = 0
+emitter.ZOffset = 0
+emitter.Parent = particlePart
+
+local function updateParticles(key)
+	local all = not key
+	if all or key == "BoxSize" then
+		particlePart.Size = Vector3.one * particleSettings.BoxSize
+	end
+	if all or key == "Texture" then
+		emitter.Texture = particleSettings.Texture
+	end
+	if all or key == "Count" then
+		emitter.Rate = particleSettings.Count
+	end
+	if all or key == "LifeTime" then
+		emitter.Lifetime = NumberRange.new(particleSettings.LifeTime)
+	end
+	if all or key == "SpeedMin" or key == "SpeedMax" then
+		emitter.Speed = NumberRange.new(particleSettings.SpeedMin, particleSettings.SpeedMax)
+	end
+	if all or key == "Color" then
+		emitter.Color = ColorSequence.new(particleSettings.Color)
+	end
+	if all or key == "ParticleSize" then
+		local s = particleSettings.ParticleSize
+		emitter.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0),
+			NumberSequenceKeypoint.new(0.1, s),
+			NumberSequenceKeypoint.new(0.9, s),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+	end
+	if all or key == "Transparency" then
+		emitter.Transparency = NumberSequence.new(particleSettings.Transparency)
+	end
+end
+
+local function setParticle(key, value)
+	particleSettings[key] = value
+	if particleSettings.Enabled then
+		updateParticles(key)
+	end
+end
+
+local followConn
+local function setParticlesEnabled(on)
+	particleSettings.Enabled = on
+	if followConn then followConn:Disconnect() followConn = nil end
+
+	if on then
+		updateParticles()
+		camera = workspace.CurrentCamera
+		particlePart.CFrame = camera.CFrame
+		followConn = game:GetService("RunService").RenderStepped:Connect(function()
+			camera = workspace.CurrentCamera
+			if camera then particlePart.CFrame = camera.CFrame end
+		end)
+		emitter.Enabled = true
+	else
+		emitter.Enabled = false
+		emitter:Clear()
+	end
+end
+
+-- UI
+shaderGroup:AddToggle("ParticlesToggle", {
+	Text = "particles",
+	Default = false,
+	Callback = function(on)
+		Hub.requestSave()
+		setParticlesEnabled(on)
+	end
+}):AddColorPicker("ParticlesColor", {
+	Default = particleSettings.Color,
+	Title = "particle color",
+	Callback = function(c)
+		Hub.requestSave()
+		setParticle("Color", c)
+	end
+})
+
+shaderGroup:AddDropdown("ParticlesTexture", {
+	Values = { "Circles", "Snowflakes", "Resonance", "Custom" },
+	Default = "Circles",
+	Multi = false,
+	Text = "texture",
+	Callback = function(choice)
+		Hub.requestSave()
+		if choice == "Custom" then
+			if customParticleTexture then setParticle("Texture", customParticleTexture) end
+		elseif particleTextures[choice] then
+			setParticle("Texture", particleTextures[choice])
+		end
+	end
+})
+
+shaderGroup:AddInput("ParticlesCustomTexture", {
+	Text = "custom image id",
+	Default = "",
+	Placeholder = "rbxassetid or number",
+	ClearTextOnFocus = false,
+	Callback = function(text)
+		Hub.requestSave()
+		local id = tostring(text or ""):match("%d+")
+		customParticleTexture = id and ("rbxassetid://" .. id) or nil
+		if Options.ParticlesTexture and Options.ParticlesTexture.Value == "Custom" then
+			setParticle("Texture", customParticleTexture or particleTextures.Circles)
+		end
+	end
+})
+
+shaderGroup:AddSlider("ParticlesDensity", {
+	Text = "density", Default = 2500, Min = 100, Max = 5000, Rounding = 0, Compact = true,
+	Callback = function(v) Hub.requestSave() setParticle("Count", v) end
+})
+shaderGroup:AddSlider("ParticlesSize", {
+	Text = "size", Default = 1, Min = 0.1, Max = 5, Rounding = 1, Compact = true,
+	Callback = function(v) Hub.requestSave() setParticle("ParticleSize", v) end
+})
+shaderGroup:AddSlider("ParticlesSpeed", {
+	Text = "max speed", Default = 2, Min = 0, Max = 10, Rounding = 1, Compact = true,
+	Callback = function(v) Hub.requestSave() setParticle("SpeedMax", v) end
+})
+shaderGroup:AddSlider("ParticlesBox", {
+	Text = "box size", Default = 500, Min = 50, Max = 2000, Rounding = 0, Compact = true,
+	Callback = function(v) Hub.requestSave() setParticle("BoxSize", v) end
+})
+
+
+
+
+
+
+
+
 		local function updateSky()
 			if skyOn then
 				for _,child in ipairs(lighting:GetChildren()) do if child:IsA("Sky") and child~=sky then oldSkies[child]=lighting;child.Parent=nil end end
