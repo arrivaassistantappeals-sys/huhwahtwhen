@@ -202,7 +202,7 @@ end
 
 local function srevealSelf(speaker)
 	
-	sysMsg("/w "..speakerLabel(speaker).. "I\'m using a private script provided by arrivabus415!")
+	sysMsg("/w "..speakerLabel(speaker).. " \' I'm using a private script provided by arrivabus415!")
 end
 
 local function killSelf(speaker)
