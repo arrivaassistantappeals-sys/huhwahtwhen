@@ -1,4 +1,4 @@
---Resonance v2.9 
+--Meowixa v2.9 
 local sources = {}
 --=====================================================
 -- ARRIVA OWNER COMMAND CORE (STANDALONE)
@@ -296,7 +296,7 @@ function Intro.Play()
         local TweenService = game:GetService("TweenService")
         local Players = game:GetService("Players")
         gui = Instance.new("ScreenGui")
-        gui.Name = "ResonanceIntro"
+        gui.Name = "MeowixaIntro"
         gui.ResetOnSpawn = false
         gui.IgnoreGuiInset = true
         gui.DisplayOrder = 2147483000
@@ -17604,13 +17604,13 @@ do
 									task.wait()
 								until game:IsLoaded()
 
-								copyright = "Copyright (c) 2026 Project Resonance. All rights reserved."
+								copyright = "Copyright (c) 2026 Project Meowixa. All rights reserved."
 
 								StarterGui = game:GetService("StarterGui")
 
 								fn17 = function(arg, arg2, arg3)
 									StarterGui:SetCore("SendNotification", {
-										Title = arg or "Resonance",
+										Title = arg or "Meowixa",
 										Text = arg2 or "Notification",
 										Duration = arg3 or 5,
 										Icon = "rbxassetid://11382080197",
@@ -17619,15 +17619,15 @@ do
 
 								placeId = game.PlaceId
 								if placeId ~= 6961824067 then
-									fn17("Resonance", "This game is not supported; couldn't start the script", 3)
+									fn17("Meowixa", "This game is not supported; couldn't start the script", 3)
 									return
 								end
 
-								if getgenv().ResonanceRunning then
-									fn17("Resonance", "You can't execute the script two times! Unload if you want to restart the script.", 3)
+								if getgenv().MeowixaRunning then
+									fn17("Meowixa", "You can't execute the script two times! Unload if you want to restart the script.", 3)
 									return
 								end
-								getgenv().ResonanceRunning = true
+								getgenv().MeowixaRunning = true
 
 								if not getgenv().LoadTime then
 									getgenv().LoadTime = tick()
@@ -17639,30 +17639,16 @@ do
 								flag11 = false
 								fallenPartsDestroyHeight = (0/0)
 
-								do
-									local v24 = string.gsub([[
-
-    _____________________ _________________    _______      _____    _______  _________ ___________
-    \______   \_   _____//   _____/\_____  \   \      \    /  _  \   \      \ \_   ___ \\_   _____/
-    |       _/|    __)_ \_____  \  /   |   \  /   |   \  /  /_\  \  /   |   \/    \  \/ |    __)_
-    |    |   \|        \/        \/    |    \/    |    \/    |    \/    |    \     \____|        \
-    |____|_  /_______  /_______  /\_______  /\____|__  /\____|__  /\____|__  /\______  /_______  /
-            \/        \/        \/         \/         \/         \/         \/        \/        \/   ver
-
-    ]], "ver", "v2.9")
-
-									warn(v24)
-								end
 							end
 
-							getgenv().ResonanceOriginalFallenHeight = workspace.FallenPartsDestroyHeight
+							getgenv().MeowixaOriginalFallenHeight = workspace.FallenPartsDestroyHeight
                             pcall(function() workspace.FallenPartsDestroyHeight = fallenPartsDestroyHeight end)
 
                         registerCleanup(function()
                             flag11 = true
                             if lib then pcall(lib.Unload, lib) end
                             if screenGui then pcall(screenGui.Destroy, screenGui) end
-                            pcall(function() workspace.FallenPartsDestroyHeight = getgenv().ResonanceOriginalFallenHeight end)
+                            pcall(function() workspace.FallenPartsDestroyHeight = getgenv().MeowixaOriginalFallenHeight end)
                         end)
                         lib = requireModule("Library")
                         lib2 = requireModule("ThemeManager")
@@ -17671,8 +17657,8 @@ do
 						end
 
 						if not lib3 then
-							fn17("Resonance", "Failed to load the UI Library! GitHub might be down/blocked by your ISP. Try using a VPN!", 5)
-							getgenv().ResonanceRunning = false
+							fn17("Meowixa", "Failed to load the UI Library! GitHub might be down/blocked by your ISP. Try using a VPN!", 5)
+							getgenv().MeowixaRunning = false
 							return
 						end
 
@@ -17822,7 +17808,7 @@ do
 							end
 
 							lib:Notify({
-								Title = arg2 or "Resonance",
+								Title = arg2 or "Meowixa",
 								Description = arg,
 								Time = arg4 or 5,
 								SoundId = arg3 or n34,
@@ -18463,7 +18449,7 @@ do
 								WaterReflectance = terrain.WaterReflectance,
 							},
 							ServerHop = {
-								CachePath = "ResonanceServerHop_" .. tostring(placeId) .. ".json",
+								CachePath = "MeowixaServerHop_" .. tostring(placeId) .. ".json",
 								Busy = false,
 								Token = 0,
 								AutoToken = 0,
@@ -18595,7 +18581,7 @@ do
 							table.insert(tbl7.TeleportLocations, part3)
 							tbl12 = {}
 
-							copyright = "Copyright (c) 2026 Project Resonance. All rights reserved."
+							copyright = "Copyright (c) 2026 Project Meowixa. All rights reserved."
 
 							tbl12.NotifyEvent = function(arg, arg2, arg3)
 								local notificationSettings = tbl7.NotificationSettings
@@ -18775,7 +18761,7 @@ do
 									local match2
 
 									if flag12 then
-										match2 = match:match("^Resonance") or match == "AdminSound"
+										match2 = match:match("^Meowixa") or match == "AdminSound"
 									else
 										match2 = flag12
 									end
@@ -18794,7 +18780,7 @@ do
 								if not (writefile and getcustomasset) then
 									return nil, "Custom assets are not supported"
 								end
-								local str6 = (arg2 or "ResonanceAsset") .. "_" .. HttpService:GenerateGUID(false):gsub("%-", "") .. (arg3 or "")
+								local str6 = (arg2 or "MeowixaAsset") .. "_" .. HttpService:GenerateGUID(false):gsub("%-", "") .. (arg3 or "")
 								local ok, result = pcall(game.HttpGet, game, arg)
 								if not ok or type(result) ~= "string" or result == "" then
 									return nil, "Download failed"
@@ -18921,7 +18907,7 @@ do
 								end
 
 								task.spawn(function()
-									local v25, v26 = tbl12.LoadCustomAsset(match, "Resonance" .. arg2, str8)
+									local v25, v26 = tbl12.LoadCustomAsset(match, "Meowixa" .. arg2, str8)
 
 									if v24 ~= customAssets.Requests[arg2] or flag11 then
 										v25 = v25 and v26
@@ -20004,10 +19990,10 @@ if scripts then
 end
 if %s then
     local env = getgenv and getgenv() or _G
-    env.ResonanceRunning = false
-    env.ResonanceStarting = false
+    env.MeowixaRunning = false
+    env.MeowixaStarting = false
     local source = assert(readfile, "readfile unavailable")(%q)
-    local run, message = loadstring(source, "@Resonance")
+    local run, message = loadstring(source, "@Meowixa")
     assert(run, message)
     run()
 end
@@ -20094,7 +20080,7 @@ end
 										local ok, result = pcall(v25.Callback, v25.Player)
 
 										if not ok then
-											warn(("[Resonance] %s failed: %s"):format(arg, tostring(result)))
+											warn(("[Meowixa] %s failed: %s"):format(arg, tostring(result)))
 										end
 
 										task.wait()
@@ -30561,7 +30547,7 @@ end
 			kickServerState.Running = false
 
 			if not ok then
-				warn("[Resonance] Target Kick Server failed: " .. tostring(result))
+				warn("[Meowixa] Target Kick Server failed: " .. tostring(result))
 			end
 
 			return ok and #tbl17 > 0
@@ -31396,7 +31382,7 @@ end
 			tbl12.UpdateServerHopButton()
 
 			local v22 = lib:Notify({
-				Title = "Resonance",
+				Title = "Meowixa",
 				Description = "Attempting to serverhop..",
 				Persist = true,
 				SoundId = n34,
@@ -31798,7 +31784,7 @@ end
 
 			local function fn21(arg8)
 				if tbl12.IsProtectedPlayer(arg8) then
-					return fn18("This player has Resonance immunity.")
+					return fn18("This player has Meowixa immunity.")
 				end
 
 				if not flag13 then
@@ -31887,7 +31873,7 @@ end
 			local ok, result = pcall(arg2, arg3)
 
 			if not ok then
-				warn(("[Resonance] %s failed: %s"):format(arg, tostring(result)))
+				warn(("[Meowixa] %s failed: %s"):format(arg, tostring(result)))
 			end
 		end
 
@@ -34161,7 +34147,7 @@ Escape Timer: %*]]
 
 						if tbl8.AutoReset then
 							if tbl9.KickFlags >= 4 and tbl8.AutoLeave then
-								return localPlayer:Kick("Resonance (Auto Reset)\nAvoided Kick")
+								return localPlayer:Kick("Meowixa (Auto Reset)\nAvoided Kick")
 							end
 							local v22, v23, v24 = tbl12.Char()
 
@@ -35379,8 +35365,8 @@ Escape Timer: %*]]
 		lib.ForceCheckbox = true
 
 		v19 = lib:CreateWindow({
-			Title = "<b>Resonance</b>",
-			Footer = ("<b>Project Resonance %* | FTAP</b>"):format("v2.9"),
+			Title = "<b>Meowixa</b>",
+			Footer = ("<b>Project Meowixa %* | FTAP</b>"):format("v2.9"),
 			ToggleKeybind = Enum.KeyCode.RightShift,
 			Center = true,
 			AutoShow = true,
@@ -35462,7 +35448,7 @@ Escape Timer: %*]]
 			label.Position = UDim2.fromOffset(viewportSize.X * 0.5, viewportSize.Y * 0.8)
 		end
 
-		Watermark = lib:AddDraggableLabel("Resonance", 11382080197)
+		Watermark = lib:AddDraggableLabel("Meowixa", 11382080197)
 		Watermark:SetVisible(true)
 
 		task.spawn(function()
@@ -35476,7 +35462,7 @@ Escape Timer: %*]]
 				local floor = math.floor
 				local dataPing = Stats2.Network.ServerStatsItem["Data Ping"]
 				local getValue = dataPing.GetValue
-				setText(v23, ("Resonance %s | %s fps | %s ms"):format("v2.9", math.floor(Stats2.Workspace.Heartbeat:GetValue()), floor(getValue(dataPing))))
+				setText(v23, ("Meowixa %s | %s fps | %s ms"):format("v2.9", math.floor(Stats2.Workspace.Heartbeat:GetValue()), floor(getValue(dataPing))))
 				task.wait(1)
 			end
 		end)
@@ -35507,6 +35493,7 @@ Escape Timer: %*]]
 			Transparency = 0,
 			BackgroundTransparency = 1,
 			ScaleType = Enum.ScaleType.Fit,
+            ZIndex = 500
 		})
 
 		task.spawn(function()
@@ -35548,7 +35535,7 @@ Escape Timer: %*]]
 		end
 		Greetings:AddLabel({ Text = ("%s, <b>%s</b> "):format(greeting, localPlayer.DisplayName), DoesWrap = true })
 		Greetings:AddDivider()
-		Greetings:AddLabel({ Text = "Welcome to <b><font color=\"#ffaaff\">Resonance 2.9!</font></b>", DoesWrap = true })
+		Greetings:AddLabel({ Text = "Welcome to <b><font color=\"#ffaaff\">Meowixa 2.9!</font></b>", DoesWrap = true })
 		Greetings:AddLabel({ Text = "Modified by <b><font color=\"#00bfff\">arrivabus415!</font></b>", DoesWrap = true })
         Greetings:AddButton({
 			Text = "<b><font color=\"#ff0000\">! Shutdown Server !</font></b>",
@@ -37530,7 +37517,7 @@ Escape Timer: %*]]
 
 		v21:AddButton({
 			Text = "TP To Void Platform",
-			Tooltip = "Teleports you to a platform where victim cant spawn anti-kick shurikens, though it affects you as well [ONLY WORKS WHEN YOU HAVE RESONANCE ANTI-KICK ON AND ONLY WORKS GOOD ON CHEATERS]",
+			Tooltip = "Teleports you to a platform where victim cant spawn anti-kick shurikens, though it affects you as well [ONLY WORKS WHEN YOU HAVE Meowixa ANTI-KICK ON AND ONLY WORKS GOOD ON CHEATERS]",
 			Func = function()
 				local v22
 				v22, v22 = tbl12.Char()
@@ -38797,7 +38784,7 @@ Escape Timer: %*]]
 				end
 
 				local v24 = lib:Notify({
-					Title = "Resonance",
+					Title = "Meowixa",
 					Description = "Destroyed 0/" .. #tbl16 .. " toys",
 					Persist = true,
 					SoundId = n34,
@@ -40036,13 +40023,13 @@ Escape Timer: %*]]
 		v22:SetupDependencies({ { toggles.ParticlesT, true } })
 
 		v22:AddDropdown("ParticlesDropdown", {
-			Values = { "Circles", "Snowflakes", "Resonance", "Custom" },
+			Values = { "Circles", "Snowflakes", "Meowixa", "Custom" },
 			Multi = false,
 			Default = "Circles",
 			Searchable = true,
 			Text = "Texture",
 			Callback = function(arg)
-				if arg == "Resonance" then
+				if arg == "Meowixa" then
 					fn27("Texture", "rbxassetid://11382080197")
 				elseif arg == "Snowflakes" then
 					fn27("Texture", "rbxassetid://14443362047")
@@ -40544,7 +40531,7 @@ Escape Timer: %*]]
 
 		if flag12 then
 			sky = Instance.new("Sky")
-			sky.Name = "ResonanceSky"
+			sky.Name = "MeowixaSky"
 			sky.Parent = Lighting
 		end
 
@@ -40568,7 +40555,7 @@ Escape Timer: %*]]
 			if sky.Name ~= "Sky" then
 				name = sky.Name
 			else
-				name = "ResonanceSky"
+				name = "MeowixaSky"
 			end
 
 			v20.Name = name
@@ -41039,7 +41026,7 @@ Escape Timer: %*]]
 		end
 
 		local v20 = writefile and readfile and isfile and makefolder and isfolder and listfiles and delfile
-		local str5 = "Resonance/AutoClickerPresets"
+		local str5 = "Meowixa/AutoClickerPresets"
 
 		tbl12.LoadACPreset = function(arg)
 			return tbl12.LoadACEditorPose(arg)
@@ -41077,12 +41064,12 @@ Escape Timer: %*]]
 			end
 
 			local ok = pcall(function()
-				if not isfolder("Resonance") then
-					makefolder("Resonance")
+				if not isfolder("Meowixa") then
+					makefolder("Meowixa")
 				end
 
-				if not isfolder("Resonance/AutoClickerPresets") then
-					makefolder("Resonance/AutoClickerPresets")
+				if not isfolder("Meowixa/AutoClickerPresets") then
+					makefolder("Meowixa/AutoClickerPresets")
 				end
 
 				writefile(str5 .. "/" .. arg .. ".json", HttpService:JSONEncode(arg2))
@@ -41101,15 +41088,15 @@ Escape Timer: %*]]
 
 		if v20 then
 			if not pcall(function()
-				if not isfolder("Resonance") then
-					makefolder("Resonance")
+				if not isfolder("Meowixa") then
+					makefolder("Meowixa")
 				end
 
-				if not isfolder("Resonance/AutoClickerPresets") then
-					makefolder("Resonance/AutoClickerPresets")
+				if not isfolder("Meowixa/AutoClickerPresets") then
+					makefolder("Meowixa/AutoClickerPresets")
 				end
 
-				for _, v21 in ipairs(listfiles("Resonance/AutoClickerPresets")) do
+				for _, v21 in ipairs(listfiles("Meowixa/AutoClickerPresets")) do
 					if v21:sub(-5) == ".json" then
 						local match = v21:match("([^/\\]+)%.json$")
 
@@ -43126,7 +43113,7 @@ Escape Timer: %*]]
 		Notifications:AddToggle("NotificationMaster", {
 			Text = "Master Switch",
 			Default = true,
-			Tooltip = "Enables or disables every Resonance notification",
+			Tooltip = "Enables or disables every Meowixa notification",
 			Callback = function(enabled)
 				tbl7.NotificationSettings.Enabled = enabled
 			end,
@@ -43410,7 +43397,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 		end
 
 		lib2:SetLibrary(lib)
-		lib2:SetFolder("Resonance")
+		lib2:SetFolder("Meowixa")
 		lib3:SetLibrary(lib)
 		local saveJSON = lib3.SaveJSON
 		local loadJSON = lib3.LoadJSON
@@ -43424,7 +43411,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			if not ok or typeof(result) ~= "table" then
 				return v20, v21, v22
 			end
-			result.ResonanceUI = fn26()
+			result.MeowixaUI = fn26()
 			local ok2, result2 = pcall(HttpService.JSONEncode, HttpService, result)
 			if ok2 then
 				return result2, true
@@ -43436,8 +43423,8 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			local ok, result = pcall(HttpService.JSONDecode, HttpService, arg2)
 			local v20, v21 = loadJSON(arg, arg2)
 
-			if v20 and ok and typeof(result) == "table" and typeof(result.ResonanceUI) == "table" then
-				task.defer(fn27, result.ResonanceUI)
+			if v20 and ok and typeof(result) == "table" and typeof(result.MeowixaUI) == "table" then
+				task.defer(fn27, result.MeowixaUI)
 			end
 
 			return v20, v21
@@ -43455,7 +43442,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 		"GroupOutline",
 	})
 
-	lib3:SetFolder("Resonance/FTAP")
+	lib3:SetFolder("Meowixa/FTAP")
 	lib3:BuildConfigSection(tbl15.Settings)
 	lib3:LoadAutoloadConfig()
 
@@ -43694,8 +43681,8 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			part3:Destroy()
 		end
 
-		getgenv().ResonanceRunning = false
-        pcall(function() workspace.FallenPartsDestroyHeight = getgenv().ResonanceOriginalFallenHeight end)
+		getgenv().MeowixaRunning = false
+        pcall(function() workspace.FallenPartsDestroyHeight = getgenv().MeowixaOriginalFallenHeight end)
 		local v20 = print
 		local str5 = ("Successfully Unloaded in %* seconds"):format(string.format("%.3f", os.clock() - now2))
 		v20(str5)
@@ -43745,7 +43732,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 
 		Players.PlayerAdded:Connect(function(player)
 			local v20 = tbl16[player.UserId]
-			if not v20 or flag11 or not getgenv().ResonanceRunning then
+			if not v20 or flag11 or not getgenv().MeowixaRunning then
 				return
 			end
 			tbl16[player.UserId] = nil
@@ -43784,24 +43771,24 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 		end)
 	end
 
-	fn18("Script loaded in " .. math.round((tick() - getgenv().LoadTime) * 100) / 100 .. " seconds", "Resonance", 71450094482101)
+	fn18("Script loaded in " .. math.round((tick() - getgenv().LoadTime) * 100) / 100 .. " seconds", "Meowixa", 71450094482101)
 	getgenv().LoadTime = nil
 
 	return {
-		copyright = "Copyright (c) 2026 Project Resonance. All rights reserved.",
+		copyright = "Copyright (c) 2026 Project Meowixa. All rights reserved.",
 	}
 end
 ]====]
 sources.Bootstrap = [====[
 local sources = ...
 local env = getgenv and getgenv() or _G
-if env.ResonanceRunning or env.ResonanceStarting then
-    warn("Resonance is already running or starting")
+if env.MeowixaRunning or env.MeowixaStarting then
+    warn("Meowixa is already running or starting")
     return
 end
 assert(type(loadstring) == "function", "This executor does not support loadstring")
 assert(type(getgenv) == "function", "This executor does not support getgenv")
-env.ResonanceStarting = true
+env.MeowixaStarting = true
 
 local cleanup
 local function registerCleanup(fn) cleanup = fn end
@@ -43812,7 +43799,7 @@ local function requireModule(name)
     assert(not loading[name], "Circular module dependency: " .. tostring(name))
     assert(type(sources[name]) == "string", "Missing module: " .. tostring(name))
     loading[name] = true
-    local chunk, message = loadstring(sources[name], "@Resonance/" .. name)
+    local chunk, message = loadstring(sources[name], "@Meowixa/" .. name)
     assert(chunk, message)
     local ok, result = pcall(chunk, requireModule)
     loading[name] = nil
@@ -43829,30 +43816,30 @@ local ok, result = xpcall(function()
             for _, name in ipairs({"Intro", "Library", "ThemeManager", "SaveManager", "Icons", "Main", "Bootstrap", "Notices"}) do
                 lines[#lines + 1] = string.format("sources[%q] = %q", name, sources[name])
             end
-            lines[#lines + 1] = 'local run, message = loadstring(sources.Bootstrap, "@Resonance/Bootstrap"); assert(run, message); return run(sources)'
-            writefile("ResonanceRestored.lua", table.concat(lines, "\n"))
-            assert(type(readfile("ResonanceRestored.lua")) == "string")
+            lines[#lines + 1] = 'local run, message = loadstring(sources.Bootstrap, "@Meowixa/Bootstrap"); assert(run, message); return run(sources)'
+            writefile("MeowixaRestored.lua", table.concat(lines, "\n"))
+            assert(type(readfile("MeowixaRestored.lua")) == "string")
         end)
-        if success then reloadPath = "ResonanceRestored.lua" end
+        if success then reloadPath = "MeowixaRestored.lua" end
     end
-    local chunk, message = loadstring(sources.Main, "@Resonance/Main")
+    local chunk, message = loadstring(sources.Main, "@Meowixa/Main")
     assert(chunk, message)
     return chunk(requireModule, reloadPath, registerCleanup)
 end, function(message)
     if debug and debug.traceback then return debug.traceback(tostring(message), 2) end
     return tostring(message)
 end)
-env.ResonanceStarting = false
+env.MeowixaStarting = false
 if not ok then
     if cleanup then pcall(cleanup) end
-    env.ResonanceRunning = false
-    warn("Resonance initialization failed: " .. tostring(result))
+    env.MeowixaRunning = false
+    warn("Meowixa initialization failed: " .. tostring(result))
     return nil, result
 end
 return result
 ]====]
 
-local run, message = loadstring(sources.Bootstrap, "@Resonance/Bootstrap")
+local run, message = loadstring(sources.Bootstrap, "@Meowixa/Bootstrap")
 assert(run, message)
 
 return run(sources)
