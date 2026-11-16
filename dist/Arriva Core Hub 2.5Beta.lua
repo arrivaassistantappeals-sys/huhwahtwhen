@@ -11119,8 +11119,21 @@ do
 
 
 -- Particles
-local Players = game:GetService("Players")
-local camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+
+-- use your existing helpers if available, otherwise fallbacks
+local parseColor = (type(color) == "function" and color) or function(hex)
+	hex = tostring(hex or ""):gsub("#", "")
+	if #hex ~= 6 or not hex:match("^%x+$") then return nil end
+	return Color3.fromHex(hex)
+end
+local function warnUser(title, text)
+	if type(notify) == "function" then
+		notify(title, text, 4, "warning")
+	else
+		warn(("[%s] %s"):format(title, text))
+	end
+end
 
 local particleSettings = {
 	Enabled = false,
@@ -11209,11 +11222,11 @@ local function setParticlesEnabled(on)
 
 	if on then
 		updateParticles()
-		camera = workspace.CurrentCamera
-		particlePart.CFrame = camera.CFrame
-		followConn = game:GetService("RunService").RenderStepped:Connect(function()
-			camera = workspace.CurrentCamera
-			if camera then particlePart.CFrame = camera.CFrame end
+		local cam = workspace.CurrentCamera
+		if cam then particlePart.CFrame = cam.CFrame end
+		followConn = RunService.RenderStepped:Connect(function()
+			local c = workspace.CurrentCamera
+			if c then particlePart.CFrame = c.CFrame end
 		end)
 		emitter.Enabled = true
 	else
@@ -11224,26 +11237,34 @@ end
 
 -- UI
 shaderGroup:AddToggle("ParticlesToggle", {
-	Text = "particles",
+	Text = "Particles",
 	Default = false,
 	Callback = function(on)
 		Hub.requestSave()
 		setParticlesEnabled(on)
 	end
-}):AddColorPicker("ParticlesColor", {
-	Default = particleSettings.Color,
-	Title = "particle color",
-	Callback = function(c)
-		Hub.requestSave()
-		setParticle("Color", c)
+})
+
+shaderGroup:AddInput("ParticlesColor", {
+	Text = "Particle HEX",
+	Default = "FFFFFF",
+	Finished = true,
+	Callback = function(v)
+		local c = parseColor(v)
+		if c then
+			Hub.requestSave()
+			setParticle("Color", c)
+		else
+			warnUser("Particle warning", "Use a six-digit HEX color.")
+		end
 	end
 })
 
-shaderGroup:AddDropdown("ParticlesTexture", {
+local textureDropdown = shaderGroup:AddDropdown("ParticlesTexture", {
 	Values = { "Circles", "Snowflakes", "Resonance", "Custom" },
 	Default = "Circles",
 	Multi = false,
-	Text = "texture",
+	Text = "Particle texture",
 	Callback = function(choice)
 		Hub.requestSave()
 		if choice == "Custom" then
@@ -11255,34 +11276,35 @@ shaderGroup:AddDropdown("ParticlesTexture", {
 })
 
 shaderGroup:AddInput("ParticlesCustomTexture", {
-	Text = "custom image id",
+	Text = "Custom image ID",
 	Default = "",
 	Placeholder = "rbxassetid or number",
 	ClearTextOnFocus = false,
+	Finished = true,
 	Callback = function(text)
 		Hub.requestSave()
 		local id = tostring(text or ""):match("%d+")
 		customParticleTexture = id and ("rbxassetid://" .. id) or nil
-		if Options.ParticlesTexture and Options.ParticlesTexture.Value == "Custom" then
+		if textureDropdown and textureDropdown.Value == "Custom" then
 			setParticle("Texture", customParticleTexture or particleTextures.Circles)
 		end
 	end
 })
 
 shaderGroup:AddSlider("ParticlesDensity", {
-	Text = "density", Default = 2500, Min = 100, Max = 5000, Rounding = 0, Compact = true,
+	Text = "Density", Default = 2500, Min = 100, Max = 5000, Rounding = 0, Compact = true,
 	Callback = function(v) Hub.requestSave() setParticle("Count", v) end
 })
 shaderGroup:AddSlider("ParticlesSize", {
-	Text = "size", Default = 1, Min = 0.1, Max = 5, Rounding = 1, Compact = true,
+	Text = "Size", Default = 1, Min = 0.1, Max = 5, Rounding = 1, Compact = true,
 	Callback = function(v) Hub.requestSave() setParticle("ParticleSize", v) end
 })
 shaderGroup:AddSlider("ParticlesSpeed", {
-	Text = "max speed", Default = 2, Min = 0, Max = 10, Rounding = 1, Compact = true,
+	Text = "Max speed", Default = 2, Min = 0, Max = 10, Rounding = 1, Compact = true,
 	Callback = function(v) Hub.requestSave() setParticle("SpeedMax", v) end
 })
 shaderGroup:AddSlider("ParticlesBox", {
-	Text = "box size", Default = 500, Min = 50, Max = 2000, Rounding = 0, Compact = true,
+	Text = "Box size", Default = 500, Min = 50, Max = 2000, Rounding = 0, Compact = true,
 	Callback = function(v) Hub.requestSave() setParticle("BoxSize", v) end
 })
 
@@ -11291,7 +11313,7 @@ shaderGroup:AddSlider("ParticlesBox", {
 
 
 
-
+		
 
 		local function updateSky()
 			if skyOn then
