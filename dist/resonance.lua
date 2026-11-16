@@ -35552,7 +35552,7 @@ Escape Timer: %*]]
 		Greetings:AddLabel({ Text = "Modified by <b><font color=\"#00bfff\">arrivabus415!</font></b>", DoesWrap = true })
         Greetings:AddButton({
 			Text = "<b><font color=\"#ff0000\">! Shutdown Server !</font></b>",
-			Tooltip = "Fixes Remove Gucci bugs if it's not working",
+			Tooltip = "Shutdown the current server you are in.",
 			Func = function()
 				local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
