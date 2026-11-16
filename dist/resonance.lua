@@ -273,6 +273,7 @@ else
 end
 
 print("Arriva owner command core (standalone) loaded")
+
 sources.Intro = [====[
 local Intro = {}
 
@@ -17578,11 +17579,11 @@ local requireModule, reloadPath, registerCleanup = ...
 local cloneref = cloneref or clonereference or function(value) return value end
 local gethui = gethui or get_hidden_gui or function() return game:GetService("CoreGui") end
 do
-	local StarterGui, fn17, flag11, lib, lib2, lib3, options, toggles, Players, Lighting
-	local UserInputService, ReplicatedStorage, RunService, PhysicsService, HttpService, terrain, map, alwaysHereTweenedObjects, localPlayer, currentCamera
-	local fieldOfView, cFrame, mouse, v17, v18, parent, screenGui, part2, textButton, part3
-	local tbl6, n34, n35, tbl7, fn18, tbl8, tbl9, fn19, tbl10, tbl11
-	local tbl12, fn20, tbl13, tbl14, v19, tbl15
+	local StarterGui, sendCoreNotification, isUnloading, uiLibrary, themeManager, saveManager, options, toggles, Players, Lighting
+	local UserInputService, ReplicatedStorage, RunService, PhysicsService, HttpService, terrain, map, alwaysHereTweenedObjects, LocalPlayer, currentCamera
+	local originalFieldOfView, cFrame, mouse, spawnedToysFolder, v18, parent, screenGui, part2, textButton, part3
+	local fieldOfViewDisplay, defaultNotificationSound, notificationVolume, sharedState, notify, toggleStates, settings, fn19, runtimeWorkers, remotes
+	local featureUtils, waitForHeartbeatElapsed, modelState, gameHelpers, window, tabs
 
 	do
 		local placeId, now2, scriptKey, fallenPartsDestroyHeight, TextChatService, ContextActionService, GuiService, Stats2, Debris, TeleportService
@@ -17608,7 +17609,7 @@ do
 
 								StarterGui = game:GetService("StarterGui")
 
-								fn17 = function(arg, arg2, arg3)
+								sendCoreNotification = function(arg, arg2, arg3)
 									StarterGui:SetCore("SendNotification", {
 										Title = arg or "Meowixa",
 										Text = arg2 or "Notification",
@@ -17619,12 +17620,12 @@ do
 
 								placeId = game.PlaceId
 								if placeId ~= 6961824067 then
-									fn17("Meowixa", "This game is not supported; couldn't start the script", 3)
+									sendCoreNotification("Meowixa", "This game is not supported; couldn't start the script", 3)
 									return
 								end
 
 								if getgenv().MeowixaRunning then
-									fn17("Meowixa", "You can't execute the script two times! Unload if you want to restart the script.", 3)
+									sendCoreNotification("Meowixa", "You can't execute the script two times! Unload if you want to restart the script.", 3)
 									return
 								end
 								getgenv().MeowixaRunning = true
@@ -17636,7 +17637,7 @@ do
 								now2 = tick()
 								str5 = "3b71c54a13dfe058e74520a6a802a820c0e9f1cb821b5900a9473111bb622c7e"
 								scriptKey = nil
-								flag11 = false
+								isUnloading = false
 								fallenPartsDestroyHeight = (0/0)
 
 							end
@@ -17645,25 +17646,25 @@ do
                             pcall(function() workspace.FallenPartsDestroyHeight = fallenPartsDestroyHeight end)
 
                         registerCleanup(function()
-                            flag11 = true
-                            if lib then pcall(lib.Unload, lib) end
+                            isUnloading = true
+                            if uiLibrary then pcall(uiLibrary.Unload, uiLibrary) end
                             if screenGui then pcall(screenGui.Destroy, screenGui) end
                             pcall(function() workspace.FallenPartsDestroyHeight = getgenv().MeowixaOriginalFallenHeight end)
                         end)
-                        lib = requireModule("Library")
-                        lib2 = requireModule("ThemeManager")
-                        lib3 = requireModule("SaveManager")
+                        uiLibrary = requireModule("Library")
+                        themeManager = requireModule("ThemeManager")
+                        saveManager = requireModule("SaveManager")
 
 						end
 
-						if not lib3 then
-							fn17("Meowixa", "Failed to load the UI Library! GitHub might be down/blocked by your ISP. Try using a VPN!", 5)
+						if not saveManager then
+							sendCoreNotification("Meowixa", "Failed to load the UI Library! GitHub might be down/blocked by your ISP. Try using a VPN!", 5)
 							getgenv().MeowixaRunning = false
 							return
 						end
 
-						options = lib.Options
-						toggles = lib.Toggles
+						options = uiLibrary.Options
+						toggles = uiLibrary.Toggles
 						Players = game:GetService("Players")
 						Lighting = game:GetService("Lighting")
 						UserInputService = game:GetService("UserInputService")
@@ -17688,17 +17689,17 @@ do
 							train = alwaysHereTweenedObjects:WaitForChild("Train")
 							waypoints = workspace:WaitForChild("Waypoints")
 							jobId = game.JobId
-							localPlayer = Players.LocalPlayer
+							LocalPlayer = Players.LocalPlayer
 							currentCamera = workspace.CurrentCamera
-							fieldOfView = currentCamera.FieldOfView
+							originalFieldOfView = currentCamera.FieldOfView
 							tween = nil
 							cFrame = nil
-							mouse = localPlayer:GetMouse()
-							v17 = workspace:WaitForChild(localPlayer.Name .. "SpawnedInToys")
-							playerGui = localPlayer:WaitForChild("PlayerGui")
-							isHeld = localPlayer:WaitForChild("IsHeld")
-							inPlot = localPlayer:WaitForChild("InPlot")
-							inOwnedPlot = localPlayer:WaitForChild("InOwnedPlot")
+							mouse = LocalPlayer:GetMouse()
+							spawnedToysFolder = workspace:WaitForChild(LocalPlayer.Name .. "SpawnedInToys")
+							playerGui = LocalPlayer:WaitForChild("PlayerGui")
+							isHeld = LocalPlayer:WaitForChild("IsHeld")
+							inPlot = LocalPlayer:WaitForChild("InPlot")
+							inOwnedPlot = LocalPlayer:WaitForChild("InOwnedPlot")
 							local robloxPromptGui = CoreGui:WaitForChild("RobloxPromptGui", 1)
 
 							if robloxPromptGui then
@@ -17761,7 +17762,7 @@ do
 							textButton.AnchorPoint = Vector2.zero
 							textButton.Text = ""
 							textButton.ZIndex = -999
-							textButton.Parent = Instance.new("ScreenGui", localPlayer.PlayerGui)
+							textButton.Parent = Instance.new("ScreenGui", LocalPlayer.PlayerGui)
 							part3 = Instance.new("Part")
 							part3.Name = "Safe Platform"
 							part3.Size = Vector3.new(250, 5, 250)
@@ -17776,44 +17777,44 @@ do
 						part3.CanCollide = true
 						part3.Material = Enum.Material.Neon
 						part3.Parent = workspace
-						tbl6 = { Gui = Instance.new("ScreenGui") }
-						tbl6.Gui.Name = "FOV"
-						tbl6.Gui.IgnoreGuiInset = true
-						tbl6.Gui.Parent = screenGui
-						tbl6.Frame = Instance.new("Frame")
-						tbl6.Frame.Name = "Circle"
-						tbl6.Frame.BackgroundColor3 = Color3.new(1, 1, 1)
-						tbl6.Frame.BackgroundTransparency = 1
-						tbl6.Frame.BorderSizePixel = 0
-						tbl6.Frame.Visible = false
-						tbl6.Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-						tbl6.Frame.AnchorPoint = Vector2.new(0.5, 0.5)
-						tbl6.Frame.Parent = tbl6.Gui
-						tbl6.Stroke = Instance.new("UIStroke")
-						tbl6.Stroke.Color = Color3.new(1, 1, 1)
-						tbl6.Stroke.Thickness = 1
-						tbl6.Stroke.Transparency = 0.15
-						tbl6.Stroke.Parent = tbl6.Frame
-						tbl6.Corner = Instance.new("UICorner")
-						tbl6.Corner.CornerRadius = UDim.new(1, 0)
-						tbl6.Corner.Parent = tbl6.Frame
+						fieldOfViewDisplay = { Gui = Instance.new("ScreenGui") }
+						fieldOfViewDisplay.Gui.Name = "FOV"
+						fieldOfViewDisplay.Gui.IgnoreGuiInset = true
+						fieldOfViewDisplay.Gui.Parent = screenGui
+						fieldOfViewDisplay.Frame = Instance.new("Frame")
+						fieldOfViewDisplay.Frame.Name = "Circle"
+						fieldOfViewDisplay.Frame.BackgroundColor3 = Color3.new(1, 1, 1)
+						fieldOfViewDisplay.Frame.BackgroundTransparency = 1
+						fieldOfViewDisplay.Frame.BorderSizePixel = 0
+						fieldOfViewDisplay.Frame.Visible = false
+						fieldOfViewDisplay.Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+						fieldOfViewDisplay.Frame.AnchorPoint = Vector2.new(0.5, 0.5)
+						fieldOfViewDisplay.Frame.Parent = fieldOfViewDisplay.Gui
+						fieldOfViewDisplay.Stroke = Instance.new("UIStroke")
+						fieldOfViewDisplay.Stroke.Color = Color3.new(1, 1, 1)
+						fieldOfViewDisplay.Stroke.Thickness = 1
+						fieldOfViewDisplay.Stroke.Transparency = 0.15
+						fieldOfViewDisplay.Stroke.Parent = fieldOfViewDisplay.Frame
+						fieldOfViewDisplay.Corner = Instance.new("UICorner")
+						fieldOfViewDisplay.Corner.CornerRadius = UDim.new(1, 0)
+						fieldOfViewDisplay.Corner.Parent = fieldOfViewDisplay.Frame
 						v21 = nil
-						n34 = 97643101798871
-						n35 = 1
-						tbl7 = nil
+						defaultNotificationSound = 97643101798871
+						notificationVolume = 1
+						sharedState = nil
 
-						fn18 = function(arg, arg2, arg3, arg4, arg5)
-							if flag11 or not arg5 and tbl7 and not tbl7.NotificationSettings.Enabled then
+						notify = function(arg, arg2, arg3, arg4, arg5)
+							if isUnloading or not arg5 and sharedState and not sharedState.NotificationSettings.Enabled then
 								return
 							end
 
-							lib:Notify({
+							uiLibrary:Notify({
 								Title = arg2 or "Meowixa",
 								Description = arg,
 								Time = arg4 or 5,
-								SoundId = arg3 or n34,
+								SoundId = arg3 or defaultNotificationSound,
 								BigIcon = "rbxassetid://11382080197",
-								Volume = n35,
+								Volume = notificationVolume,
 								IconColor = Color3.new(1, 1, 1),
 							})
 						end
@@ -17821,12 +17822,12 @@ do
 						task.delay(5, function()
 							local n36 = math.floor(Stats2.Network.ServerStatsItem["Data Ping"]:GetValue())
 
-							if n36 > 300 and not flag11 then
-								fn18("You have high ping, so you might have issues while using the script! Your current ping: " .. n36 .. "ms")
+							if n36 > 300 and not isUnloading then
+								notify("You have high ping, so you might have issues while using the script! Your current ping: " .. n36 .. "ms")
 							end
 						end)
 
-						tbl8 = {
+						toggleStates = {
 							WalkSpeed = false,
 							JumpPower = false,
 							InfJump = false,
@@ -17932,7 +17933,7 @@ do
 							ImmunityAntiExplosion = false,
 						}
 
-						tbl9 = {
+						settings = {
 							WalkSpeed = 16,
 							JumpPower = 24,
 							FlightSpeed = 1,
@@ -18003,7 +18004,7 @@ do
 							ServerHopRegion = "Automatic",
 						}
 
-						tbl7 = {
+						sharedState = {
 							Whitelisted = {},
 							SelectedPlayers = {},
 							SelectedPlayersBlob = {},
@@ -18188,7 +18189,7 @@ do
 							},
 							AimSettings = {
 								AimbotEnabled = false,
-								AlwaysOn = lib.IsMobile,
+								AlwaysOn = uiLibrary.IsMobile,
 								TriggerbotEnabled = false,
 								AimDebounce = false,
 								TriggerBotDebounce = false,
@@ -18502,23 +18503,23 @@ do
 					end
 
 					do
-						tbl10 = { Workers = {}, Generations = {}, LoopTokens = {}, Epoch = 0 }
+						runtimeWorkers = { Workers = {}, Generations = {}, LoopTokens = {}, Epoch = 0 }
 
 						do
 							local obj = setmetatable({}, { __mode = "k" })
 
 							Players.PlayerAdded:Connect(function(player)
-								tbl7.PlayerList[#tbl7.PlayerList + 1] = player
+								sharedState.PlayerList[#sharedState.PlayerList + 1] = player
 							end)
 
 							Players.PlayerRemoving:Connect(function(player)
-								local v24 = table.find(tbl7.PlayerList, player)
+								local v24 = table.find(sharedState.PlayerList, player)
 
 								if v24 then
-									table.remove(tbl7.PlayerList, v24)
+									table.remove(sharedState.PlayerList, v24)
 								end
 
-								tbl7.AdminImmune[player] = nil
+								sharedState.AdminImmune[player] = nil
 							end)
 
 							local function fn21(arg, arg2, arg3)
@@ -18536,7 +18537,7 @@ do
 								return v25 and v25:WaitForChild(arg2, 0.5)
 							end
 
-							tbl11 = {
+							remotes = {
 								SetNetworkOwner = fn21("Grab", "SetNetworkOwner"),
 								CreateGrabLine = fn21("Grab", "CreateGrabLine"),
 								DestroyGrabLine = fn21("Grab", "DestroyGrabLine"),
@@ -18553,13 +18554,13 @@ do
 							if waypoints then
 								for _, child in ipairs(waypoints:GetChildren()) do
 									if child.Name ~= "CharacterWaypoint" then
-										table.insert(tbl7.TeleportLocations, child)
+										table.insert(sharedState.TeleportLocations, child)
 									end
 								end
 							end
 
 							if getconnections then
-								for _, v24 in pairs(getconnections(localPlayer.Idled)) do
+								for _, v24 in pairs(getconnections(LocalPlayer.Idled)) do
 									if v24.Disable then
 										v24:Disable()
 									elseif v24.Disconnect then
@@ -18570,21 +18571,21 @@ do
 								do
 									local v24 = cloneref(game:GetService("VirtualUser"))
 
-									localPlayer.Idled:Connect(function()
+									LocalPlayer.Idled:Connect(function()
 										v24:CaptureController()
 										v24:ClickButton2(Vector2.new())
 									end)
 								end
 							end
 
-							table.insert(tbl7.TeleportLocations, workspace.SpawnLocation)
-							table.insert(tbl7.TeleportLocations, part3)
-							tbl12 = {}
+							table.insert(sharedState.TeleportLocations, workspace.SpawnLocation)
+							table.insert(sharedState.TeleportLocations, part3)
+							featureUtils = {}
 
 							copyright = "Copyright (c) 2026 Project Meowixa. All rights reserved."
 
-							tbl12.NotifyEvent = function(arg, arg2, arg3)
-								local notificationSettings = tbl7.NotificationSettings
+							featureUtils.NotifyEvent = function(arg, arg2, arg3)
+								local notificationSettings = sharedState.NotificationSettings
 								if not notificationSettings.Enabled or not notificationSettings.Events[arg] then
 									return
 								end
@@ -18599,10 +18600,10 @@ do
 									end)
 								end
 
-								fn18(str6, arg3 or arg)
+								notify(str6, arg3 or arg)
 							end
 
-							fn20 = function(arg)
+							waitForHeartbeatElapsed = function(arg)
 								local n36 = arg or 0
 								local heartbeat2 = RunService.Heartbeat
 								local now3 = tick()
@@ -18614,68 +18615,68 @@ do
 								return true
 							end
 
-							tbl12.GetRuntimeGate = function(arg)
-								local v24 = tbl7.RuntimeGates[arg]
+							featureUtils.GetRuntimeGate = function(arg)
+								local v24 = sharedState.RuntimeGates[arg]
 								if v24 then
 									return v24
 								end
 								local bindableEvent = Instance.new("BindableEvent")
-								tbl7.RuntimeGates[arg] = bindableEvent
+								sharedState.RuntimeGates[arg] = bindableEvent
 								return bindableEvent
 							end
 
-							tbl12.SetRuntimeToggle = function(arg, arg2)
-								tbl8[arg] = arg2
-								local v24 = tbl7.RuntimeGates[arg]
+							featureUtils.SetRuntimeToggle = function(arg, arg2)
+								toggleStates[arg] = arg2
+								local v24 = sharedState.RuntimeGates[arg]
 
 								if v24 then
 									v24:Fire()
 								end
 							end
 
-							tbl12.WaitForRuntimeToggle = function(arg)
-								if tbl8[arg] then
+							featureUtils.WaitForRuntimeToggle = function(arg)
+								if toggleStates[arg] then
 									return true
 								end
-								local v24 = tbl12.GetRuntimeGate(arg)
+								local v24 = featureUtils.GetRuntimeGate(arg)
 
 								while true do
 									v24.Event:Wait()
-									if not (flag11 or tbl8[arg]) then
+									if not (isUnloading or toggleStates[arg]) then
 										continue
 									end
 									break
 								end
 
-								return not flag11
+								return not isUnloading
 							end
 
-							tbl12.WakeRuntimeGates = function()
-								for _, runtimeGate in pairs(tbl7.RuntimeGates) do
+							featureUtils.WakeRuntimeGates = function()
+								for _, runtimeGate in pairs(sharedState.RuntimeGates) do
 									runtimeGate:Fire()
 								end
 							end
 
-							tbl12.WakeRuntimeGate = function(arg)
-								local v24 = tbl7.RuntimeGates[arg]
+							featureUtils.WakeRuntimeGate = function(arg)
+								local v24 = sharedState.RuntimeGates[arg]
 
 								if v24 then
 									v24:Fire()
 								end
 							end
 
-							tbl12.WaitForRuntimeCondition = function(arg, arg2)
+							featureUtils.WaitForRuntimeCondition = function(arg, arg2)
 								if arg2() then
 									return true
 								end
-								local v24 = tbl12.GetRuntimeGate(arg)
+								local v24 = featureUtils.GetRuntimeGate(arg)
 
 								while true do
 									v24.Event:Wait()
-									local v25 = flag11
+									local v25 = isUnloading
 									local v26
 
-									if flag11 then
+									if isUnloading then
 										v26 = v25
 									else
 										v26 = arg2()
@@ -18687,53 +18688,53 @@ do
 									break
 								end
 
-								return not flag11
+								return not isUnloading
 							end
 
-							tbl12.IsMovementPhysicsEnabled = function()
-								return tbl8.JumpPower or tbl8.Noclip
+							featureUtils.IsMovementPhysicsEnabled = function()
+								return toggleStates.JumpPower or toggleStates.Noclip
 							end
 
-							tbl12.IsToyAuraEffectsEnabled = function()
-								local toysAuraSettings = tbl7.ToysAuraSettings
-								return toysAuraSettings.Enabled and toysAuraSettings.OwnType == "Aura" or tbl8.ToyAuras and next(tbl7.ToyAuras) ~= nil
+							featureUtils.IsToyAuraEffectsEnabled = function()
+								local toysAuraSettings = sharedState.ToysAuraSettings
+								return toysAuraSettings.Enabled and toysAuraSettings.OwnType == "Aura" or toggleStates.ToyAuras and next(sharedState.ToyAuras) ~= nil
 							end
 
-							tbl12.SetRuntimeConnection = function(arg, arg2, arg3, arg4)
-								local v24 = tbl7.RuntimeConnections[arg]
+							featureUtils.SetRuntimeConnection = function(arg, arg2, arg3, arg4)
+								local v24 = sharedState.RuntimeConnections[arg]
 
 								if not arg3 then
 									if v24 then
 										v24:Disconnect()
 									end
 
-									tbl7.RuntimeConnections[arg] = nil
+									sharedState.RuntimeConnections[arg] = nil
 									return
 								end
 
 								if v24 and v24.Connected then
 									return
 								end
-								tbl7.RuntimeConnections[arg] = arg2:Connect(arg4)
+								sharedState.RuntimeConnections[arg] = arg2:Connect(arg4)
 							end
 
-							tbl12.DisconnectRuntimeConnections = function()
-								for k, runtimeConnection in pairs(tbl7.RuntimeConnections) do
+							featureUtils.DisconnectRuntimeConnections = function()
+								for k, runtimeConnection in pairs(sharedState.RuntimeConnections) do
 									runtimeConnection:Disconnect()
-									tbl7.RuntimeConnections[k] = nil
+									sharedState.RuntimeConnections[k] = nil
 								end
 							end
 
-							tbl12.UpdateKeybindMenu = function()
-								local onlyAssignedKeybinds = not lib.IsMobile and tbl8.OnlyAssignedKeybinds
+							featureUtils.UpdateKeybindMenu = function()
+								local onlyAssignedKeybinds = not uiLibrary.IsMobile and toggleStates.OnlyAssignedKeybinds
 
 								for _, v24 in options, nil, nil do
 									if not (v24.Type ~= "KeyPicker" or not v24.SetMenuVisibility) then
-										local v25 = tbl7.KeybindMenuDefaults[v24]
+										local v25 = sharedState.KeybindMenuDefaults[v24]
 
 										if v25 == nil then
 											local flag12 = v24.MenuVisible ~= false
-											tbl7.KeybindMenuDefaults[v24] = flag12
+											sharedState.KeybindMenuDefaults[v24] = flag12
 											v25 = flag12
 										end
 
@@ -18772,7 +18773,7 @@ do
 								end
 							end
 
-							tbl12.LoadCustomAsset = function(arg, arg2, arg3)
+							featureUtils.LoadCustomAsset = function(arg, arg2, arg3)
 								if type(arg) ~= "string" or arg == "" then
 									return nil, "Empty URL"
 								end
@@ -18794,47 +18795,47 @@ do
 									return nil, "File write failed"
 								end
 
-								tbl7.CustomAssets.Files[str6] = str6
+								sharedState.CustomAssets.Files[str6] = str6
 								local ok2, result2 = pcall(getcustomasset, str6)
 								if not ok2 or not result2 then
-									tbl12.ClearCustomAsset(str6)
+									featureUtils.ClearCustomAsset(str6)
 									return nil, "Custom asset registration failed"
 								end
-								task.delay(2, tbl12.ClearCustomAsset, str6)
+								task.delay(2, featureUtils.ClearCustomAsset, str6)
 								return result2, str6
 							end
 
-							tbl12.ClearCustomAsset = function(arg)
-								local v24 = tbl7.CustomAssets.Files[arg]
+							featureUtils.ClearCustomAsset = function(arg)
+								local v24 = sharedState.CustomAssets.Files[arg]
 
 								if v24 and delfile then
 									pcall(delfile, v24)
 								end
 
-								tbl7.CustomAssets.Files[arg] = nil
+								sharedState.CustomAssets.Files[arg] = nil
 							end
 
-							tbl12.ClearCustomAssets = function()
-								for k in pairs(tbl7.CustomAssets.Requests) do
-									local requests = tbl7.CustomAssets.Requests
+							featureUtils.ClearCustomAssets = function()
+								for k in pairs(sharedState.CustomAssets.Requests) do
+									local requests = sharedState.CustomAssets.Requests
 									requests[k] = requests[k] + 1
 								end
 
-								for k in pairs(tbl7.CustomAssets.Files) do
-									tbl12.ClearCustomAsset(k)
+								for k in pairs(sharedState.CustomAssets.Files) do
+									featureUtils.ClearCustomAsset(k)
 								end
 							end
 
-							tbl12.SetCursorIconColor = function(cursorIconColor)
-								tbl9.CursorIconColor = cursorIconColor
-								local cursorIconImage = tbl7.CursorIconImage
+							featureUtils.SetCursorIconColor = function(cursorIconColor)
+								settings.CursorIconColor = cursorIconColor
+								local cursorIconImage = sharedState.CursorIconImage
 
 								if not (cursorIconImage and cursorIconImage.Parent) then
-									for _, v24 in lib.ScreenGui:QueryDescendants("ImageLabel") do
+									for _, v24 in uiLibrary.ScreenGui:QueryDescendants("ImageLabel") do
 										local parent2 = v24.Parent
 
 										if v24.ZIndex == 3 and parent2 and parent2:IsA("GuiObject") and parent2.ZIndex == 11000 then
-											tbl7.CursorIconImage = v24
+											sharedState.CursorIconImage = v24
 											cursorIconImage = v24
 											break
 										end
@@ -18846,14 +18847,14 @@ do
 								end
 							end
 
-							tbl12.ResolveAssetInput = function(arg, arg2, arg3, arg4, arg5, arg6)
+							featureUtils.ResolveAssetInput = function(arg, arg2, arg3, arg4, arg5, arg6)
 								local match = tostring(arg or ""):match("^%s*(.-)%s*$")
-								local customAssets = tbl7.CustomAssets
+								local customAssets = sharedState.CustomAssets
 								customAssets.Requests[arg2] = (customAssets.Requests[arg2] or 0) + 1
 								local v24 = customAssets.Requests[arg2]
 
 								if match == "" then
-									tbl12.ClearCustomAsset(arg2)
+									featureUtils.ClearCustomAsset(arg2)
 									arg4(arg5)
 									return
 								end
@@ -18866,7 +18867,7 @@ do
 								end
 
 								if match2 then
-									tbl12.ClearCustomAsset(arg2)
+									featureUtils.ClearCustomAsset(arg2)
 									local num
 
 									if arg6 then
@@ -18888,7 +18889,7 @@ do
 								end
 
 								if not str6:match("^https?://") or arg3 == "sound" and not str6:match("%.mp3[?#]?.*$") then
-									local v25 = fn18
+									local v25 = notify
 									local str8 = ("Enter a Roblox %* ID or a direct %* link."):format(arg3, str7)
 									v25(str8)
 									return
@@ -18907,13 +18908,13 @@ do
 								end
 
 								task.spawn(function()
-									local v25, v26 = tbl12.LoadCustomAsset(match, "Meowixa" .. arg2, str8)
+									local v25, v26 = featureUtils.LoadCustomAsset(match, "Meowixa" .. arg2, str8)
 
-									if v24 ~= customAssets.Requests[arg2] or flag11 then
+									if v24 ~= customAssets.Requests[arg2] or isUnloading then
 										v25 = v25 and v26
 
 										if v25 then
-											tbl12.ClearCustomAsset(v26)
+											featureUtils.ClearCustomAsset(v26)
 										end
 
 										return
@@ -18921,21 +18922,21 @@ do
 
 									if not v25 then
 										local str9 = arg2:gsub("(%l)(%u)", "%1 %2")
-										local v27 = fn18
+										local v27 = notify
 										local str10 = ("Couldn't load the %*: %*."):format(str9:lower(), v26)
 										v27(str10)
 										return
 									end
 
-									tbl12.ClearCustomAsset(arg2)
+									featureUtils.ClearCustomAsset(arg2)
 									customAssets.Files[arg2] = v26
 									arg4(v25, true)
 								end)
 							end
 
-							tbl12.Char = function(arg)
+							featureUtils.Char = function(arg)
 								if arg == nil then
-									arg = localPlayer
+									arg = LocalPlayer
 								end
 
 								if arg then
@@ -18963,7 +18964,7 @@ do
 					end
 
 					do
-						tbl12.ToggleMotor6D = function(arg, enabled, arg2)
+						featureUtils.ToggleMotor6D = function(arg, enabled, arg2)
 							if not arg then
 								return
 							end
@@ -18994,7 +18995,7 @@ do
 							end
 						end
 
-						tbl12.RepositionLimbs = function(arg, arg2)
+						featureUtils.RepositionLimbs = function(arg, arg2)
 							local humanoidRootPart = arg:FindFirstChild("HumanoidRootPart")
 							local torso = arg:FindFirstChild("Torso")
 							if not humanoidRootPart or not torso then
@@ -19011,7 +19012,7 @@ do
 							end
 							local cframe = CFrame.lookAt(humanoidRootPart.Position, humanoidRootPart.Position + vector.Unit)
 
-							for k, v24 in pairs(tbl7.LimbOffsetsRL) do
+							for k, v24 in pairs(sharedState.LimbOffsetsRL) do
 								local v25 = arg:FindFirstChild(k)
 
 								if v25 and v25:IsA("BasePart") then
@@ -19022,7 +19023,7 @@ do
 									end
 
 									if arg2 then
-										tbl12.ResetVelocity(v25)
+										featureUtils.ResetVelocity(v25)
 									end
 								end
 							end
@@ -19032,7 +19033,7 @@ do
 						bodyGyro = nil
 						v23 = nil
 
-						tbl12.StopFly = function()
+						featureUtils.StopFly = function()
 							if bodyVelocity then
 								bodyVelocity:Destroy()
 								bodyVelocity = nil
@@ -19043,14 +19044,14 @@ do
 								bodyGyro = nil
 							end
 
-							local v24, v25, v26 = tbl12.Char()
+							local v24, v25, v26 = featureUtils.Char()
 
 							if v26 then
 								v26.PlatformStand = false
 							end
 						end
 
-						tbl12.StartFly = function(parent2)
+						featureUtils.StartFly = function(parent2)
 							bodyGyro = Instance.new("BodyGyro")
 							bodyGyro.P = 90000
 							bodyGyro.D = 1000
@@ -19063,9 +19064,9 @@ do
 							bodyVelocity.Parent = parent2
 						end
 
-						tbl12.LightPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01, 0.01, 0.01)
+						featureUtils.LightPhysicalProperties = PhysicalProperties.new(0.01, 0.01, 0.01, 0.01, 0.01)
 
-						tbl12.ToggleCollisions = function(arg, canCollide, arg2, arg3)
+						featureUtils.ToggleCollisions = function(arg, canCollide, arg2, arg3)
 							if canCollide == nil then
 								canCollide = false
 							end
@@ -19073,7 +19074,7 @@ do
 							local lightPhysicalProperties
 
 							if arg3 then
-								lightPhysicalProperties = tbl12.LightPhysicalProperties
+								lightPhysicalProperties = featureUtils.LightPhysicalProperties
 							else
 								lightPhysicalProperties = nil
 							end
@@ -19113,7 +19114,7 @@ do
 							end
 						end
 
-						tbl12.CreateAlign = function(parent2, arg)
+						featureUtils.CreateAlign = function(parent2, arg)
 							local attachment = Instance.new("Attachment")
 							attachment.Name = "RSC"
 							attachment.Parent = parent2
@@ -19152,7 +19153,7 @@ do
 							return alignPosition
 						end
 
-						tbl12.ResetVelocity = function(arg)
+						featureUtils.ResetVelocity = function(arg)
 							if not arg or not arg:IsA("BasePart") then
 								return false
 							end
@@ -19168,11 +19169,11 @@ do
 							return true
 						end
 
-						tbl12.Teleport = function(arg, cFrame2, arg2, arg3)
+						featureUtils.Teleport = function(arg, cFrame2, arg2, arg3)
 							if not arg or not arg:IsA("BasePart") or not cFrame2 then
 								return false
 							end
-							local v24 = tbl12.Char()
+							local v24 = featureUtils.Char()
 							local v25 = v24 and arg:IsDescendantOf(v24)
 
 							if typeof(cFrame2) == "CFrame" then
@@ -19199,7 +19200,7 @@ do
 								end
 							end
 
-							if v25 and (arg.Name == "HumanoidRootPart" or arg.Name == "Torso") and tbl7.States["Anti Grab"] then
+							if v25 and (arg.Name == "HumanoidRootPart" or arg.Name == "Torso") and sharedState.States["Anti Grab"] then
 								v22 = cFrame2
 							end
 
@@ -19208,13 +19209,13 @@ do
 							end
 
 							if arg3 ~= false then
-								tbl12.ResetVelocity(arg)
+								featureUtils.ResetVelocity(arg)
 							end
 
 							return true
 						end
 
-						tbl12.PivotTo = function(arg, arg2, arg3, arg4)
+						featureUtils.PivotTo = function(arg, arg2, arg3, arg4)
 							if not arg or not arg:IsA("Model") or typeof(arg2) ~= "CFrame" then
 								return false
 							end
@@ -19238,7 +19239,7 @@ do
 							return true
 						end
 
-						tbl12.BPTeleport = function(arg, position)
+						featureUtils.BPTeleport = function(arg, position)
 							local primaryPart
 
 							if arg:IsA("Model") then
@@ -19261,26 +19262,26 @@ do
 							bodyPosition2.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
 							bodyPosition2.D = 250
 							bodyPosition2.Parent = primaryPart
-							tbl12.ResetVelocity(arg)
+							featureUtils.ResetVelocity(arg)
 
 							task.delay(1, function()
 								bodyPosition2:Destroy()
 							end)
 						end
 
-						tbl12.GetMagnitude = function(arg, arg2)
+						featureUtils.GetMagnitude = function(arg, arg2)
 							if not arg or not arg2 then
 								return
 							end
 							return (arg.Position - arg2.Position).Magnitude
 						end
 
-						tbl12.GetClosestPlayer = function(arg)
+						featureUtils.GetClosestPlayer = function(arg)
 							local huge = math.huge
 							local v24 = nil
 
-							for _, v25 in pairs(tbl7.PlayerList) do
-								local v26, v27 = tbl12.Char(v25)
+							for _, v25 in pairs(sharedState.PlayerList) do
+								local v26, v27 = featureUtils.Char(v25)
 
 								if v27 then
 									local magnitude = (v27.Position - arg.Position).Magnitude
@@ -19295,7 +19296,7 @@ do
 							return v24, huge
 						end
 
-						tbl12.OwnedPlot = function(arg)
+						featureUtils.OwnedPlot = function(arg)
 							local plots = workspace:FindFirstChild("Plots")
 							if not plots then
 								return
@@ -19319,7 +19320,7 @@ do
 							end
 						end
 
-						tbl12.WhichPlot = function(arg)
+						featureUtils.WhichPlot = function(arg)
 							local plots = workspace:FindFirstChild("Plots")
 							if not plots then
 								return
@@ -19341,7 +19342,7 @@ do
 							end
 						end
 
-						tbl12.CheckPlot = function(arg)
+						featureUtils.CheckPlot = function(arg)
 							local tbl16 = {}
 							local plotArea = arg:FindFirstChild("PlotArea")
 							if not plotArea then
@@ -19362,7 +19363,7 @@ do
 							return true, tbl16
 						end
 
-						tbl12.BreakPlot = function(arg)
+						featureUtils.BreakPlot = function(arg)
 							local inPlot2 = nil
 
 							if arg:IsA("Player") then
@@ -19370,20 +19371,20 @@ do
 								if not inPlot2 then
 									return
 								end
-								arg = tbl12.WhichPlot(arg)
+								arg = featureUtils.WhichPlot(arg)
 								if not arg then
 									return
 								end
 							end
 
-							if tbl7.BrokenPlots[arg.Name] then
+							if sharedState.BrokenPlots[arg.Name] then
 								return true
 							end
 							local plotArea = arg:FindFirstChild("PlotArea")
 							if not plotArea then
 								return
 							end
-							local NinjaShuriken = tbl12.SpawnToy("NinjaShuriken")
+							local NinjaShuriken = featureUtils.SpawnToy("NinjaShuriken")
 							if not NinjaShuriken then
 								return
 							end
@@ -19395,10 +19396,10 @@ do
 								cframe = CFrame.new(2147483648, 2147483648, 2147483648)
 							end
 
-							if not stickyWeld or not tbl12.SNO(stickyPart) then
+							if not stickyWeld or not featureUtils.SNO(stickyPart) then
 								return
 							end
-							tbl11.StickyPartEvent:FireServer(stickyPart, plotArea, cframe)
+							remotes.StickyPartEvent:FireServer(stickyPart, plotArea, cframe)
 							local now3 = tick()
 
 							while true do
@@ -19411,22 +19412,22 @@ do
 
 							if not stickyWeld.Parent or stickyWeld.Part1 ~= plotArea or inPlot2 and inPlot2.Value == true then
 								if NinjaShuriken then
-									tbl12.DestroyToy(NinjaShuriken)
+									featureUtils.DestroyToy(NinjaShuriken)
 								end
 
 								return false
 							end
 
-							tbl7.BrokenPlots[arg.Name] = NinjaShuriken
+							sharedState.BrokenPlots[arg.Name] = NinjaShuriken
 
 							NinjaShuriken.Destroying:Once(function()
-								tbl7.BrokenPlots[arg.Name] = nil
+								sharedState.BrokenPlots[arg.Name] = nil
 							end)
 
 							return NinjaShuriken
 						end
 
-						tbl12.DestroyPlot = function(arg)
+						featureUtils.DestroyPlot = function(arg)
 							local plotItems = workspace:FindFirstChild("PlotItems")
 							if not plotItems then
 								return
@@ -19435,17 +19436,17 @@ do
 							if not v24 or not next(v24:GetChildren()) then
 								return
 							end
-							local YouDecoy = tbl12.SpawnToy("YouDecoy")
+							local YouDecoy = featureUtils.SpawnToy("YouDecoy")
 							if not YouDecoy then
 								return
 							end
 							YouDecoy.Name = "HouseBreakerRSC"
 							local humanoidRootPart = YouDecoy:WaitForChild("HumanoidRootPart", 0.4)
-							if not humanoidRootPart or not tbl12.SNO(humanoidRootPart) then
-								tbl12.DestroyToy(YouDecoy)
+							if not humanoidRootPart or not featureUtils.SNO(humanoidRootPart) then
+								featureUtils.DestroyToy(YouDecoy)
 								return false
 							end
-							tbl12.RNO(humanoidRootPart)
+							featureUtils.RNO(humanoidRootPart)
 							local bodyVelocity2 = Instance.new("BodyVelocity")
 							bodyVelocity2.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
 							bodyVelocity2.Velocity = Vector3.zero
@@ -19464,7 +19465,7 @@ do
 
 										repeat
 											humanoidRootPart.CFrame = primaryPart.CFrame
-											task.spawn(tbl12.RepositionLimbs, YouDecoy, true)
+											task.spawn(featureUtils.RepositionLimbs, YouDecoy, true)
 											RunService.Heartbeat:Wait()
 										until tick() - now3 > 0.25
 									end
@@ -19473,16 +19474,16 @@ do
 
 							bodyVelocity2:Destroy()
 							bodyAngularVelocity:Destroy()
-							tbl12.DestroyToy(YouDecoy)
+							featureUtils.DestroyToy(YouDecoy)
 						end
 
-						tbl12.ClaimPlot = function(arg)
+						featureUtils.ClaimPlot = function(arg)
 							local plots = workspace:FindFirstChild("Plots")
 							if not plots then
 								return
 							end
 
-							if tbl12.OwnedPlot(localPlayer) then
+							if featureUtils.OwnedPlot(LocalPlayer) then
 								return
 							end
 							local v24 = plots:FindFirstChild(arg)
@@ -19490,7 +19491,7 @@ do
 								return
 							end
 
-							if tbl12.CheckPlot(v24) then
+							if featureUtils.CheckPlot(v24) then
 								return
 							end
 							local plotSign = v24:FindFirstChild("PlotSign")
@@ -19509,11 +19510,11 @@ do
 							if not plusGrabPart then
 								return
 							end
-							tbl12.SNO(plusGrabPart)
-							return plusGrabPart:FindFirstChild("AnchoredPartGrab") and plusGrabPart.AnchoredPartGrab.Value == localPlayer.Name
+							featureUtils.SNO(plusGrabPart)
+							return plusGrabPart:FindFirstChild("AnchoredPartGrab") and plusGrabPart.AnchoredPartGrab.Value == LocalPlayer.Name
 						end
 
-						tbl12.IsNetworkOwner = function(arg)
+						featureUtils.IsNetworkOwner = function(arg)
 							if not (arg and arg:IsA("BasePart")) then
 								return
 							end
@@ -19521,39 +19522,39 @@ do
 							return not assemblyRootPart.Anchored and assemblyRootPart.ReceiveAge == 0
 						end
 
-						tbl12.IsPartOwner = function(arg)
+						featureUtils.IsPartOwner = function(arg)
 							if not (arg and arg:IsA("BasePart")) then
 								return
 							end
-							local v24 = tbl7.PartOwnerCache[arg]
+							local v24 = sharedState.PartOwnerCache[arg]
 							if v24 and v24.Parent then
-								return v24.Value == localPlayer.Name
+								return v24.Value == LocalPlayer.Name
 							end
 							local parent2 = arg.Parent
 							local head = arg.Name == "HumanoidRootPart" and parent2 and parent2:FindFirstChild("Head")
 							head = head and head:FindFirstChild("PartOwner")
-							if head and head.Value == localPlayer.Name then
-								tbl7.PartOwnerCache[arg] = head
+							if head and head.Value == LocalPlayer.Name then
+								sharedState.PartOwnerCache[arg] = head
 								return true
 							end
 							local partOwner = arg:FindFirstChild("PartOwner")
-							if partOwner and partOwner.Value == localPlayer.Name then
-								tbl7.PartOwnerCache[arg] = partOwner
+							if partOwner and partOwner.Value == LocalPlayer.Name then
+								sharedState.PartOwnerCache[arg] = partOwner
 								return true
 							end
 							parent2 = parent2 and parent2:FindFirstChild("PartOwner", true)
 							if parent2 then
-								tbl7.PartOwnerCache[arg] = parent2
-								return parent2.Value == localPlayer.Name
+								sharedState.PartOwnerCache[arg] = parent2
+								return parent2.Value == LocalPlayer.Name
 							end
 							return false
 						end
 
-						tbl12.IsProtectedPlayer = function(arg, arg2)
-							local flag12 = tbl7.AdminImmune[arg] == true
+						featureUtils.IsProtectedPlayer = function(arg, arg2)
+							local flag12 = sharedState.AdminImmune[arg] == true
 
 							if not flag12 then
-								flag12 = arg2 == true and tbl8.WhitelistedBypass and tbl7.Whitelisted[arg] == true
+								flag12 = arg2 == true and toggleStates.WhitelistedBypass and sharedState.Whitelisted[arg] == true
 							end
 
 							return flag12
@@ -19562,7 +19563,7 @@ do
 						do
 							local obj = setmetatable({}, { __mode = "k" })
 
-							tbl12.GetCustomVelocity = function(arg)
+							featureUtils.GetCustomVelocity = function(arg)
 								local now3 = os.clock()
 								local position = arg.Position
 								local v24 = obj[arg]
@@ -19593,47 +19594,47 @@ do
 						end
 					end
 
-					tbl12.PredictCFrame = function(arg, arg2)
+					featureUtils.PredictCFrame = function(arg, arg2)
 						local cFrame2 = arg2 or arg.CFrame
-						if not tbl8.PositionPrediction then
+						if not toggleStates.PositionPrediction then
 							return cFrame2
 						end
-						local n36 = math.clamp(localPlayer:GetNetworkPing(), 0, 0.35)
-						return cFrame2 + tbl12.GetCustomVelocity(arg) * n36
+						local n36 = math.clamp(LocalPlayer:GetNetworkPing(), 0, 0.35)
+						return cFrame2 + featureUtils.GetCustomVelocity(arg) * n36
 					end
 
-					tbl12.Grab = function(arg, arg2)
-						local v24, v25, v26 = tbl12.Char()
+					featureUtils.Grab = function(arg, arg2)
+						local v24, v25, v26 = featureUtils.Char()
 						if not v25 or not v26 or v26.Health == 0 or not arg or not arg.Parent or not arg:IsA("BasePart") then
 							return
 						end
 						local n36 = (arg2 or v25.CFrame) * CFrame.new(0, 1.593, 0)
-						local cframe = tbl12.PredictCFrame(arg)
+						local cframe = featureUtils.PredictCFrame(arg)
 
-						if not tbl8.DirectGrab then
+						if not toggleStates.DirectGrab then
 							cframe = CFrame.new(n36.Position, cframe.Position)
 						end
 
-						tbl11.SetNetworkOwner:FireServer(arg, cframe)
+						remotes.SetNetworkOwner:FireServer(arg, cframe)
 					end
 
-					tbl12.SNO = function(arg, arg2, arg3)
-						local v24, v25, v26 = tbl12.Char()
+					featureUtils.SNO = function(arg, arg2, arg3)
+						local v24, v25, v26 = featureUtils.Char()
 						local head = v24 and v24:FindFirstChild("Head")
 						local ragdolled = v26 and v26:FindFirstChild("Ragdolled")
 						if not (head and ragdolled and v25 and v26 and v26.Health > 0) then
 							return false
 						end
 
-						if not arg or not arg:IsA("BasePart") or not arg.Parent or tbl12.GetMagnitude(arg, workspace.SpawnLocation) > 10000000 then
+						if not arg or not arg:IsA("BasePart") or not arg.Parent or featureUtils.GetMagnitude(arg, workspace.SpawnLocation) > 10000000 then
 							return false
 						end
 
-						if tbl12.IsPartOwner(arg) then
+						if featureUtils.IsPartOwner(arg) then
 							return true
 						end
 
-						if tbl7.States.Owning or arg3 and not arg3() then
+						if sharedState.States.Owning or arg3 and not arg3() then
 							return false
 						end
 						local flag12 = false
@@ -19654,7 +19655,7 @@ do
 							v27 = nil
 
 							if v28 then
-								local v29, v30, v31 = tbl12.Char(v28)
+								local v29, v30, v31 = featureUtils.Char(v28)
 								if not v31 or v31.Health == 0 then
 									return false
 								end
@@ -19663,7 +19664,7 @@ do
 								v27 = nil
 
 								if inPlot2 then
-									v27 = tbl12.BreakPlot(v28)
+									v27 = featureUtils.BreakPlot(v28)
 									if not v27 then
 										return false
 									end
@@ -19671,7 +19672,7 @@ do
 							end
 						end
 
-						tbl7.States.Owning = true
+						sharedState.States.Owning = true
 
 						local function fn21()
 							cframe2 = v25.CFrame
@@ -19711,13 +19712,13 @@ do
 							arg2 = arg2 or 0.65
 							local now3 = tick()
 
-							while not flag11 and arg.Parent and not tbl12.IsPartOwner(arg) and v26.Health ~= 0 and v25.Parent and (not arg3 or arg3()) and tick() - now3 < arg2 do
+							while not isUnloading and arg.Parent and not featureUtils.IsPartOwner(arg) and v26.Health ~= 0 and v25.Parent and (not arg3 or arg3()) and tick() - now3 < arg2 do
 								if flag12 then
-									cframe3 = tbl12.PredictCFrame(arg) - Vector3.new(0, 22, 0)
+									cframe3 = featureUtils.PredictCFrame(arg) - Vector3.new(0, 22, 0)
 								end
 
 								RunService.Heartbeat:Wait()
-								local grab = tbl12.Grab
+								local grab = featureUtils.Grab
 								local v28
 
 								if flag12 then
@@ -19735,21 +19736,21 @@ do
 						end
 
 						if v27 then
-							task.delay(1, tbl12.DestroyToy, v27)
+							task.delay(1, featureUtils.DestroyToy, v27)
 						end
 
-						tbl7.States.Owning = false
+						sharedState.States.Owning = false
 						if not ok then
 							return warn(result)
 						end
-						return tbl12.IsPartOwner(arg)
+						return featureUtils.IsPartOwner(arg)
 					end
 
-					tbl12.RNO = function(arg)
-						tbl11.DestroyGrabLine:FireServer(arg)
+					featureUtils.RNO = function(arg)
+						remotes.DestroyGrabLine:FireServer(arg)
 					end
 
-					tbl12.DisableEndGrabEarly = function()
+					featureUtils.DisableEndGrabEarly = function()
 						local grabEvents = ReplicatedStorage:FindFirstChild("GrabEvents")
 						if not grabEvents then
 							return
@@ -19774,7 +19775,7 @@ do
 							return #tostring(arg) / 1000000
 						end
 
-						tbl12.FormatPlayer = function(arg, arg2, arg3)
+						featureUtils.FormatPlayer = function(arg, arg2, arg3)
 							local v24
 
 							if type(arg) ~= "string" then
@@ -19787,7 +19788,7 @@ do
 								return "???"
 							end
 
-							if v24 == localPlayer and arg3 then
+							if v24 == LocalPlayer and arg3 then
 								return "You"
 							end
 							local str6 = "%*%* (@%*)"
@@ -19804,8 +19805,8 @@ do
 							return (format(str6, displayName, str7, v24.Name))
 						end
 
-						tbl12.PacketHandler = function(arg, arg2, arg3)
-							if arg == localPlayer then
+						featureUtils.PacketHandler = function(arg, arg2, arg3)
+							if arg == LocalPlayer then
 								return
 							end
 
@@ -19816,17 +19817,17 @@ do
 							if #str6 < 400 then
 								return
 							end
-							local tbl16 = tbl7.PacketData[arg]
+							local tbl16 = sharedState.PacketData[arg]
 
 							if not tbl16 then
 								tbl16 = {}
-								tbl7.PacketData[arg] = tbl16
+								sharedState.PacketData[arg] = tbl16
 							end
 
 							local now3 = tick()
 							local lastSize = #str6
 							local preview = string.sub(str6, 1, 15)
-							local v24 = tbl12.FormatPlayer(arg)
+							local v24 = featureUtils.FormatPlayer(arg)
 							local str7 = string.format("%.2f", fn21(str6))
 							local str8
 
@@ -19841,7 +19842,7 @@ do
 							if not tbl16.IsLagging then
 								tbl16.IsLagging = true
 								tbl16.SizeChanged = false
-								fn18("Player: " .. v24 .. "\n" .. "Status: Started packet lagging\n" .. "Method: " .. method .. "\n" .. "Packet Size: " .. str7 .. " MB\n" .. "Preview: " .. preview, "Packet Lag Detected", nil, 7)
+								notify("Player: " .. v24 .. "\n" .. "Status: Started packet lagging\n" .. "Method: " .. method .. "\n" .. "Packet Size: " .. str7 .. " MB\n" .. "Preview: " .. preview, "Packet Lag Detected", nil, 7)
 							end
 
 							if tbl16.LastSize then
@@ -19849,7 +19850,7 @@ do
 
 								if n36 >= 25000 and not tbl16.SizeChanged then
 									tbl16.SizeChanged = true
-									fn18("Player: " .. v24 .. "\n" .. "Status: Packet size changed\n" .. "Method: " .. method .. "\n" .. "New Packet Size: " .. str7 .. " MB\n" .. "Difference: " .. math.floor(n36 / 1024) .. " KB\n" .. "Preview: " .. preview, "Packet Size Changed", nil, 6)
+									notify("Player: " .. v24 .. "\n" .. "Status: Packet size changed\n" .. "Method: " .. method .. "\n" .. "New Packet Size: " .. str7 .. " MB\n" .. "Difference: " .. math.floor(n36 / 1024) .. " KB\n" .. "Preview: " .. preview, "Packet Size Changed", nil, 6)
 								end
 							end
 
@@ -19861,7 +19862,7 @@ do
 							end
 
 							tbl16.LagCheck = task.delay(8, function()
-								if not tbl7.PacketData[arg] then
+								if not sharedState.PacketData[arg] then
 									return
 								end
 								local lastTime = tbl16.LastTime
@@ -19871,17 +19872,17 @@ do
 									tbl16.SizeChanged = false
 									tbl16.LagCheck = nil
 									tbl16.LastSize = nil
-									fn18("Player: " .. v24 .. "\n" .. "Status: Stopped packet lagging\n" .. "Method: " .. method, "Packet Lag Ended")
+									notify("Player: " .. v24 .. "\n" .. "Status: Stopped packet lagging\n" .. "Method: " .. method, "Packet Lag Ended")
 								end
 							end)
 						end
 					end
 
-					tbl12.LineLagHandler = function(arg, lastPart, arg2)
-						if typeof(lastPart) ~= "Instance" or typeof(arg2) ~= "CFrame" or arg == localPlayer then
+					featureUtils.LineLagHandler = function(arg, lastPart, arg2)
+						if typeof(lastPart) ~= "Instance" or typeof(arg2) ~= "CFrame" or arg == LocalPlayer then
 							return
 						end
-						local tbl16 = tbl7.LineData[arg]
+						local tbl16 = sharedState.LineData[arg]
 
 						if not tbl16 then
 							tbl16 = {
@@ -19895,13 +19896,13 @@ do
 								NotificationCooldown = 0,
 							}
 
-							tbl7.LineData[arg] = tbl16
+							sharedState.LineData[arg] = tbl16
 						end
 
 						local n36 = 2
 						local n37 = 3
 						local now3 = tick()
-						local v24 = tbl12.FormatPlayer(arg)
+						local v24 = featureUtils.FormatPlayer(arg)
 
 						if not tbl16.Initialized then
 							tbl16.FirstTime = now3
@@ -19934,7 +19935,7 @@ do
 						if tbl16.Count >= 20 and (n38 > 10000 or tbl16.PartSwitches >= 10 or flag12) and not tbl16.IsLagging and now3 - tbl16.NotificationCooldown >= n37 then
 							tbl16.IsLagging = true
 							tbl16.NotificationCooldown = now3
-							fn18("Player: " .. v24 .. "\nStatus: Line lag started", "Line Lag Detected")
+							notify("Player: " .. v24 .. "\nStatus: Line lag started", "Line Lag Detected")
 						end
 
 						if tbl16.LagCheck then
@@ -19944,7 +19945,7 @@ do
 
 						if tbl16.IsLagging then
 							tbl16.LagCheck = task.delay(2, function()
-								if not tbl7.LineData[arg] then
+								if not sharedState.LineData[arg] then
 									return
 								end
 
@@ -19960,21 +19961,21 @@ do
 
 									if tick() - notificationCooldown >= n37 then
 										tbl16.NotificationCooldown = tick()
-										fn18("Player: " .. v24 .. "\nStatus: Line lag stopped", "Line Lag Ended")
+										notify("Player: " .. v24 .. "\nStatus: Line lag stopped", "Line Lag Ended")
 									end
 								end
 							end)
 						end
 					end
 
-                    tbl12.QueueTeleport = function(antiLag, reload)
+                    featureUtils.QueueTeleport = function(antiLag, reload)
                         local queue = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
                         if type(queue) ~= "function" then
-                            if reload then fn18("This executor does not support queue_on_teleport") end
+                            if reload then notify("This executor does not support queue_on_teleport") end
                             return false
                         end
                         if reload and not reloadPath then
-                            fn18("Local reload is unavailable: file persistence failed")
+                            notify("Local reload is unavailable: file persistence failed")
                             return false
                         end
                         local source = string.format([[
@@ -19999,27 +20000,27 @@ if %s then
 end
 ]], tostring(antiLag == true), tostring(reload == true), reloadPath or "")
                         local ok, err = pcall(queue, source)
-                        if not ok then fn18("Unable to queue teleport: " .. tostring(err)) end
+                        if not ok then notify("Unable to queue teleport: " .. tostring(err)) end
                         return ok
                     end
 
-					tbl12.Rejoin = function(arg, arg2)
+					featureUtils.Rejoin = function(arg, arg2)
 						if not jobId or jobId == "" then
-							fn18("Job ID not found! This might be because your executor is protecting you from other people joining your server. Couldn't rejoin")
+							notify("Job ID not found! This might be because your executor is protecting you from other people joining your server. Couldn't rejoin")
 							return
 						end
-						tbl12.QueueTeleport(arg, arg2)
+						featureUtils.QueueTeleport(arg, arg2)
 
-						if #tbl7.PlayerList <= 1 then
-							localPlayer:Kick("\nRejoining...")
+						if #sharedState.PlayerList <= 1 then
+							LocalPlayer:Kick("\nRejoining...")
 							task.wait()
-							TeleportService:Teleport(placeId, localPlayer)
+							TeleportService:Teleport(placeId, LocalPlayer)
 						else
-							TeleportService:TeleportToPlaceInstance(placeId, jobId, localPlayer)
+							TeleportService:TeleportToPlaceInstance(placeId, jobId, LocalPlayer)
 						end
 					end
 
-					tbl10.Compact = function(arg)
+					runtimeWorkers.Compact = function(arg)
 						local items = {}
 						local tail = 0
 
@@ -20037,24 +20038,24 @@ end
 						arg.Tail = tail
 					end
 
-					tbl10.Enqueue = function(arg, arg2, arg3, arg4)
+					runtimeWorkers.Enqueue = function(arg, arg2, arg3, arg4)
 						if not (arg and arg2 and arg3) then
 							return
 						end
 						arg4 = arg4 or arg
-						local tbl16 = tbl10.Workers[arg]
+						local tbl16 = runtimeWorkers.Workers[arg]
 
 						if not tbl16 then
 							tbl16 = { Items = {}, Pending = {}, Head = 1, Tail = 0, Running = false }
-							tbl10.Workers[arg] = tbl16
+							runtimeWorkers.Workers[arg] = tbl16
 						end
 
-						local n36 = tbl10.Generations[arg4] or 0
+						local n36 = runtimeWorkers.Generations[arg4] or 0
 						local v24 = tbl16.Pending[arg3]
-						if v24 and v24.Owner == arg4 and v24.Epoch == tbl10.Epoch and v24.Generation == n36 then
+						if v24 and v24.Owner == arg4 and v24.Epoch == runtimeWorkers.Epoch and v24.Generation == n36 then
 							return
 						end
-						local tbl17 = { Callback = arg2, Player = arg3, Owner = arg4, Epoch = tbl10.Epoch, Generation = n36 }
+						local tbl17 = { Callback = arg2, Player = arg3, Owner = arg4, Epoch = runtimeWorkers.Epoch, Generation = n36 }
 						tbl16.Tail = tbl16.Tail + 1
 						tbl16.Items[tbl16.Tail] = tbl17
 						tbl16.Pending[arg3] = tbl17
@@ -20064,16 +20065,16 @@ end
 						tbl16.Running = true
 
 						task.spawn(function()
-							while not flag11 do
+							while not isUnloading do
 								local v25 = tbl16.Items[tbl16.Head]
 
 								if v25 then
 									tbl16.Items[tbl16.Head] = nil
 									tbl16.Head = tbl16.Head + 1
-									local flag12 = v25.Epoch == tbl10.Epoch
+									local flag12 = v25.Epoch == runtimeWorkers.Epoch
 
 									if flag12 then
-										flag12 = v25.Generation == (tbl10.Generations[v25.Owner] or 0)
+										flag12 = v25.Generation == (runtimeWorkers.Generations[v25.Owner] or 0)
 									end
 
 									if flag12 and v25.Player.Parent then
@@ -20091,7 +20092,7 @@ end
 									end
 
 									if tbl16.Head > 128 and tbl16.Head > tbl16.Tail / 2 then
-										tbl10.Compact(tbl16)
+										runtimeWorkers.Compact(tbl16)
 									end
 
 									continue
@@ -20108,19 +20109,19 @@ end
 						end)
 					end
 
-					tbl10.Cancel = function(arg)
-						tbl10.Generations[arg] = (tbl10.Generations[arg] or 0) + 1
+					runtimeWorkers.Cancel = function(arg)
+						runtimeWorkers.Generations[arg] = (runtimeWorkers.Generations[arg] or 0) + 1
 					end
 
-					tbl10.CancelAll = function()
-						tbl10.Epoch = tbl10.Epoch + 1
+					runtimeWorkers.CancelAll = function()
+						runtimeWorkers.Epoch = runtimeWorkers.Epoch + 1
 
-						for _, worker in pairs(tbl10.Workers) do
+						for _, worker in pairs(runtimeWorkers.Workers) do
 							worker.Pending = {}
 						end
 					end
 
-					tbl12.IsTerminalDisconnect = function()
+					featureUtils.IsTerminalDisconnect = function()
 						local ok, result = pcall(GuiService.GetErrorCode, GuiService)
 
 						if not ok then
@@ -20141,12 +20142,12 @@ end
 						return value ~= nil and value >= Enum.ConnectionError.DisconnectErrors.Value and value < Enum.ConnectionError.PlacelaunchErrors.Value
 					end
 
-					tbl12.AimRaycastParams = RaycastParams.new()
-					tbl12.AimRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
+					featureUtils.AimRaycastParams = RaycastParams.new()
+					featureUtils.AimRaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 
-					tbl12.GetAimTarget = function()
-						local aimSettings = tbl7.AimSettings
-						local character = localPlayer.Character
+					featureUtils.GetAimTarget = function()
+						local aimSettings = sharedState.AimSettings
+						local character = LocalPlayer.Character
 						local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
 						if not humanoidRootPart then
 							return nil
@@ -20156,14 +20157,14 @@ end
 						local x = mouse.X
 						local y = mouse.Y
 
-						if lib.IsMobile then
+						if uiLibrary.IsMobile then
 							x = currentCamera.ViewportSize.X / 2
 							y = currentCamera.ViewportSize.Y / 2
 						end
 
 						local worldToViewportPoint
 
-						if lib.IsMobile then
+						if uiLibrary.IsMobile then
 							worldToViewportPoint = currentCamera.WorldToViewportPoint
 						else
 							worldToViewportPoint = currentCamera.WorldToScreenPoint
@@ -20171,13 +20172,13 @@ end
 
 						local n36 = aimSettings.FOVRadius * aimSettings.FOVRadius
 						local n37 = aimSettings.SADist * aimSettings.SADist
-						local aimRaycastFilter = tbl7.AimRaycastFilter
-						local aimRaycastParams = tbl12.AimRaycastParams
+						local aimRaycastFilter = sharedState.AimRaycastFilter
+						local aimRaycastParams = featureUtils.AimRaycastParams
 						local huge = math.huge
 						local v24 = nil
 
-						for _, v25 in pairs(tbl7.PlayerList) do
-							if v25 ~= localPlayer and v25.Character and not tbl12.IsProtectedPlayer(v25, true) then
+						for _, v25 in pairs(sharedState.PlayerList) do
+							if v25 ~= LocalPlayer and v25.Character and not featureUtils.IsProtectedPlayer(v25, true) then
 								local inPlot2 = v25:FindFirstChild("InPlot")
 
 								if not (inPlot2 and inPlot2.Value) then
@@ -20217,8 +20218,8 @@ end
 						return v24
 					end
 
-					tbl12.Click = function()
-						if not lib.IsMobile then
+					featureUtils.Click = function()
+						if not uiLibrary.IsMobile then
 							if mouse1click then
 								return mouse1click()
 							end
@@ -20246,7 +20247,7 @@ end
 						VirtualInputManager:SendTouchEvent(1, 2, n36.X, n36.Y)
 					end
 
-					tbl12.TweenFOV = function(arg, arg2)
+					featureUtils.TweenFOV = function(arg, arg2)
 						if tween then
 							tween:Cancel()
 							tween = nil
@@ -20260,19 +20261,19 @@ end
 				end
 
 				do
-					tbl12.SetFOV = function(arg, arg2)
+					featureUtils.SetFOV = function(arg, arg2)
 						if arg2 then
-							tbl9.ZoomFOV = math.clamp(arg, tbl9.ZoomMinFOV, tbl9.ZoomMaxFOV)
-							return tbl12.TweenFOV(tbl9.ZoomFOV, 0.2)
+							settings.ZoomFOV = math.clamp(arg, settings.ZoomMinFOV, settings.ZoomMaxFOV)
+							return featureUtils.TweenFOV(settings.ZoomFOV, 0.2)
 						end
-						fieldOfView = math.clamp(arg, 30, 120)
-						if not tbl8.Zoom then
-							return tbl12.TweenFOV(fieldOfView, 0.25)
+						originalFieldOfView = math.clamp(arg, 30, 120)
+						if not toggleStates.Zoom then
+							return featureUtils.TweenFOV(originalFieldOfView, 0.25)
 						end
 					end
 
-					tbl12.UpdateZoomCamera = function(arg)
-						if flag11 then
+					featureUtils.UpdateZoomCamera = function(arg)
+						if isUnloading then
 							pcall(function()
 								RunService:UnbindFromRenderStep("RSCZoom")
 							end)
@@ -20280,7 +20281,7 @@ end
 							return
 						end
 
-						if not tbl8.Zoom or currentCamera.CameraType == Enum.CameraType.Scriptable then
+						if not toggleStates.Zoom or currentCamera.CameraType == Enum.CameraType.Scriptable then
 							cFrame = nil
 							return
 						end
@@ -20289,7 +20290,7 @@ end
 							cFrame = cFrame2
 							return
 						end
-						cFrame = cFrame:Lerp(cFrame2, math.clamp(1 - math.exp(-(tbl9.ZoomCameraSmoothness or 14) * (arg or 0.016666666666666666)), 0, 1))
+						cFrame = cFrame:Lerp(cFrame2, math.clamp(1 - math.exp(-(settings.ZoomCameraSmoothness or 14) * (arg or 0.016666666666666666)), 0, 1))
 						currentCamera.CFrame = cFrame
 					end
 
@@ -20361,7 +20362,7 @@ end
 									beam.Color = colorSequence
 									beam.Transparency = numberSequence
 									local wrap = Enum.TextureMode.Wrap
-									beam.Texture = tbl7.LineTypes.Dots
+									beam.Texture = sharedState.LineTypes.Dots
 									beam.TextureMode = wrap
 									beam.TextureLength = 0.75
 									beam.Width0 = 0.12
@@ -20374,9 +20375,9 @@ end
 							return v30, tbl16, tbl17
 						end
 
-						tbl12.UpdateAuraVisuals = function()
+						featureUtils.UpdateAuraVisuals = function()
 							local v30
-							v30, v30 = tbl12.Char()
+							v30, v30 = featureUtils.Char()
 							if not v30 then
 								return
 							end
@@ -20390,7 +20391,7 @@ end
 							end
 						end
 
-						tbl12.UpdateAuraVisualSettings = function()
+						featureUtils.UpdateAuraVisualSettings = function()
 							local function fn22(arg, arg2, arg3, arg4)
 								local v30 = ipairs
 								arg2 = arg2 or {}
@@ -20420,11 +20421,11 @@ end
 								end
 							end
 
-							fn22(v26, v27, tbl9.AuraDistance, tbl7.AuraVisualSettings.AuraColor)
-							fn22(v28, v29, tbl9.ToyAuraDistance, tbl7.AuraVisualSettings.ToyAuraColor)
+							fn22(v26, v27, settings.AuraDistance, sharedState.AuraVisualSettings.AuraColor)
+							fn22(v28, v29, settings.ToyAuraDistance, sharedState.AuraVisualSettings.ToyAuraColor)
 						end
 
-						tbl12.RefreshAuraVisuals = function()
+						featureUtils.RefreshAuraVisuals = function()
 							if v24 then
 								v24:Destroy()
 								v24 = nil
@@ -20440,23 +20441,23 @@ end
 							v28 = nil
 							v29 = nil
 
-							if tbl8.AuraVisualizer and tbl8.Aura then
-								local AuraRadius, v30, v31 = fn21("AuraRadius", tbl9.AuraDistance, tbl7.AuraVisualSettings.AuraColor)
+							if toggleStates.AuraVisualizer and toggleStates.Aura then
+								local AuraRadius, v30, v31 = fn21("AuraRadius", settings.AuraDistance, sharedState.AuraVisualSettings.AuraColor)
 								v24 = AuraRadius
 								v26 = v30
 								v27 = v31
 							end
 
-							if tbl8.ToyAuraVisualizer and tbl8.ToyAuras then
-								local ToyAuraRadius, v30, v31 = fn21("ToyAuraRadius", tbl9.ToyAuraDistance, tbl7.AuraVisualSettings.ToyAuraColor)
+							if toggleStates.ToyAuraVisualizer and toggleStates.ToyAuras then
+								local ToyAuraRadius, v30, v31 = fn21("ToyAuraRadius", settings.ToyAuraDistance, sharedState.AuraVisualSettings.ToyAuraColor)
 								v25 = ToyAuraRadius
 								v28 = v30
 								v29 = v31
 							end
 
-							tbl12.UpdateAuraVisualSettings()
-							tbl12.UpdateAuraVisuals()
-							local setRuntimeConnection = tbl12.SetRuntimeConnection
+							featureUtils.UpdateAuraVisualSettings()
+							featureUtils.UpdateAuraVisuals()
+							local setRuntimeConnection = featureUtils.SetRuntimeConnection
 							local renderStepped = RunService.RenderStepped
 							local v30 = v24
 							local v31
@@ -20467,31 +20468,31 @@ end
 								v31 = v25
 							end
 
-							setRuntimeConnection("AuraVisuals", renderStepped, v31, tbl12.UpdateAuraVisuals)
+							setRuntimeConnection("AuraVisuals", renderStepped, v31, featureUtils.UpdateAuraVisuals)
 						end
 					end
 				end
 
-				tbl12.ClearAuraVisuals = function()
-					local v24 = tbl8
-					tbl8.AuraVisualizer = false
+				featureUtils.ClearAuraVisuals = function()
+					local v24 = toggleStates
+					toggleStates.AuraVisualizer = false
 					v24.ToyAuraVisualizer = false
-					tbl12.RefreshAuraVisuals()
+					featureUtils.RefreshAuraVisuals()
 				end
 
-				tbl12.GetTriggerTarget = function()
-					local aimSettings = tbl7.AimSettings
-					local silentAimState = tbl7.SilentAimState
-					if flag11 or not aimSettings.TriggerbotEnabled or UserInputService:GetFocusedTextBox() or workspace:FindFirstChild("GrabParts") then
+				featureUtils.GetTriggerTarget = function()
+					local aimSettings = sharedState.AimSettings
+					local silentAimState = sharedState.SilentAimState
+					if isUnloading or not aimSettings.TriggerbotEnabled or UserInputService:GetFocusedTextBox() or workspace:FindFirstChild("GrabParts") then
 						return
 					end
-					local v24, v25, v26 = tbl12.Char()
+					local v24, v25, v26 = featureUtils.Char()
 					if not (v25 and v26 and v26.Health > 0) then
 						return
 					end
 					local instance
 
-					if tbl8.SilentAim and silentAimState.RaycastActive then
+					if toggleStates.SilentAim and silentAimState.RaycastActive then
 						local hit = silentAimState.Hit
 
 						if hit then
@@ -20504,7 +20505,7 @@ end
 							instance = nil
 						end
 					else
-						instance = tbl12.GetTarget()
+						instance = featureUtils.GetTarget()
 					end
 
 					if not (instance and instance.Parent) or (instance.Position - v25.Position).Magnitude > aimSettings.TriggerDist then
@@ -20512,19 +20513,19 @@ end
 					end
 					local model = instance:FindFirstAncestorOfClass("Model")
 					local playerFromCharacter = model and Players:GetPlayerFromCharacter(model)
-					if not playerFromCharacter or playerFromCharacter == localPlayer or tbl12.IsProtectedPlayer(playerFromCharacter, true) or tbl8.SilentAim and not tbl12.IsSilentAimTarget(playerFromCharacter) then
+					if not playerFromCharacter or playerFromCharacter == LocalPlayer or featureUtils.IsProtectedPlayer(playerFromCharacter, true) or toggleStates.SilentAim and not featureUtils.IsSilentAimTarget(playerFromCharacter) then
 						return
 					end
-					local v27, v28, v29 = tbl12.Char(playerFromCharacter)
+					local v27, v28, v29 = featureUtils.Char(playerFromCharacter)
 					if v29 and v29.Health > 0 then
 						return playerFromCharacter
 					end
 				end
 
-				tbl12.PlayTriggerTrick = function(arg, arg2)
-					local aimSettings = tbl7.AimSettings
-					local v24, v25, v26 = tbl12.Char()
-					local v27, v28, v29 = tbl12.Char(arg2)
+				featureUtils.PlayTriggerTrick = function(arg, arg2)
+					local aimSettings = sharedState.AimSettings
+					local v24, v25, v26 = featureUtils.Char()
+					local v27, v28, v29 = featureUtils.Char(arg2)
 					local currentCamera2 = workspace.CurrentCamera
 					local triggerTrick = aimSettings.TriggerTrick
 					if not (v25 and v26 and v26.Health > 0 and currentCamera2 and v28 and v29 and v29.Health > 0) then
@@ -20555,7 +20556,7 @@ end
 
 						repeat
 							n36 += RunService.RenderStepped:Wait()
-							if flag11 or v26.Health <= 0 or not aimSettings.TriggerbotEnabled or not aimSettings.TriggerTricks or aimSettings.TriggerVersion ~= arg or localPlayer.Character ~= v24 or workspace:FindFirstChild("GrabParts") then
+							if isUnloading or v26.Health <= 0 or not aimSettings.TriggerbotEnabled or not aimSettings.TriggerTricks or aimSettings.TriggerVersion ~= arg or LocalPlayer.Character ~= v24 or workspace:FindFirstChild("GrabParts") then
 								return false
 							end
 
@@ -20563,7 +20564,7 @@ end
 								return false
 							end
 
-							if UserInputService:GetFocusedTextBox() or tbl12.IsProtectedPlayer(arg2, true) or tbl8.SilentAim and not tbl12.IsSilentAimTarget(arg2) or (v28.Position - v25.Position).Magnitude > aimSettings.TriggerDist then
+							if UserInputService:GetFocusedTextBox() or featureUtils.IsProtectedPlayer(arg2, true) or toggleStates.SilentAim and not featureUtils.IsSilentAimTarget(arg2) or (v28.Position - v25.Position).Magnitude > aimSettings.TriggerDist then
 								return false
 							end
 							local n39 = math.min(n36 / n38, 1)
@@ -20612,44 +20613,44 @@ end
 					return ok and result
 				end
 
-				tbl12.UpdateTriggerbot = function()
-					local aimSettings = tbl7.AimSettings
+				featureUtils.UpdateTriggerbot = function()
+					local aimSettings = sharedState.AimSettings
 					if aimSettings.TriggerBotDebounce then
 						return
 					end
-					local v24 = tbl12.GetTriggerTarget()
+					local v24 = featureUtils.GetTriggerTarget()
 					if not v24 then
 						return
 					end
-					local character = localPlayer.Character
+					local character = LocalPlayer.Character
 					local triggerVersion = aimSettings.TriggerVersion
 					aimSettings.TriggerBotDebounce = true
 
 					task.spawn(function()
 						pcall(function()
 							task.wait(aimSettings.TriggerDelay)
-							if aimSettings.TriggerVersion ~= triggerVersion or localPlayer.Character ~= character or tbl12.GetTriggerTarget() ~= v24 then
+							if aimSettings.TriggerVersion ~= triggerVersion or LocalPlayer.Character ~= character or featureUtils.GetTriggerTarget() ~= v24 then
 								return
 							end
 
 							if aimSettings.TriggerTricks then
-								if not tbl12.PlayTriggerTrick(triggerVersion, v24) then
+								if not featureUtils.PlayTriggerTrick(triggerVersion, v24) then
 									return
 								end
 								RunService.Heartbeat:Wait()
 							end
 
-							if aimSettings.TriggerVersion ~= triggerVersion or localPlayer.Character ~= character or tbl12.GetTriggerTarget() ~= v24 then
+							if aimSettings.TriggerVersion ~= triggerVersion or LocalPlayer.Character ~= character or featureUtils.GetTriggerTarget() ~= v24 then
 								return
 							end
-							tbl12.Click()
+							featureUtils.Click()
 							task.wait(0.2)
 
-							while not flag11 and aimSettings.TriggerbotEnabled and aimSettings.TriggerVersion == triggerVersion and localPlayer.Character == character and workspace:FindFirstChild("GrabParts") do
+							while not isUnloading and aimSettings.TriggerbotEnabled and aimSettings.TriggerVersion == triggerVersion and LocalPlayer.Character == character and workspace:FindFirstChild("GrabParts") do
 								task.wait()
 							end
 
-							if not flag11 and aimSettings.TriggerVersion == triggerVersion then
+							if not isUnloading and aimSettings.TriggerVersion == triggerVersion then
 								task.wait(aimSettings.TriggerCooldown)
 							end
 						end)
@@ -20658,12 +20659,12 @@ end
 					end)
 				end
 
-				tbl12.UpdateAimAssist = function()
-					local aimSettings = tbl7.AimSettings
+				featureUtils.UpdateAimAssist = function()
+					local aimSettings = sharedState.AimSettings
 					local grabParts = workspace:FindFirstChild("GrabParts")
 					local viewportSize = currentCamera.ViewportSize
 					local vector2 = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
-					local frame2 = tbl6.Frame
+					local frame2 = fieldOfViewDisplay.Frame
 
 					if aimSettings.FOVEnabled then
 						local n36 = aimSettings.FOVRadius * 2
@@ -20696,7 +20697,7 @@ end
 							task.spawn(function()
 								while true do
 									task.wait()
-									if not (flag11 or not grabParts.Parent) then
+									if not (isUnloading or not grabParts.Parent) then
 										continue
 									end
 									break
@@ -20723,7 +20724,7 @@ end
 							end
 						end
 
-						local v24 = alwaysOn and tbl12.GetAimTarget()
+						local v24 = alwaysOn and featureUtils.GetAimTarget()
 
 						if v24 and v24.Character and v24.Character:FindFirstChild(aimSettings.TargetPart) then
 							local smoothness = aimSettings.Smoothness
@@ -20732,32 +20733,32 @@ end
 					end
 
 					if aimSettings.TriggerbotEnabled and not grabParts then
-						tbl12.UpdateTriggerbot()
+						featureUtils.UpdateTriggerbot()
 					end
 				end
 
-				tbl12.UpdateAimConnection = function()
-					local aimSettings = tbl7.AimSettings
+				featureUtils.UpdateAimConnection = function()
+					local aimSettings = sharedState.AimSettings
 					local fovEnabled = aimSettings.FOVEnabled or aimSettings.AimbotEnabled or aimSettings.TriggerbotEnabled
-					tbl12.SetRuntimeConnection("AimAssist", RunService.RenderStepped, fovEnabled, tbl12.UpdateAimAssist)
+					featureUtils.SetRuntimeConnection("AimAssist", RunService.RenderStepped, fovEnabled, featureUtils.UpdateAimAssist)
 
-					if not fovEnabled and tbl6.Frame.Visible then
-						tbl6.Frame.Visible = false
+					if not fovEnabled and fieldOfViewDisplay.Frame.Visible then
+						fieldOfViewDisplay.Frame.Visible = false
 					end
 				end
 
-				tbl12.IsSilentAimTarget = function(arg)
-					return arg and arg ~= localPlayer and not tbl12.IsProtectedPlayer(arg, tbl8.SilentAimIgnoreWhitelist) and (not tbl8.SilentAimTargetsOnly or tbl7.SelectedSilentAimPlayers[arg])
+				featureUtils.IsSilentAimTarget = function(arg)
+					return arg and arg ~= LocalPlayer and not featureUtils.IsProtectedPlayer(arg, toggleStates.SilentAimIgnoreWhitelist) and (not toggleStates.SilentAimTargetsOnly or sharedState.SelectedSilentAimPlayers[arg])
 				end
 
-				tbl12.ApplySilentAimPlayer = function(arg)
-					if arg == localPlayer then
+				featureUtils.ApplySilentAimPlayer = function(arg)
+					if arg == LocalPlayer then
 						return
 					end
-					local v24, v25 = tbl12.Char(arg)
-					local silentAimState = tbl7.SilentAimState
+					local v24, v25 = featureUtils.Char(arg)
+					local silentAimState = sharedState.SilentAimState
 					local v26 = silentAimState.Players[arg]
-					local flag12 = tbl8.SilentAim and not silentAimState.RaycastActive and tbl12.IsSilentAimTarget(arg)
+					local flag12 = toggleStates.SilentAim and not silentAimState.RaycastActive and featureUtils.IsSilentAimTarget(arg)
 
 					if v26 and (not flag12 or v26.Root ~= v25) then
 						if v26.Root.Parent then
@@ -20783,7 +20784,7 @@ end
 						}
 					end
 
-					local saimHitbox = tbl9.SAIMHitbox
+					local saimHitbox = settings.SAIMHitbox
 
 					if silentAimState.Size ~= saimHitbox then
 						silentAimState.Size = saimHitbox
@@ -20796,19 +20797,19 @@ end
 					v25.CanCollide = false
 				end
 
-				tbl12.UpdateSilentAimFOV = function()
-					local silentAimState = tbl7.SilentAimState
-					silentAimState.Circle.Size = UDim2.fromOffset(tbl9.SAIMRadius * 2, tbl9.SAIMRadius * 2)
-					silentAimState.Circle.Visible = not flag11 and tbl8.SilentAim == true and silentAimState.RaycastActive == true and tbl8.SilentAimFOV == true
+				featureUtils.UpdateSilentAimFOV = function()
+					local silentAimState = sharedState.SilentAimState
+					silentAimState.Circle.Size = UDim2.fromOffset(settings.SAIMRadius * 2, settings.SAIMRadius * 2)
+					silentAimState.Circle.Visible = not isUnloading and toggleStates.SilentAim == true and silentAimState.RaycastActive == true and toggleStates.SilentAimFOV == true
 				end
 
-				tbl12.RefreshSilentAim = function()
-					for _, v24 in ipairs(tbl7.PlayerList) do
-						tbl12.ApplySilentAimPlayer(v24)
+				featureUtils.RefreshSilentAim = function()
+					for _, v24 in ipairs(sharedState.PlayerList) do
+						featureUtils.ApplySilentAimPlayer(v24)
 					end
 
-					local flag12 = tbl7.SilentAimState.RaycastActive == true
-					local silentAimMethod = lib.Labels and lib.Labels.SilentAimMethod
+					local flag12 = sharedState.SilentAimState.RaycastActive == true
+					local silentAimMethod = uiLibrary.Labels and uiLibrary.Labels.SilentAimMethod
 
 					if silentAimMethod then
 						local v24 = silentAimMethod
@@ -20836,22 +20837,22 @@ end
 						toggles.SilentAimFOV:SetVisible(flag12)
 					end
 
-					tbl12.UpdateSilentAimFOV()
+					featureUtils.UpdateSilentAimFOV()
 				end
 
-				tbl12.GetSilentAimHit = function(arg, arg2, arg3)
+				featureUtils.GetSilentAimHit = function(arg, arg2, arg3)
 					local currentCamera2 = workspace.CurrentCamera
 					if not currentCamera2 or type(arg) ~= "number" or arg <= 0 then
 						return
 					end
 					arg3 = arg3 or currentCamera2.CFrame.Position
 					local n36 = currentCamera2.ViewportSize / 2
-					local n37 = tbl9.SAIMRadius ^ 2
+					local n37 = settings.SAIMRadius ^ 2
 					local v24 = nil
 
-					for _, v25 in ipairs(tbl7.PlayerList) do
-						if tbl12.IsSilentAimTarget(v25) then
-							local v26, v27, v28 = tbl12.Char(v25)
+					for _, v25 in ipairs(sharedState.PlayerList) do
+						if featureUtils.IsSilentAimTarget(v25) then
+							local v26, v27, v28 = featureUtils.Char(v25)
 
 							if v27 and v28 and v28.Health > 0 then
 								local v29, v30 = currentCamera2:WorldToViewportPoint(v27.Position)
@@ -20879,9 +20880,9 @@ end
 					return v24
 				end
 
-				tbl12.SetSilentAim = function(arg)
-					local silentAimState = tbl7.SilentAimState
-					arg = arg and not flag11
+				featureUtils.SetSilentAim = function(arg)
+					local silentAimState = sharedState.SilentAimState
+					arg = arg and not isUnloading
 
 					if arg then
 						silentAimState.Failed = nil
@@ -20889,16 +20890,16 @@ end
 
 					silentAimState.Hit = nil
 					silentAimState.HitTime = nil
-					tbl12.SetRuntimeToggle("SilentAim", arg)
+					featureUtils.SetRuntimeToggle("SilentAim", arg)
 
-					tbl12.SetRuntimeConnection("SilentAimStatus", RunService.Heartbeat, not flag11, function()
+					featureUtils.SetRuntimeConnection("SilentAimStatus", RunService.Heartbeat, not isUnloading, function()
 						if silentAimState.Dirty then
 							silentAimState.Dirty = nil
-							tbl12.RefreshSilentAim()
+							featureUtils.RefreshSilentAim()
 						end
 					end)
 
-					if flag11 then
+					if isUnloading then
 						local patch = silentAimState.Patch
 
 						if patch and getrawmetatable then
@@ -20917,7 +20918,7 @@ end
 
 						local function wrapper(arg2, ...)
 							local v24 = table.pack(...)
-							if flag11 or not tbl8.SilentAim or not silentAimState.RaycastActive or arg2 ~= workspace or getnamecallmethod() ~= "Raycast" or checkcaller and checkcaller() then
+							if isUnloading or not toggleStates.SilentAim or not silentAimState.RaycastActive or arg2 ~= workspace or getnamecallmethod() ~= "Raycast" or checkcaller and checkcaller() then
 								return patch.Original(arg2, ...)
 							end
 							local v25 = ...
@@ -20931,7 +20932,7 @@ end
 							if ok and result and result.Name ~= "GrabbingScript" and result.Name ~= "RaycastModule" then
 								return patch.Original(arg2, table.unpack(v24, 1, v24.n))
 							end
-							local ok2, hit = pcall(tbl12.GetSilentAimHit, value.Magnitude, value2, v25)
+							local ok2, hit = pcall(featureUtils.GetSilentAimHit, value.Magnitude, value2, v25)
 
 							if ok2 and hit then
 								local v26 = silentAimState
@@ -20970,19 +20971,19 @@ end
 						end
 					end
 
-					silentAimState.RaycastActive = not flag11 and silentAimState.Patch ~= nil and not silentAimState.Failed
-					tbl12.RefreshSilentAim()
+					silentAimState.RaycastActive = not isUnloading and silentAimState.Patch ~= nil and not silentAimState.Failed
+					featureUtils.RefreshSilentAim()
 				end
 
-				tbl12.TrackSilentAimPlayer = function(arg)
-					lib:GiveSignal(arg.CharacterAdded:Connect(function(character)
-						local v24 = flag11
+				featureUtils.TrackSilentAimPlayer = function(arg)
+					uiLibrary:GiveSignal(arg.CharacterAdded:Connect(function(character)
+						local v24 = isUnloading
 						local flag12
 
-						if flag11 then
+						if isUnloading then
 							flag12 = v24
 						else
-							flag12 = not tbl8.SilentAim
+							flag12 = not toggleStates.SilentAim
 						end
 
 						if flag12 then
@@ -20993,14 +20994,14 @@ end
 							return
 						end
 
-						if not flag11 then
-							tbl12.ApplySilentAimPlayer(arg)
+						if not isUnloading then
+							featureUtils.ApplySilentAimPlayer(arg)
 						end
 					end))
 				end
 
-				tbl12.Ragdoll = function(arg)
-					if not arg or not arg.Parent or tbl7.States.Ragdolling then
+				featureUtils.Ragdoll = function(arg)
+					if not arg or not arg.Parent or sharedState.States.Ragdolling then
 						return
 					end
 					local head = arg:FindFirstChild("Head")
@@ -21009,13 +21010,13 @@ end
 					humanoid = humanoid and humanoid:FindFirstChild("Ragdolled")
 
 					if humanoid and humanoid.Value == false then
-						tbl7.States.Ragdolling = true
-						local ragdollRSC = v17:FindFirstChild("RagdollRSC") or tbl12.SpawnToy("PalletLightBrown")
+						sharedState.States.Ragdolling = true
+						local ragdollRSC = spawnedToysFolder:FindFirstChild("RagdollRSC") or featureUtils.SpawnToy("PalletLightBrown")
 						local soundPart = ragdollRSC and ragdollRSC:WaitForChild("SoundPart", 0.5)
 						local main = soundPart and ragdollRSC:WaitForChild("Main", 0.5)
-						if not main or not tbl12.SNO(soundPart) then
-							tbl7.States.Ragdolling = false
-							return tbl12.DestroyToy(ragdollRSC)
+						if not main or not featureUtils.SNO(soundPart) then
+							sharedState.States.Ragdolling = false
+							return featureUtils.DestroyToy(ragdollRSC)
 						end
 						ragdollRSC.Name = "RagdollRSC"
 
@@ -21046,12 +21047,12 @@ end
 							break
 						end
 
-						tbl7.States.Ragdolling = false
+						sharedState.States.Ragdolling = false
 						return humanoid.Value
 					end
 				end
 
-				tbl12.RemoveSticky = function(arg, arg2)
+				featureUtils.RemoveSticky = function(arg, arg2)
 					if not arg or not arg.Parent then
 						return
 					end
@@ -21066,11 +21067,11 @@ end
 										end
 									end
 
-									local parent2 = v25.Parent and tbl12.FindNicePart(v25.Parent)
+									local parent2 = v25.Parent and featureUtils.FindNicePart(v25.Parent)
 
 									if parent2 then
 										if not parent2:IsDescendantOf(workspace.PlotItems) then
-											tbl12.Grab(parent2)
+											featureUtils.Grab(parent2)
 										end
 									end
 								end
@@ -21085,7 +21086,7 @@ end
 					if not playerFromCharacter then
 						return
 					end
-					local v24 = tbl12.GetInventory(playerFromCharacter)
+					local v24 = featureUtils.GetInventory(playerFromCharacter)
 					if not v24 then
 						return
 					end
@@ -21099,11 +21100,11 @@ end
 							local position = humanoidRootPart.Position
 
 							if (v25:GetPivot().Position - position).Magnitude < 10 then
-								local v26 = tbl12.FindNicePart(v25)
+								local v26 = featureUtils.FindNicePart(v25)
 
 								if v26 then
-									tbl12.ToggleCollisions(v25, false)
-									tbl12.Grab(v26)
+									featureUtils.ToggleCollisions(v25, false)
+									featureUtils.Grab(v26)
 
 									if not v25:FindFirstChild("StickyPart") then
 										if not v26:FindFirstChild("RscBV") then
@@ -21114,8 +21115,8 @@ end
 											bodyVelocity2.Parent = v26
 										end
 
-										tbl12.PivotTo(v25, CFrame.new(0, -50000, 0))
-										task.delay(1, tbl12.RNO, v26)
+										featureUtils.PivotTo(v25, CFrame.new(0, -50000, 0))
+										task.delay(1, featureUtils.RNO, v26)
 									end
 								end
 							end
@@ -21123,12 +21124,12 @@ end
 					end
 				end
 
-				tbl12.BreakLimb = function(arg, arg2)
-					local flag12 = arg == localPlayer
-					if flag12 and tbl8.GucciAntiGrab then
-						return fn18("Can't break limbs while in Gucci!")
+				featureUtils.BreakLimb = function(arg, arg2)
+					local flag12 = arg == LocalPlayer
+					if flag12 and toggleStates.GucciAntiGrab then
+						return notify("Can't break limbs while in Gucci!")
 					end
-					local v24, v25, v26 = tbl12.Char(arg)
+					local v24, v25, v26 = featureUtils.Char(arg)
 					local ragdolled = v26 and v26:FindFirstChild("Ragdolled")
 					if not (v25 and v26 and v26.Health ~= 0 and ragdolled) then
 						return
@@ -21150,7 +21151,7 @@ end
 					end
 
 					if flag12 then
-						tbl11.RagdollRemote:FireServer(v25, 0.35)
+						remotes.RagdollRemote:FireServer(v25, 0.35)
 						local now3 = tick()
 
 						while true do
@@ -21160,7 +21161,7 @@ end
 							end
 							break
 						end
-					elseif not (tbl12.SNO(v25) and tbl12.Ragdoll(v24)) then
+					elseif not (featureUtils.SNO(v25) and featureUtils.Ragdoll(v24)) then
 						return
 					end
 
@@ -21172,9 +21173,9 @@ end
 					for _, child in ipairs(children) do
 						if child:IsA("BasePart") then
 							if child.Name:find("Arm") and (arg2 == "Arms" or arg2 == "All") then
-								tbl12.Teleport(child, CFrame.new(0, -100000, 0))
+								featureUtils.Teleport(child, CFrame.new(0, -100000, 0))
 							elseif child.Name:find("Leg") and (arg2 == "Legs" or arg2 == "All") then
-								tbl12.Teleport(child, CFrame.new(0, -100000, 0))
+								featureUtils.Teleport(child, CFrame.new(0, -100000, 0))
 							end
 						end
 					end
@@ -21185,24 +21186,24 @@ end
 					end
 
 					if flag12 then
-						tbl12.Grab(v25)
+						featureUtils.Grab(v25)
 						task.wait()
 
 						for _, v27 in children, nil, nil do
 							if v27.Parent then
-								tbl12.ResetVelocity(v27)
+								featureUtils.ResetVelocity(v27)
 							end
 						end
 
-						tbl11.RagdollRemote:FireServer(v25, 0)
+						remotes.RagdollRemote:FireServer(v25, 0)
 					else
 						workspace.FallenPartsDestroyHeight = -10000
-						tbl12.Teleport(v25, CFrame.new(0, -11000, 0))
+						featureUtils.Teleport(v25, CFrame.new(0, -11000, 0))
 						task.wait()
 						local v27 = workspace
 						local fallenPartsDestroyHeight2
 
-						if tbl8.DestroyVoid then
+						if toggleStates.DestroyVoid then
 							fallenPartsDestroyHeight2 = (0/0)
 						else
 							fallenPartsDestroyHeight2 = -100
@@ -21211,11 +21212,11 @@ end
 						v27.FallenPartsDestroyHeight = fallenPartsDestroyHeight2
 
 						if v25.Parent then
-							tbl12.Teleport(v25, cFrame2)
+							featureUtils.Teleport(v25, cFrame2)
 
 							for _, v28 in children, nil, nil do
 								if v28.Parent then
-									tbl12.ResetVelocity(v28)
+									featureUtils.ResetVelocity(v28)
 								end
 							end
 
@@ -21223,47 +21224,47 @@ end
 
 							for _, v28 in children, nil, nil do
 								if v28.Parent then
-									tbl12.ResetVelocity(v28)
+									featureUtils.ResetVelocity(v28)
 								end
 							end
 
 							if v25.Parent then
-								tbl12.RNO(v25)
+								featureUtils.RNO(v25)
 							end
 						end
 					end
 				end
 
-				tbl12.UpdateWalkSpeed = function(arg)
-					local v24, v25, v26 = tbl12.Char()
+				featureUtils.UpdateWalkSpeed = function(arg)
+					local v24, v25, v26 = featureUtils.Char()
 					local humanoidCreature = parent and parent:FindFirstChild("HumanoidCreature")
 
 					if v26 and v26.Parent and v26.Health > 0 then
 						if humanoidCreature then
-							humanoidCreature.WalkSpeed = tbl9.WalkSpeed
+							humanoidCreature.WalkSpeed = settings.WalkSpeed
 							return
 						end
 
 						if v26.MoveDirection.Magnitude > 0 then
-							v24:TranslateBy(v26.MoveDirection * tbl9.WalkSpeed * arg)
+							v24:TranslateBy(v26.MoveDirection * settings.WalkSpeed * arg)
 						end
 					end
 				end
 
-				tbl12.UpdateFlight = function()
-					local v24, v25, v26 = tbl12.Char()
+				featureUtils.UpdateFlight = function()
+					local v24, v25, v26 = featureUtils.Char()
 
 					if not (v24 and v25 and v26 and v26.Health > 0) then
 						if bodyVelocity or bodyGyro then
-							tbl12.StopFly()
+							featureUtils.StopFly()
 						end
 
 						return
 					end
 
 					if not bodyVelocity or bodyVelocity.Parent ~= v25 or not bodyGyro or bodyGyro.Parent ~= v25 then
-						tbl12.StopFly()
-						tbl12.StartFly(v25)
+						featureUtils.StopFly()
+						featureUtils.StartFly(v25)
 					end
 
 					if not v26.Sit then
@@ -21307,7 +21308,7 @@ end
 						if v23 then
 							ControlModule = v27
 						else
-							ControlModule = require(localPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule"))
+							ControlModule = require(LocalPlayer.PlayerScripts:WaitForChild("PlayerModule"):WaitForChild("ControlModule"))
 						end
 
 						v23 = ControlModule
@@ -21329,7 +21330,7 @@ end
 					local v27 = bodyVelocity
 					local velocity = bodyVelocity.Velocity
 					local lerp = velocity.Lerp
-					local n40 = n39 * tbl9.FlightSpeed * 50
+					local n40 = n39 * settings.FlightSpeed * 50
 					local n41
 
 					if n39.Magnitude > 0 then
@@ -21349,7 +21350,7 @@ end
 					local num = nil
 					local n37 = nil
 					local n38 = 0
-					tbl12.DesyncSupported = type(sethiddenproperty) == "function" and type(setfflag) == "function" and type(getfflag) == "function"
+					featureUtils.DesyncSupported = type(sethiddenproperty) == "function" and type(setfflag) == "function" and type(getfflag) == "function"
 
 					local function fn21(arg)
 						for _, v25 in ipairs({ tostring(arg), arg }) do
@@ -21376,7 +21377,7 @@ end
 					end
 
 					local function fn23()
-						tbl12.SetDesync(false)
+						featureUtils.SetDesync(false)
 						local desyncT = toggles.DesyncT
 
 						if desyncT then
@@ -21384,8 +21385,8 @@ end
 						end
 					end
 
-					tbl12.UpdateDesync = function()
-						if flag11 or not tbl8.Desync then
+					featureUtils.UpdateDesync = function()
+						if isUnloading or not toggleStates.Desync then
 							return
 						end
 						local now3 = os.clock()
@@ -21398,8 +21399,8 @@ end
 							end
 						end
 
-						local v25, v26, v27 = tbl12.Char()
-						local flag13 = v25 ~= localPlayer.Character
+						local v25, v26, v27 = featureUtils.Char()
+						local flag13 = v25 ~= LocalPlayer.Character
 						local flag14
 
 						if flag13 then
@@ -21440,11 +21441,11 @@ end
 							return fn23()
 						end
 						task.wait(0.1)
-						if v29 ~= n38 or flag11 or not tbl8.Desync or v28 ~= v24 then
+						if v29 ~= n38 or isUnloading or not toggleStates.Desync or v28 ~= v24 then
 							return
 						end
 
-						if not v28.Parent or v25 ~= localPlayer.Character or v27.Health <= 0 then
+						if not v28.Parent or v25 ~= LocalPlayer.Character or v27.Health <= 0 then
 							return fn22()
 						end
 
@@ -21455,13 +21456,13 @@ end
 						n36 = os.clock() + 0.14
 					end
 
-					tbl12.SetDesync = function(arg)
-						local desync = arg == true and not flag11 and tbl12.DesyncSupported == true
-						if tbl8.Desync == desync then
+					featureUtils.SetDesync = function(arg)
+						local desync = arg == true and not isUnloading and featureUtils.DesyncSupported == true
+						if toggleStates.Desync == desync then
 							return
 						end
-						tbl12.SetRuntimeConnection("Desync", nil, false)
-						tbl8.Desync = desync
+						featureUtils.SetRuntimeConnection("Desync", nil, false)
+						toggleStates.Desync = desync
 
 						if desync then
 							local ok, result = pcall(getfflag, "S2PhysicsSenderRate")
@@ -21485,7 +21486,7 @@ end
 							end
 						end
 
-						tbl12.SetRuntimeConnection("Desync", RunService.Heartbeat, desync, tbl12.UpdateDesync)
+						featureUtils.SetRuntimeConnection("Desync", RunService.Heartbeat, desync, featureUtils.UpdateDesync)
 					end
 				end
 			end
@@ -21502,9 +21503,9 @@ end
 						}
 
 						local look = ReplicatedStorage.CharacterEvents.Look
-						tbl7.LookFigures = lookFigures
+						sharedState.LookFigures = lookFigures
 
-						tbl12.ClearLookFigureCharacter = function()
+						featureUtils.ClearLookFigureCharacter = function()
 							if lookFigures.Root and lookFigures.Root.Parent then
 								lookFigures.Root.C0 = lookFigures.Saved[2]
 							end
@@ -21516,21 +21517,21 @@ end
 							v24.Saved = nil
 						end
 
-						tbl12.UpdateLookFigures = function(arg)
-							if flag11 or not lookFigures.Enabled then
+						featureUtils.UpdateLookFigures = function(arg)
+							if isUnloading or not lookFigures.Enabled then
 								return
 							end
-							local v23, rootJoint, v24 = tbl12.Char()
+							local v23, rootJoint, v24 = featureUtils.Char()
 							local torso = v23 and v23:FindFirstChild("Torso")
 							local neck = torso and torso:FindFirstChild("Neck")
 							rootJoint = rootJoint and rootJoint:FindFirstChild("RootJoint")
 							torso = torso and torso:FindFirstChild("Right Shoulder")
 							if not (v24 and v24.Health > 0 and neck and rootJoint and torso) then
-								return tbl12.ClearLookFigureCharacter()
+								return featureUtils.ClearLookFigureCharacter()
 							end
 
 							if lookFigures.Character ~= v23 or lookFigures.Root ~= rootJoint then
-								tbl12.ClearLookFigureCharacter()
+								featureUtils.ClearLookFigureCharacter()
 								local v25 = lookFigures
 								local v26 = lookFigures
 								local saved = { neck.C0, rootJoint.C0, torso.C0 }
@@ -21585,8 +21586,8 @@ end
 							end
 						end
 
-						tbl12.SetLookFigures = function(arg)
-							local enabled = arg and not flag11
+						featureUtils.SetLookFigures = function(arg)
+							local enabled = arg and not isUnloading
 							if lookFigures.Enabled == enabled then
 								return
 							end
@@ -21601,10 +21602,10 @@ end
 								end
 
 								antiLag:SetDisabled(true)
-								tbl12.UpdateLookFigures(0)
+								featureUtils.UpdateLookFigures(0)
 							else
-								local saved = lookFigures.Character == localPlayer.Character and lookFigures.Saved
-								tbl12.ClearLookFigureCharacter()
+								local saved = lookFigures.Character == LocalPlayer.Character and lookFigures.Saved
+								featureUtils.ClearLookFigureCharacter()
 								local v23 = lookFigures
 								lookFigures.Clock = 0
 								v23.Cycle = 0
@@ -21624,18 +21625,18 @@ end
 								lookFigures.AntiLag = nil
 							end
 
-							tbl12.SetRuntimeConnection("LookFigures", RunService.Heartbeat, enabled, tbl12.UpdateLookFigures)
+							featureUtils.SetRuntimeConnection("LookFigures", RunService.Heartbeat, enabled, featureUtils.UpdateLookFigures)
 						end
 					end
 
-					tbl12.AntiGrab = function()
-						if flag11 then
+					featureUtils.AntiGrab = function()
+						if isUnloading then
 							return
 						end
 
-						if isHeld.Value and tbl8.AntiGrab and not tbl7.States["Anti Grab"] then
-							tbl11.Struggle:FireServer()
-							local v23, v24, v25 = tbl12.Char()
+						if isHeld.Value and toggleStates.AntiGrab and not sharedState.States["Anti Grab"] then
+							remotes.Struggle:FireServer()
+							local v23, v24, v25 = featureUtils.Char()
 							local torso = v23 and v23:FindFirstChild("Torso")
 							local neck = torso and torso:FindFirstChild("Neck")
 							if not (v25 and torso) then
@@ -21643,17 +21644,17 @@ end
 							end
 							v25.RequiresNeck = false
 							v25.AutoRotate = false
-							tbl12.ResetVelocity(v24 or torso)
+							featureUtils.ResetVelocity(v24 or torso)
 							local position = torso.Position
 							local lookVector = torso.CFrame.LookVector
 							local unit = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
-							tbl7.States["Anti Grab"] = true
-							local flag12 = tbl9.AGType == "Escapes Anything, but buggy"
-							local sit = tbl9.AGType == "Anti-Kill"
-							local flag13 = tbl9.AGType == "No Ragdoll"
+							sharedState.States["Anti Grab"] = true
+							local flag12 = settings.AGType == "Escapes Anything, but buggy"
+							local sit = settings.AGType == "Anti-Kill"
+							local flag13 = settings.AGType == "No Ragdoll"
 
 							if flag12 then
-								task.spawn(tbl12.ExtraEscape)
+								task.spawn(featureUtils.ExtraEscape)
 							end
 
 							local now3 = tick()
@@ -21665,12 +21666,12 @@ end
 								local now4 = tick()
 
 								if now4 >= n36 then
-									tbl11.Struggle:FireServer()
+									remotes.Struggle:FireServer()
 									n36 = now4 + 0.033333333333333333
 								end
 
 								if v24 and not flag12 and not flag13 and now4 >= n37 then
-									local ragdollRemote = tbl11.RagdollRemote
+									local ragdollRemote = remotes.RagdollRemote
 									local fireServer = ragdollRemote.FireServer
 									local n38
 
@@ -21685,15 +21686,15 @@ end
 								end
 
 								if flag12 and tick() - now3 > 2 then
-									task.spawn(tbl12.ExtraEscape)
+									task.spawn(featureUtils.ExtraEscape)
 									now3 = tick()
 								end
 
 								local moveDirection = v25.MoveDirection
 								local walkSpeed
 
-								if tbl8.WalkSpeed and tbl9.WalkSpeed > 16 then
-									walkSpeed = tbl9.WalkSpeed
+								if toggleStates.WalkSpeed and settings.WalkSpeed > 16 then
+									walkSpeed = settings.WalkSpeed
 								else
 									walkSpeed = 16
 								end
@@ -21712,7 +21713,7 @@ end
 									unit = unit:Lerp(vector.Unit, math.min(deltaTime * 12, 1)).Unit
 								end
 
-								tbl12.ResetVelocity(v24 or torso)
+								featureUtils.ResetVelocity(v24 or torso)
 
 								if v22 then
 									local v26 = torso
@@ -21727,8 +21728,8 @@ end
 								v25.Sit = sit
 
 								if not neck or not neck.Enabled then
-									tbl12.ToggleCollisions(v23, false)
-									tbl12.RepositionLimbs(v23, true)
+									featureUtils.ToggleCollisions(v23, false)
+									featureUtils.RepositionLimbs(v23, true)
 								end
 
 								for _, v26 in ipairs(v25:GetPlayingAnimationTracks()) do
@@ -21741,8 +21742,8 @@ end
 									v24.Scream.Playing = false
 								end
 
-								if not isHeld.Value or not tbl8.AntiGrab then
-									tbl7.States["Anti Grab"] = false
+								if not isHeld.Value or not toggleStates.AntiGrab then
+									sharedState.States["Anti Grab"] = false
 
 									if sit then
 										task.delay(0.1, function()
@@ -21806,7 +21807,7 @@ end
 							end
 
 							if tbl16.Ragdoll and hrp and hrp.Parent then
-								tbl11.RagdollRemote:FireServer(hrp, 0.15)
+								remotes.RagdollRemote:FireServer(hrp, 0.15)
 							end
 
 							local v23 = tbl16
@@ -21830,7 +21831,7 @@ end
 							local seat = tbl16.Seat
 
 							if vehicle then
-								tbl7.ToyAuraReserved[vehicle] = tbl16.Reserved
+								sharedState.ToyAuraReserved[vehicle] = tbl16.Reserved
 
 								if tbl16.Type == "Train" then
 									if seat and seat.Parent then
@@ -21838,7 +21839,7 @@ end
 										seat.CanCollide = tbl16.CanCollide
 									end
 								else
-									tbl12.DestroyToy(vehicle)
+									featureUtils.DestroyToy(vehicle)
 								end
 							end
 
@@ -21846,19 +21847,19 @@ end
 						end
 
 						local function fn24()
-							local character = localPlayer.Character
+							local character = LocalPlayer.Character
 							local n36 = 0
 							local v23 = nil
 							local v24, v25, v26, gucciType, ragdolled, object, v27, seat
 
-							while tbl8.GucciAntiGrab do
+							while toggleStates.GucciAntiGrab do
 								local exitTo = nil
 								local vehicle, root, flag13, fn25, flag14, now3, cFrame2, n37, connection, flag15, flag16, now4, flag17, parent2, v28, bodyPosition, random, parent3, seatPart, flag18, occupant, playerFromCharacter
 
 								while true do
 									task.wait()
-									v24, v25, v26 = tbl12.Char()
-									gucciType = tbl9.GucciType
+									v24, v25, v26 = featureUtils.Char()
+									gucciType = settings.GucciType
 
 									if v24 ~= character then
 										character = v24
@@ -21869,7 +21870,7 @@ end
 										fn23()
 									end
 
-									if tbl8.GucciAntiGrab then
+									if toggleStates.GucciAntiGrab then
 										ragdolled = v26 and v26:FindFirstChild("Ragdolled")
 
 										if not (v25 and v26 and v26.Health > 0 and ragdolled) or isHeld.Value or ragdolled.Value then
@@ -21887,9 +21888,9 @@ end
 													exitTo = 25
 													break
 												else
-													v29 = tbl7.ToyAuraReserved[object]
+													v29 = sharedState.ToyAuraReserved[object]
 													v30 = nil
-													flag19 = not tbl8.GucciAntiGrab or tbl9.GucciType ~= gucciType or localPlayer.Character ~= v24
+													flag19 = not toggleStates.GucciAntiGrab or settings.GucciType ~= gucciType or LocalPlayer.Character ~= v24
 
 													if flag19 then
 														flag20 = flag19
@@ -21915,7 +21916,7 @@ end
 															CanCollide = seat2.CanCollide,
 														}
 
-														tbl7.ToyAuraReserved[object] = true
+														sharedState.ToyAuraReserved[object] = true
 														v23 = nil
 
 														if gucciType == "Train" then
@@ -21930,7 +21931,7 @@ end
 																break
 															else
 																fn25 = function()
-																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+																	local flag21 = tbl16 == v27 and toggleStates.GucciAntiGrab and settings.GucciType == gucciType and LocalPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
 
 																	if flag21 then
 																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
@@ -21973,15 +21974,15 @@ end
 																		connection:Disconnect()
 																	elseif n37 and os.clock() >= n37 then
 																		v27.Ragdoll = false
-																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		remotes.RagdollRemote:FireServer(v25, 0.15)
 																		connection:Disconnect()
 																	else
-																		tbl11.RagdollRemote:FireServer(v25, 0)
+																		remotes.RagdollRemote:FireServer(v25, 0)
 																	end
 																end)
 
 																table.insert(v27.Connections, connection)
-																tbl11.RagdollRemote:FireServer(v25, 0)
+																remotes.RagdollRemote:FireServer(v25, 0)
 																task.wait()
 
 																if not fn25() then
@@ -22015,7 +22016,7 @@ end
 																		n37 = now4 + 0.15
 
 																		if now4 < n36 then
-																			tbl12.Teleport(v25, cFrame2)
+																			featureUtils.Teleport(v25, cFrame2)
 																		end
 
 																		flag17 = gucciType ~= "Train" and root
@@ -22023,7 +22024,7 @@ end
 
 																		if parent2 then
 																			v28 = root:IsDescendantOf(workspace.PlotItems)
-																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																			parent2 = v28 or featureUtils.IsNetworkOwner(root) or featureUtils.SNO(root)
 																		end
 
 																		if parent2 then
@@ -22051,7 +22052,7 @@ end
 																				flag18 = seatPart and v26.SeatPart ~= seat
 
 																				if flag18 then
-																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																					notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 																				end
 
 																				if tbl16 == v27 then
@@ -22059,7 +22060,7 @@ end
 																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 																					if playerFromCharacter then
-																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																						notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 																					end
 
 																					fn22()
@@ -22070,7 +22071,7 @@ end
 																				end
 
 																				fn21(v26)
-																				if tbl8.GucciAntiGrab then
+																				if toggleStates.GucciAntiGrab then
 																					continue
 																				end
 																			end
@@ -22110,7 +22111,7 @@ end
 																break
 															else
 																fn25 = function()
-																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+																	local flag21 = tbl16 == v27 and toggleStates.GucciAntiGrab and settings.GucciType == gucciType and LocalPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
 
 																	if flag21 then
 																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
@@ -22153,15 +22154,15 @@ end
 																		connection:Disconnect()
 																	elseif n37 and os.clock() >= n37 then
 																		v27.Ragdoll = false
-																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		remotes.RagdollRemote:FireServer(v25, 0.15)
 																		connection:Disconnect()
 																	else
-																		tbl11.RagdollRemote:FireServer(v25, 0)
+																		remotes.RagdollRemote:FireServer(v25, 0)
 																	end
 																end)
 
 																table.insert(v27.Connections, connection)
-																tbl11.RagdollRemote:FireServer(v25, 0)
+																remotes.RagdollRemote:FireServer(v25, 0)
 																task.wait()
 
 																if not fn25() then
@@ -22195,7 +22196,7 @@ end
 																		n37 = now4 + 0.15
 
 																		if now4 < n36 then
-																			tbl12.Teleport(v25, cFrame2)
+																			featureUtils.Teleport(v25, cFrame2)
 																		end
 
 																		flag17 = gucciType ~= "Train" and root
@@ -22203,7 +22204,7 @@ end
 
 																		if parent2 then
 																			v28 = root:IsDescendantOf(workspace.PlotItems)
-																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																			parent2 = v28 or featureUtils.IsNetworkOwner(root) or featureUtils.SNO(root)
 																		end
 
 																		if parent2 then
@@ -22231,7 +22232,7 @@ end
 																				flag18 = seatPart and v26.SeatPart ~= seat
 
 																				if flag18 then
-																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																					notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 																				end
 
 																				if tbl16 == v27 then
@@ -22239,7 +22240,7 @@ end
 																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 																					if playerFromCharacter then
-																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																						notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 																					end
 
 																					fn22()
@@ -22250,7 +22251,7 @@ end
 																				end
 
 																				fn21(v26)
-																				if tbl8.GucciAntiGrab then
+																				if toggleStates.GucciAntiGrab then
 																					continue
 																				end
 																			end
@@ -22265,14 +22266,14 @@ end
 													end
 												end
 											else
-												object = tbl12.SpawnToy(gucciType, CFrame.new(100000, 500000, 0), 2, true)
+												object = featureUtils.SpawnToy(gucciType, CFrame.new(100000, 500000, 0), 2, true)
 												seat2 = object and object:WaitForChild("VehicleSeat", 1.25)
 												v29 = nil
 
 												if seat2 then
-													v30 = tbl12.FindNicePart(object)
+													v30 = featureUtils.FindNicePart(object)
 													v29 = nil
-													flag19 = not tbl8.GucciAntiGrab or tbl9.GucciType ~= gucciType or localPlayer.Character ~= v24
+													flag19 = not toggleStates.GucciAntiGrab or settings.GucciType ~= gucciType or LocalPlayer.Character ~= v24
 
 													if flag19 then
 														flag20 = flag19
@@ -22298,7 +22299,7 @@ end
 															CanCollide = seat2.CanCollide,
 														}
 
-														tbl7.ToyAuraReserved[object] = true
+														sharedState.ToyAuraReserved[object] = true
 														v23 = nil
 
 														if gucciType == "Train" then
@@ -22313,7 +22314,7 @@ end
 																break
 															else
 																fn25 = function()
-																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+																	local flag21 = tbl16 == v27 and toggleStates.GucciAntiGrab and settings.GucciType == gucciType and LocalPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
 
 																	if flag21 then
 																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
@@ -22356,15 +22357,15 @@ end
 																		connection:Disconnect()
 																	elseif n37 and os.clock() >= n37 then
 																		v27.Ragdoll = false
-																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		remotes.RagdollRemote:FireServer(v25, 0.15)
 																		connection:Disconnect()
 																	else
-																		tbl11.RagdollRemote:FireServer(v25, 0)
+																		remotes.RagdollRemote:FireServer(v25, 0)
 																	end
 																end)
 
 																table.insert(v27.Connections, connection)
-																tbl11.RagdollRemote:FireServer(v25, 0)
+																remotes.RagdollRemote:FireServer(v25, 0)
 																task.wait()
 
 																if not fn25() then
@@ -22398,7 +22399,7 @@ end
 																		n37 = now4 + 0.15
 
 																		if now4 < n36 then
-																			tbl12.Teleport(v25, cFrame2)
+																			featureUtils.Teleport(v25, cFrame2)
 																		end
 
 																		flag17 = gucciType ~= "Train" and root
@@ -22406,7 +22407,7 @@ end
 
 																		if parent2 then
 																			v28 = root:IsDescendantOf(workspace.PlotItems)
-																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																			parent2 = v28 or featureUtils.IsNetworkOwner(root) or featureUtils.SNO(root)
 																		end
 
 																		if parent2 then
@@ -22434,7 +22435,7 @@ end
 																				flag18 = seatPart and v26.SeatPart ~= seat
 
 																				if flag18 then
-																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																					notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 																				end
 
 																				if tbl16 == v27 then
@@ -22442,7 +22443,7 @@ end
 																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 																					if playerFromCharacter then
-																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																						notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 																					end
 
 																					fn22()
@@ -22453,7 +22454,7 @@ end
 																				end
 
 																				fn21(v26)
-																				if tbl8.GucciAntiGrab then
+																				if toggleStates.GucciAntiGrab then
 																					continue
 																				end
 																			end
@@ -22493,7 +22494,7 @@ end
 																break
 															else
 																fn25 = function()
-																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+																	local flag21 = tbl16 == v27 and toggleStates.GucciAntiGrab and settings.GucciType == gucciType and LocalPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
 
 																	if flag21 then
 																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
@@ -22536,15 +22537,15 @@ end
 																		connection:Disconnect()
 																	elseif n37 and os.clock() >= n37 then
 																		v27.Ragdoll = false
-																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		remotes.RagdollRemote:FireServer(v25, 0.15)
 																		connection:Disconnect()
 																	else
-																		tbl11.RagdollRemote:FireServer(v25, 0)
+																		remotes.RagdollRemote:FireServer(v25, 0)
 																	end
 																end)
 
 																table.insert(v27.Connections, connection)
-																tbl11.RagdollRemote:FireServer(v25, 0)
+																remotes.RagdollRemote:FireServer(v25, 0)
 																task.wait()
 
 																if not fn25() then
@@ -22578,7 +22579,7 @@ end
 																		n37 = now4 + 0.15
 
 																		if now4 < n36 then
-																			tbl12.Teleport(v25, cFrame2)
+																			featureUtils.Teleport(v25, cFrame2)
 																		end
 
 																		flag17 = gucciType ~= "Train" and root
@@ -22586,7 +22587,7 @@ end
 
 																		if parent2 then
 																			v28 = root:IsDescendantOf(workspace.PlotItems)
-																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																			parent2 = v28 or featureUtils.IsNetworkOwner(root) or featureUtils.SNO(root)
 																		end
 
 																		if parent2 then
@@ -22614,7 +22615,7 @@ end
 																				flag18 = seatPart and v26.SeatPart ~= seat
 
 																				if flag18 then
-																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																					notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 																				end
 
 																				if tbl16 == v27 then
@@ -22622,7 +22623,7 @@ end
 																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 																					if playerFromCharacter then
-																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																						notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 																					end
 
 																					fn22()
@@ -22633,7 +22634,7 @@ end
 																				end
 
 																				fn21(v26)
-																				if tbl8.GucciAntiGrab then
+																				if toggleStates.GucciAntiGrab then
 																					continue
 																				end
 																			end
@@ -22648,7 +22649,7 @@ end
 													end
 												else
 													v30 = seat2
-													flag19 = not tbl8.GucciAntiGrab or tbl9.GucciType ~= gucciType or localPlayer.Character ~= v24
+													flag19 = not toggleStates.GucciAntiGrab or settings.GucciType ~= gucciType or LocalPlayer.Character ~= v24
 
 													if flag19 then
 														flag20 = flag19
@@ -22674,7 +22675,7 @@ end
 															CanCollide = seat2.CanCollide,
 														}
 
-														tbl7.ToyAuraReserved[object] = true
+														sharedState.ToyAuraReserved[object] = true
 														v23 = nil
 
 														if gucciType == "Train" then
@@ -22689,7 +22690,7 @@ end
 																break
 															else
 																fn25 = function()
-																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+																	local flag21 = tbl16 == v27 and toggleStates.GucciAntiGrab and settings.GucciType == gucciType and LocalPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
 
 																	if flag21 then
 																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
@@ -22732,15 +22733,15 @@ end
 																		connection:Disconnect()
 																	elseif n37 and os.clock() >= n37 then
 																		v27.Ragdoll = false
-																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		remotes.RagdollRemote:FireServer(v25, 0.15)
 																		connection:Disconnect()
 																	else
-																		tbl11.RagdollRemote:FireServer(v25, 0)
+																		remotes.RagdollRemote:FireServer(v25, 0)
 																	end
 																end)
 
 																table.insert(v27.Connections, connection)
-																tbl11.RagdollRemote:FireServer(v25, 0)
+																remotes.RagdollRemote:FireServer(v25, 0)
 																task.wait()
 
 																if not fn25() then
@@ -22774,7 +22775,7 @@ end
 																		n37 = now4 + 0.15
 
 																		if now4 < n36 then
-																			tbl12.Teleport(v25, cFrame2)
+																			featureUtils.Teleport(v25, cFrame2)
 																		end
 
 																		flag17 = gucciType ~= "Train" and root
@@ -22782,7 +22783,7 @@ end
 
 																		if parent2 then
 																			v28 = root:IsDescendantOf(workspace.PlotItems)
-																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																			parent2 = v28 or featureUtils.IsNetworkOwner(root) or featureUtils.SNO(root)
 																		end
 
 																		if parent2 then
@@ -22810,7 +22811,7 @@ end
 																				flag18 = seatPart and v26.SeatPart ~= seat
 
 																				if flag18 then
-																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																					notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 																				end
 
 																				if tbl16 == v27 then
@@ -22818,7 +22819,7 @@ end
 																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 																					if playerFromCharacter then
-																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																						notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 																					end
 
 																					fn22()
@@ -22829,7 +22830,7 @@ end
 																				end
 
 																				fn21(v26)
-																				if tbl8.GucciAntiGrab then
+																				if toggleStates.GucciAntiGrab then
 																					continue
 																				end
 																			end
@@ -22869,7 +22870,7 @@ end
 																break
 															else
 																fn25 = function()
-																	local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+																	local flag21 = tbl16 == v27 and toggleStates.GucciAntiGrab and settings.GucciType == gucciType and LocalPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
 
 																	if flag21 then
 																		flag21 = not (seat.Occupant and seat.Occupant ~= v26)
@@ -22912,15 +22913,15 @@ end
 																		connection:Disconnect()
 																	elseif n37 and os.clock() >= n37 then
 																		v27.Ragdoll = false
-																		tbl11.RagdollRemote:FireServer(v25, 0.15)
+																		remotes.RagdollRemote:FireServer(v25, 0.15)
 																		connection:Disconnect()
 																	else
-																		tbl11.RagdollRemote:FireServer(v25, 0)
+																		remotes.RagdollRemote:FireServer(v25, 0)
 																	end
 																end)
 
 																table.insert(v27.Connections, connection)
-																tbl11.RagdollRemote:FireServer(v25, 0)
+																remotes.RagdollRemote:FireServer(v25, 0)
 																task.wait()
 
 																if not fn25() then
@@ -22954,7 +22955,7 @@ end
 																		n37 = now4 + 0.15
 
 																		if now4 < n36 then
-																			tbl12.Teleport(v25, cFrame2)
+																			featureUtils.Teleport(v25, cFrame2)
 																		end
 
 																		flag17 = gucciType ~= "Train" and root
@@ -22962,7 +22963,7 @@ end
 
 																		if parent2 then
 																			v28 = root:IsDescendantOf(workspace.PlotItems)
-																			parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+																			parent2 = v28 or featureUtils.IsNetworkOwner(root) or featureUtils.SNO(root)
 																		end
 
 																		if parent2 then
@@ -22990,7 +22991,7 @@ end
 																				flag18 = seatPart and v26.SeatPart ~= seat
 
 																				if flag18 then
-																					fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																					notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 																				end
 
 																				if tbl16 == v27 then
@@ -22998,7 +22999,7 @@ end
 																					playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 																					if playerFromCharacter then
-																						fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																						notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 																					end
 
 																					fn22()
@@ -23009,7 +23010,7 @@ end
 																				end
 
 																				fn21(v26)
-																				if tbl8.GucciAntiGrab then
+																				if toggleStates.GucciAntiGrab then
 																					continue
 																				end
 																			end
@@ -23049,7 +23050,7 @@ end
 											fn23()
 										else
 											fn25 = function()
-												local flag21 = tbl16 == v27 and tbl8.GucciAntiGrab and tbl9.GucciType == gucciType and localPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
+												local flag21 = tbl16 == v27 and toggleStates.GucciAntiGrab and settings.GucciType == gucciType and LocalPlayer.Character == v24 and vehicle.Parent and seat.Parent and v25.Parent and v26.Parent and v26.Health > 0 and not isHeld.Value and not ragdolled.Value
 
 												if flag21 then
 													flag21 = not (seat.Occupant and seat.Occupant ~= v26)
@@ -23092,15 +23093,15 @@ end
 													connection:Disconnect()
 												elseif n37 and os.clock() >= n37 then
 													v27.Ragdoll = false
-													tbl11.RagdollRemote:FireServer(v25, 0.15)
+													remotes.RagdollRemote:FireServer(v25, 0.15)
 													connection:Disconnect()
 												else
-													tbl11.RagdollRemote:FireServer(v25, 0)
+													remotes.RagdollRemote:FireServer(v25, 0)
 												end
 											end)
 
 											table.insert(v27.Connections, connection)
-											tbl11.RagdollRemote:FireServer(v25, 0)
+											remotes.RagdollRemote:FireServer(v25, 0)
 											task.wait()
 
 											if not fn25() then
@@ -23145,7 +23146,7 @@ end
 													n37 = now4 + 0.15
 
 													if now4 < n36 then
-														tbl12.Teleport(v25, cFrame2)
+														featureUtils.Teleport(v25, cFrame2)
 													end
 
 													flag17 = gucciType ~= "Train" and root
@@ -23153,7 +23154,7 @@ end
 
 													if parent2 then
 														v28 = root:IsDescendantOf(workspace.PlotItems)
-														parent2 = v28 or tbl12.IsNetworkOwner(root) or tbl12.SNO(root)
+														parent2 = v28 or featureUtils.IsNetworkOwner(root) or featureUtils.SNO(root)
 													end
 
 													if parent2 then
@@ -23184,7 +23185,7 @@ end
 															flag18 = seatPart and v26.SeatPart ~= seat
 
 															if flag18 then
-																fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+																notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 															end
 
 															if tbl16 == v27 then
@@ -23192,7 +23193,7 @@ end
 																playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 																if playerFromCharacter then
-																	fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																	notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 																end
 
 																fn22()
@@ -23216,7 +23217,7 @@ end
 														flag18 = seatPart and v26.SeatPart ~= seat
 
 														if flag18 then
-															fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+															notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 														end
 
 														if tbl16 == v27 then
@@ -23224,7 +23225,7 @@ end
 															playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 															if playerFromCharacter then
-																fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+																notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 															end
 
 															fn22()
@@ -23248,8 +23249,8 @@ end
 											flag21 = object and gucciType ~= "Train"
 
 											if flag21 then
-												tbl7.ToyAuraReserved[object] = nil
-												tbl12.DestroyToy(object)
+												sharedState.ToyAuraReserved[object] = nil
+												featureUtils.DestroyToy(object)
 											end
 
 											continue
@@ -23288,7 +23289,7 @@ end
 											flag18 = seatPart and v26.SeatPart ~= seat
 
 											if flag18 then
-												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+												notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 											end
 
 											if tbl16 == v27 then
@@ -23296,7 +23297,7 @@ end
 												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 												if playerFromCharacter then
-													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+													notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 												end
 
 												fn22()
@@ -23350,7 +23351,7 @@ end
 											flag18 = seatPart and v26.SeatPart ~= seat
 
 											if flag18 then
-												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+												notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 											end
 
 											if tbl16 == v27 then
@@ -23358,7 +23359,7 @@ end
 												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 												if playerFromCharacter then
-													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+													notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 												end
 
 												fn22()
@@ -23381,8 +23382,8 @@ end
 											flag21 = object and gucciType ~= "Train"
 
 											if flag21 then
-												tbl7.ToyAuraReserved[object] = nil
-												tbl12.DestroyToy(object)
+												sharedState.ToyAuraReserved[object] = nil
+												featureUtils.DestroyToy(object)
 											end
 
 											continue
@@ -23421,7 +23422,7 @@ end
 											flag18 = seatPart and v26.SeatPart ~= seat
 
 											if flag18 then
-												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+												notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 											end
 
 											if tbl16 == v27 then
@@ -23429,7 +23430,7 @@ end
 												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 												if playerFromCharacter then
-													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+													notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 												end
 
 												fn22()
@@ -23483,7 +23484,7 @@ end
 											flag18 = seatPart and v26.SeatPart ~= seat
 
 											if flag18 then
-												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+												notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 											end
 
 											if tbl16 == v27 then
@@ -23491,7 +23492,7 @@ end
 												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 												if playerFromCharacter then
-													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+													notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 												end
 
 												fn22()
@@ -23512,7 +23513,7 @@ end
 											continue
 										elseif exitTo == 25 then
 											if v23 ~= gucciType then
-												local v29 = fn18
+												local v29 = notify
 												local str5
 
 												if object then
@@ -23530,8 +23531,8 @@ end
 											flag21 = object and gucciType ~= "Train"
 
 											if flag21 then
-												tbl7.ToyAuraReserved[object] = nil
-												tbl12.DestroyToy(object)
+												sharedState.ToyAuraReserved[object] = nil
+												featureUtils.DestroyToy(object)
 											end
 
 											continue
@@ -23570,7 +23571,7 @@ end
 											flag18 = seatPart and v26.SeatPart ~= seat
 
 											if flag18 then
-												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+												notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 											end
 
 											if tbl16 == v27 then
@@ -23578,7 +23579,7 @@ end
 												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 												if playerFromCharacter then
-													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+													notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 												end
 
 												fn22()
@@ -23632,7 +23633,7 @@ end
 											flag18 = seatPart and v26.SeatPart ~= seat
 
 											if flag18 then
-												fn18("You can't sit on other Vehicles while in Gucci!", "Invincibility")
+												notify("You can't sit on other Vehicles while in Gucci!", "Invincibility")
 											end
 
 											if tbl16 == v27 then
@@ -23640,7 +23641,7 @@ end
 												playerFromCharacter = occupant and occupant ~= v26 and Players:GetPlayerFromCharacter(occupant.Parent)
 
 												if playerFromCharacter then
-													fn18(playerFromCharacter.DisplayName .. " sat on your gucci!")
+													notify(playerFromCharacter.DisplayName .. " sat on your gucci!")
 												end
 
 												fn22()
@@ -23667,9 +23668,9 @@ end
 							end
 						end
 
-						tbl12.SetGucciAntiGrab = function(arg)
-							tbl8.GucciAntiGrab = arg and not flag11
-							if not tbl8.GucciAntiGrab then
+						featureUtils.SetGucciAntiGrab = function(arg)
+							toggleStates.GucciAntiGrab = arg and not isUnloading
+							if not toggleStates.GucciAntiGrab then
 								fn23()
 								return
 							end
@@ -23687,7 +23688,7 @@ end
 								if not ok then
 									warn("[GUCCI Anti Grab] " .. tostring(result))
 
-									if not flag11 then
+									if not isUnloading then
 										toggles.GucciAntiGrab:SetValue(false)
 									end
 								end
@@ -23700,18 +23701,18 @@ end
 					local espConfig, tbl16, tbl17, obj, fn21, fn22
 
 					do
-						tbl12.IsWaitingPCLD = function(arg)
+						featureUtils.IsWaitingPCLD = function(arg)
 							return arg and arg.Position == Vector3.zero
 						end
 
-						tbl12.ClearPCLDAssignment = function(arg, arg2)
+						featureUtils.ClearPCLDAssignment = function(arg, arg2)
 							if not arg2 then
 								return
 							end
 							local player = arg2 and arg2.Player
 
-							if player and tbl7.PCLD[player] == arg then
-								tbl7.PCLD[player] = nil
+							if player and sharedState.PCLD[player] == arg then
+								sharedState.PCLD[player] = nil
 							end
 
 							table.clear(arg2)
@@ -23721,22 +23722,22 @@ end
 								arg:SetAttribute("CurrentlyAssignedTo", nil)
 							end
 
-							if tbl8.PCLDESP and tbl12.UpdatePCLDESP then
-								tbl12.UpdatePCLDESP(arg)
+							if toggleStates.PCLDESP and featureUtils.UpdatePCLDESP then
+								featureUtils.UpdatePCLDESP(arg)
 							end
 						end
 
-						tbl12.UpdatePCLDAssignments = function()
-							local pcldTracker = tbl7.PCLDTracker
+						featureUtils.UpdatePCLDAssignments = function()
+							local pcldTracker = sharedState.PCLDTracker
 							local players = pcldTracker.Players
 							local positions = pcldTracker.Positions
 							table.clear(players)
 							table.clear(positions)
 							local flag12 = false
 
-							for k in tbl7.PCLDParts, nil, nil do
+							for k in sharedState.PCLDParts, nil, nil do
 								local v23 = pcldTracker.PartStates[k]
-								local flag13 = k.Parent and k.Name == "PlayerCharacterLocationDetector" and not tbl12.IsWaitingPCLD(k)
+								local flag13 = k.Parent and k.Name == "PlayerCharacterLocationDetector" and not featureUtils.IsWaitingPCLD(k)
 
 								if flag13 then
 									flag13 = not v23 or not v23.Player or v23.Player.Parent ~= Players
@@ -23749,8 +23750,8 @@ end
 							end
 
 							if flag12 then
-								for _, v23 in ipairs(tbl7.PlayerList) do
-									local v24, v25, v26 = tbl12.Char(v23)
+								for _, v23 in ipairs(sharedState.PlayerList) do
+									local v24, v25, v26 = featureUtils.Char(v23)
 
 									if v25 and v26 and v26.Health > 0 then
 										players[#players + 1] = v23
@@ -23759,16 +23760,16 @@ end
 								end
 							end
 
-							for k in tbl7.PCLDParts, nil, nil do
+							for k in sharedState.PCLDParts, nil, nil do
 								if not k.Parent or k.Name ~= "PlayerCharacterLocationDetector" then
 									local v23 = pcldTracker.PartStates[k]
 
 									if v23 then
-										tbl12.ClearPCLDAssignment(k, v23)
+										featureUtils.ClearPCLDAssignment(k, v23)
 									end
 
 									pcldTracker.PartStates[k] = nil
-									tbl7.PCLDParts[k] = nil
+									sharedState.PCLDParts[k] = nil
 								else
 									local tbl18 = pcldTracker.PartStates[k]
 
@@ -23777,26 +23778,26 @@ end
 										pcldTracker.PartStates[k] = tbl18
 									end
 
-									if tbl12.IsWaitingPCLD(k) then
+									if featureUtils.IsWaitingPCLD(k) then
 										if tbl18.Player or tbl18.Candidate or tbl18.Hits ~= 0 or k:GetAttribute("CurrentlyAssignedTo") ~= nil then
-											tbl12.ClearPCLDAssignment(k, tbl18)
+											featureUtils.ClearPCLDAssignment(k, tbl18)
 										end
 									else
-										if tbl8.PCLDESP and tbl12.CreatePCLDESP then
-											tbl12.CreatePCLDESP(k)
+										if toggleStates.PCLDESP and featureUtils.CreatePCLDESP then
+											featureUtils.CreatePCLDESP(k)
 										end
 
 										local position, huge, huge2, v23, n36, v24, v25, v26, flag13, pcldesp, updatePCLDESP
 
 										if tbl18.Player then
 											if tbl18.Player.Parent == Players then
-												tbl7.PCLD[tbl18.Player] = k
+												sharedState.PCLD[tbl18.Player] = k
 
-												if tbl8.PCLDESP and tbl12.UpdatePCLDESP then
-													tbl12.UpdatePCLDESP(k)
+												if toggleStates.PCLDESP and featureUtils.UpdatePCLDESP then
+													featureUtils.UpdatePCLDESP(k)
 												end
 											else
-												tbl12.ClearPCLDAssignment(k, tbl18)
+												featureUtils.ClearPCLDAssignment(k, tbl18)
 												position = k.Position
 												huge = math.huge
 												huge2 = math.huge
@@ -23817,7 +23818,7 @@ end
 
 												v25 = math.sqrt(huge)
 												v26 = math.sqrt(huge2)
-												flag13 = v23 and not tbl7.PCLD[v23] and v25 <= pcldTracker.MaxDistance and v26 - v25 >= pcldTracker.MinMargin
+												flag13 = v23 and not sharedState.PCLD[v23] and v25 <= pcldTracker.MaxDistance and v26 - v25 >= pcldTracker.MinMargin
 
 												if flag13 then
 													if tbl18.Candidate == v23 then
@@ -23831,13 +23832,13 @@ end
 														tbl18.Player = v23
 														tbl18.Candidate = nil
 														tbl18.Hits = 0
-														tbl7.PCLD[v23] = k
+														sharedState.PCLD[v23] = k
 														k:SetAttribute("CurrentlyAssignedTo", v23.Name)
-														pcldesp = tbl8.PCLDESP
-														updatePCLDESP = pcldesp and tbl12.UpdatePCLDESP
+														pcldesp = toggleStates.PCLDESP
+														updatePCLDESP = pcldesp and featureUtils.UpdatePCLDESP
 
 														if updatePCLDESP then
-															tbl12.UpdatePCLDESP(k)
+															featureUtils.UpdatePCLDESP(k)
 														end
 													end
 												else
@@ -23866,7 +23867,7 @@ end
 
 											v25 = math.sqrt(huge)
 											v26 = math.sqrt(huge2)
-											flag13 = v23 and not tbl7.PCLD[v23] and v25 <= pcldTracker.MaxDistance and v26 - v25 >= pcldTracker.MinMargin
+											flag13 = v23 and not sharedState.PCLD[v23] and v25 <= pcldTracker.MaxDistance and v26 - v25 >= pcldTracker.MinMargin
 
 											if flag13 then
 												if tbl18.Candidate == v23 then
@@ -23880,13 +23881,13 @@ end
 													tbl18.Player = v23
 													tbl18.Candidate = nil
 													tbl18.Hits = 0
-													tbl7.PCLD[v23] = k
+													sharedState.PCLD[v23] = k
 													k:SetAttribute("CurrentlyAssignedTo", v23.Name)
-													pcldesp = tbl8.PCLDESP
-													updatePCLDESP = pcldesp and tbl12.UpdatePCLDESP
+													pcldesp = toggleStates.PCLDESP
+													updatePCLDESP = pcldesp and featureUtils.UpdatePCLDESP
 
 													if updatePCLDESP then
-														tbl12.UpdatePCLDESP(k)
+														featureUtils.UpdatePCLDESP(k)
 													end
 												end
 											else
@@ -23899,11 +23900,11 @@ end
 							end
 						end
 
-						tbl12.DetectPCLD = function(arg)
-							return tbl7.PCLD[arg]
+						featureUtils.DetectPCLD = function(arg)
+							return sharedState.PCLD[arg]
 						end
 
-						espConfig = tbl7.ESPConfig
+						espConfig = sharedState.ESPConfig
 
 						do
 							local tbl18 = {}
@@ -23946,7 +23947,7 @@ end
 								end
 							end
 
-							tbl12.GetFont = function(arg)
+							featureUtils.GetFont = function(arg)
 								local str5 = arg or "Arial"
 								if tbl18[str5] then
 									return tbl18[str5]
@@ -23975,7 +23976,7 @@ end
 								return font
 							end
 
-							tbl12.GetPlayerIcon = function(arg, arg2)
+							featureUtils.GetPlayerIcon = function(arg, arg2)
 								local ok, result = pcall(function()
 									return Players:GetUserThumbnailAsync(arg.UserId, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize["Size" .. (arg2 or "48x48")])
 								end)
@@ -23999,7 +24000,7 @@ end
 								fn21(tbl16.Players, arg, arg2)
 							end
 
-							tbl12.UpdatePlayerESP = function(arg)
+							featureUtils.UpdatePlayerESP = function(arg)
 								local v23 = tbl16.Players[arg]
 								local player = espConfig.Player
 								if not v23 then
@@ -24009,7 +24010,7 @@ end
 								if not (arg.Parent and v23.Player.Parent and v23.Head.Parent and v23.Highlight.Parent and v23.Billboard.Parent) then
 									return fn22(arg, v23)
 								end
-								local playerESP = tbl8.PlayerESP
+								local playerESP = toggleStates.PlayerESP
 								v23.Highlight.FillColor = player.FillColor
 								v23.Highlight.OutlineColor = player.OutlineColor
 								v23.Highlight.FillTransparency = player.FillTransparency
@@ -24024,10 +24025,10 @@ end
 								v23.Label.TextTransparency = player.NameTransparency
 								v23.Label.TextStrokeColor3 = player.NameOutlineColor
 								v23.Label.TextStrokeTransparency = player.NameOutlineTransparency
-								v23.Label.FontFace = tbl12.GetFont(player.NameFont)
+								v23.Label.FontFace = featureUtils.GetFont(player.NameFont)
 							end
 
-							tbl12.RemovePlayerESP = function(arg)
+							featureUtils.RemovePlayerESP = function(arg)
 								local v23 = obj[arg]
 
 								if v23 then
@@ -24045,7 +24046,7 @@ end
 								end
 							end
 
-							tbl12.CreatePlayerESP = function(arg)
+							featureUtils.CreatePlayerESP = function(arg)
 								local v23 = obj2[arg]
 								if v23 then
 									task.spawn(v23, arg.Character)
@@ -24054,7 +24055,7 @@ end
 								local v24 = nil
 
 								task.spawn(function()
-									v24 = tbl12.GetPlayerIcon(arg)
+									v24 = featureUtils.GetPlayerIcon(arg)
 									local v25 = obj3[arg]
 
 									if v25 then
@@ -24064,12 +24065,12 @@ end
 											v25.Icon.Image = v24
 										end
 
-										tbl12.UpdatePlayerESP(v25.Character)
+										featureUtils.UpdatePlayerESP(v25.Character)
 									end
 								end)
 
 								local function fn24(character)
-									if flag11 or not tbl8.PlayerESP or not character then
+									if isUnloading or not toggleStates.PlayerESP or not character then
 										return
 									end
 
@@ -24077,7 +24078,7 @@ end
 										return
 									end
 									local head = character:WaitForChild("Head", 5)
-									if not head or flag11 or not tbl8.PlayerESP or not character.Parent then
+									if not head or isUnloading or not toggleStates.PlayerESP or not character.Parent then
 										return
 									end
 									local clone = highlight:Clone()
@@ -24108,7 +24109,7 @@ end
 									textLabel.TextStrokeTransparency = 0
 									textLabel.TextXAlignment = Enum.TextXAlignment.Center
 									textLabel.TextYAlignment = Enum.TextYAlignment.Top
-									textLabel.Text = tbl12.FormatPlayer(arg, true)
+									textLabel.Text = featureUtils.FormatPlayer(arg, true)
 									textLabel.Parent = billboardGui
 
 									local tbl19 = {
@@ -24133,7 +24134,7 @@ end
 										end
 									end)
 
-									tbl12.UpdatePlayerESP(character)
+									featureUtils.UpdatePlayerESP(character)
 								end
 
 								obj2[arg] = fn24
@@ -24150,12 +24151,12 @@ end
 							tbl17[arg2] = nil
 							fn21(tbl16.PCLDs, arg, arg2)
 
-							if tbl12.SetSmoothPCLDConnection then
-								tbl12.SetSmoothPCLDConnection()
+							if featureUtils.SetSmoothPCLDConnection then
+								featureUtils.SetSmoothPCLDConnection()
 							end
 						end
 
-						tbl12.UpdatePCLDESP = function(arg)
+						featureUtils.UpdatePCLDESP = function(arg)
 							local v23 = tbl16.PCLDs[arg]
 							local server = espConfig.Server
 							if not v23 then
@@ -24165,19 +24166,19 @@ end
 							if not (arg.Parent and v23.Clone.Parent and v23.Box.Parent and v23.Billboard.Parent) then
 								return fn23(arg, v23)
 							end
-							local v24 = tbl12.IsWaitingPCLD(arg)
+							local v24 = featureUtils.IsWaitingPCLD(arg)
 							v23.Waiting = v24
 							v23.Box.Color3 = server.OutlineColor
 							v23.Box.SurfaceColor3 = server.FillColor
 							v23.Box.Transparency = server.OutlineTransparency
 							v23.Box.SurfaceTransparency = server.FillTransparency
 							v23.Box.LineThickness = server.OutlineThickness
-							v23.Box.Visible = tbl8.PCLDESP and not v24
-							local player = tbl7.PCLDTracker.PartStates[arg]
+							v23.Box.Visible = toggleStates.PCLDESP and not v24
+							local player = sharedState.PCLDTracker.PartStates[arg]
 							player = player and player.Player
-							local value = player and select(2, tbl12.Char(player))
+							local value = player and select(2, featureUtils.Char(player))
 							value = value and value.Position - arg.Position
-							local flag12 = server.NameEnabled and tbl8.PCLDESP and not v24 and value and value:Dot(value) >= server.NameDistance * server.NameDistance
+							local flag12 = server.NameEnabled and toggleStates.PCLDESP and not v24 and value and value:Dot(value) >= server.NameDistance * server.NameDistance
 							v23.Billboard.StudsOffset = Vector3.new(0, server.NameYOffset, 0)
 							v23.Billboard.Enabled = flag12 == true
 							if not flag12 then
@@ -24186,7 +24187,7 @@ end
 
 							if v23.CachedPlayer ~= player then
 								v23.CachedPlayer = player
-								v23.CachedName = tbl12.FormatPlayer(player, true, true)
+								v23.CachedName = featureUtils.FormatPlayer(player, true, true)
 							end
 
 							v23.NameLabel.Text = v23.CachedName
@@ -24195,14 +24196,14 @@ end
 							v23.NameLabel.TextTransparency = server.NameTransparency
 							v23.NameLabel.TextStrokeColor3 = server.NameOutlineColor
 							v23.NameLabel.TextStrokeTransparency = server.NameOutlineTransparency
-							v23.NameLabel.FontFace = tbl12.GetFont(server.NameFont)
+							v23.NameLabel.FontFace = featureUtils.GetFont(server.NameFont)
 						end
 
-						tbl12.CreatePCLDESP = function(arg)
-							if not arg or not arg.Parent or arg.Name ~= "PlayerCharacterLocationDetector" or tbl12.IsWaitingPCLD(arg) then
+						featureUtils.CreatePCLDESP = function(arg)
+							if not arg or not arg.Parent or arg.Name ~= "PlayerCharacterLocationDetector" or featureUtils.IsWaitingPCLD(arg) then
 								return
 							end
-							tbl7.PCLDParts[arg] = true
+							sharedState.PCLDParts[arg] = true
 							if tbl16.PCLDs[arg] then
 								return
 							end
@@ -24219,7 +24220,7 @@ end
 							clone.Parent = arg.Parent
 							local clone2 = selectionBox:Clone()
 							clone2.Adornee = clone
-							clone2.Visible = not tbl12.IsWaitingPCLD(arg)
+							clone2.Visible = not featureUtils.IsWaitingPCLD(arg)
 							clone2.Parent = clone
 							local billboardGui = Instance.new("BillboardGui")
 							billboardGui.Enabled = false
@@ -24260,22 +24261,22 @@ end
 							tbl16.PCLDs[arg] = tbl18
 
 							tbl18.Connections[1] = arg:GetPropertyChangedSignal("CFrame"):Connect(function()
-								if flag11 or not clone.Parent then
+								if isUnloading or not clone.Parent then
 									return
 								end
-								local v23 = tbl12.IsWaitingPCLD(arg)
+								local v23 = featureUtils.IsWaitingPCLD(arg)
 								tbl18.Waiting = v23
 
 								if v23 then
 									tbl18.Moving = false
 									tbl17[tbl18] = nil
 								else
-									if not tbl8.PCLDESP then
-										tbl12.UpdatePCLDESP(arg)
+									if not toggleStates.PCLDESP then
+										featureUtils.UpdatePCLDESP(arg)
 										return
 									end
 
-									if not tbl8.SmoothPCLD then
+									if not toggleStates.SmoothPCLD then
 										local cFrame2 = arg.CFrame
 										tbl18.Moving = false
 										tbl17[tbl18] = nil
@@ -24293,11 +24294,11 @@ end
 										tbl18.Duration = math.clamp(n36 * 1.05, 0.08, 0.5)
 										tbl18.Moving = true
 										tbl17[tbl18] = true
-										tbl12.SetSmoothPCLDConnection()
+										featureUtils.SetSmoothPCLDConnection()
 									end
 								end
 
-								tbl12.UpdatePCLDESP(arg)
+								featureUtils.UpdatePCLDESP(arg)
 							end)
 
 							tbl18.Connections[2] = arg.AncestryChanged:Connect(function(child, parent2)
@@ -24306,29 +24307,29 @@ end
 								end
 							end)
 
-							tbl12.UpdatePCLDESP(arg)
+							featureUtils.UpdatePCLDESP(arg)
 						end
 
-						tbl12.SnapPCLDESP = function()
+						featureUtils.SnapPCLDESP = function()
 							for k, pclD in pairs(tbl16.PCLDs) do
 								if k.Parent and pclD.Clone.Parent then
 									pclD.Moving = false
 
-									if not tbl12.IsWaitingPCLD(k) then
+									if not featureUtils.IsWaitingPCLD(k) then
 										pclD.Clone.CFrame = k.CFrame
 										pclD.From = k.CFrame
 										pclD.Target = k.CFrame
 										pclD.LastUpdate = tick()
 									end
 
-									tbl12.UpdatePCLDESP(k)
+									featureUtils.UpdatePCLDESP(k)
 								else
 									fn23(k, pclD)
 								end
 							end
 
 							table.clear(tbl17)
-							tbl12.SetSmoothPCLDConnection()
+							featureUtils.SetSmoothPCLDConnection()
 						end
 
 						fn24 = function(arg, arg2)
@@ -24391,7 +24392,7 @@ end
 								table.insert(arg.Instances, boxHandleAdornment)
 							end
 
-							tbl12.UpdateStickyESP = function(arg)
+							featureUtils.UpdateStickyESP = function(arg)
 								local v23 = tbl16.Stickies[arg]
 								local sticky = espConfig.Sticky
 								if not v23 then
@@ -24402,8 +24403,8 @@ end
 									return fn24(arg, v23)
 								end
 								local part1 = v23.StickyWeld.Part1
-								local character = localPlayer.Character
-								local flag12 = tbl8.StickyESP and part1 ~= nil
+								local character = LocalPlayer.Character
+								local flag12 = toggleStates.StickyESP and part1 ~= nil
 
 								if flag12 then
 									flag12 = not (character and part1:IsDescendantOf(character))
@@ -24452,13 +24453,13 @@ end
 								end
 							end
 
-							tbl12.CreateStickyESP = function(arg)
+							featureUtils.CreateStickyESP = function(arg)
 								if tbl16.Stickies[arg] then
 									return
 								end
 								local stickyPart = arg:WaitForChild("StickyPart", 0.15)
 								stickyPart = stickyPart and stickyPart:WaitForChild("StickyWeld", 0.15)
-								if not stickyPart or flag11 or not tbl8.StickyESP or not arg.Parent or tbl16.Stickies[arg] then
+								if not stickyPart or isUnloading or not toggleStates.StickyESP or not arg.Parent or tbl16.Stickies[arg] then
 									return
 								end
 								local tbl18 = { StickyWeld = stickyPart, Parts = {}, Connections = {}, Instances = {} }
@@ -24469,7 +24470,7 @@ end
 								end
 
 								tbl18.Connections[1] = stickyPart:GetPropertyChangedSignal("Part1"):Connect(function()
-									tbl12.UpdateStickyESP(arg)
+									featureUtils.UpdateStickyESP(arg)
 								end)
 
 								tbl18.Connections[2] = arg.AncestryChanged:Connect(function(child, parent2)
@@ -24484,10 +24485,10 @@ end
 
 								tbl18.Connections[4] = arg.DescendantAdded:Connect(function(descendant)
 									fn25(tbl18, descendant)
-									tbl12.UpdateStickyESP(arg)
+									featureUtils.UpdateStickyESP(arg)
 								end)
 
-								tbl12.UpdateStickyESP(arg)
+								featureUtils.UpdateStickyESP(arg)
 							end
 						end
 					end
@@ -24497,7 +24498,7 @@ end
 							fn21(tbl16.BlackHoles, arg, arg2)
 						end
 
-						tbl12.UpdateBlackHoleESP = function(arg)
+						featureUtils.UpdateBlackHoleESP = function(arg)
 							local v23 = tbl16.BlackHoles[arg]
 							local blackhole = espConfig.Blackhole
 							if not v23 then
@@ -24511,19 +24512,19 @@ end
 							v23.Highlight.OutlineColor = blackhole.OutlineColor
 							v23.Highlight.FillTransparency = blackhole.FillTransparency
 							v23.Highlight.OutlineTransparency = blackhole.OutlineTransparency
-							v23.Highlight.Enabled = tbl8.BlackholeESP
+							v23.Highlight.Enabled = toggleStates.BlackholeESP
 							v23.Billboard.StudsOffset = Vector3.new(0, blackhole.NameYOffset, 0)
-							v23.Billboard.Enabled = tbl8.BlackholeESP and blackhole.NameEnabled
+							v23.Billboard.Enabled = toggleStates.BlackholeESP and blackhole.NameEnabled
 							v23.Label.TextSize = blackhole.NameSize
 							v23.Label.TextColor3 = blackhole.NameColor
 							v23.Label.TextTransparency = blackhole.NameTransparency
 							v23.Label.TextStrokeColor3 = blackhole.NameOutlineColor
 							v23.Label.TextStrokeTransparency = blackhole.NameOutlineTransparency
-							v23.Label.FontFace = tbl12.GetFont(blackhole.NameFont)
+							v23.Label.FontFace = featureUtils.GetFont(blackhole.NameFont)
 						end
 
-						tbl12.CreateBlackHoleESP = function(arg, arg2)
-							if flag11 or not arg then
+						featureUtils.CreateBlackHoleESP = function(arg, arg2)
+							if isUnloading or not arg then
 								return
 							end
 
@@ -24554,7 +24555,7 @@ end
 							textLabel.TextStrokeTransparency = 0
 							textLabel.TextXAlignment = Enum.TextXAlignment.Center
 							textLabel.TextYAlignment = Enum.TextYAlignment.Center
-							textLabel.Text = "Kicked: " .. tbl12.FormatPlayer(arg2, true)
+							textLabel.Text = "Kicked: " .. featureUtils.FormatPlayer(arg2, true)
 							textLabel.Parent = billboardGui
 
 							local tbl18 = {
@@ -24575,39 +24576,39 @@ end
 								end
 							end)
 
-							tbl12.UpdateBlackHoleESP(arg)
+							featureUtils.UpdateBlackHoleESP(arg)
 							return tbl18
 						end
 
-						tbl12.RefreshESP = function(arg)
+						featureUtils.RefreshESP = function(arg)
 							task.spawn(function()
 								if arg == "Player" then
-									for _, v23 in ipairs(tbl7.PlayerList) do
-										if v23 ~= localPlayer then
-											tbl12.CreatePlayerESP(v23)
+									for _, v23 in ipairs(sharedState.PlayerList) do
+										if v23 ~= LocalPlayer then
+											featureUtils.CreatePlayerESP(v23)
 										end
 									end
 								elseif arg == "Server" then
-									for k in pairs(tbl7.PCLDParts) do
+									for k in pairs(sharedState.PCLDParts) do
 										if not k.Parent or k.Name ~= "PlayerCharacterLocationDetector" then
-											tbl7.PCLDParts[k] = nil
-										elseif not tbl12.IsWaitingPCLD(k) then
-											tbl12.CreatePCLDESP(k)
+											sharedState.PCLDParts[k] = nil
+										elseif not featureUtils.IsWaitingPCLD(k) then
+											featureUtils.CreatePCLDESP(k)
 										end
 									end
 								elseif arg == "Sticky" then
 									for _, v23 in ipairs(workspace:QueryDescendants("BasePart#StickyPart")) do
 										if v23.Parent then
-											tbl12.CreateStickyESP(v23.Parent)
+											featureUtils.CreateStickyESP(v23.Parent)
 										end
 									end
 								end
 
-								tbl12.UpdateESP(arg)
+								featureUtils.UpdateESP(arg)
 							end)
 						end
 
-						tbl12.UpdateESP = function(arg)
+						featureUtils.UpdateESP = function(arg)
 							local v23 = espConfig[arg]
 							if not v23 then
 								return
@@ -24615,18 +24616,18 @@ end
 
 							for k in pairs(v23.Objects) do
 								if arg == "Player" then
-									tbl12.UpdatePlayerESP(k)
+									featureUtils.UpdatePlayerESP(k)
 								elseif arg == "Server" then
-									tbl12.UpdatePCLDESP(k)
+									featureUtils.UpdatePCLDESP(k)
 								elseif arg == "Sticky" then
-									tbl12.UpdateStickyESP(k)
+									featureUtils.UpdateStickyESP(k)
 								elseif arg == "Blackhole" then
-									tbl12.UpdateBlackHoleESP(k)
+									featureUtils.UpdateBlackHoleESP(k)
 								end
 							end
 						end
 
-						tbl12.UpdateSmoothPCLD = function()
+						featureUtils.UpdateSmoothPCLD = function()
 							local now3 = tick()
 
 							for k in pairs(tbl17) do
@@ -24644,12 +24645,12 @@ end
 							end
 
 							if not next(tbl17) then
-								tbl12.SetSmoothPCLDConnection()
+								featureUtils.SetSmoothPCLDConnection()
 							end
 						end
 
-						tbl12.SetSmoothPCLDConnection = function()
-							if not tbl8.PCLDESP or not tbl8.SmoothPCLD then
+						featureUtils.SetSmoothPCLDConnection = function()
+							if not toggleStates.PCLDESP or not toggleStates.SmoothPCLD then
 								for k in pairs(tbl17) do
 									k.Moving = false
 								end
@@ -24657,15 +24658,15 @@ end
 								table.clear(tbl17)
 							end
 
-							tbl12.SetRuntimeConnection("SmoothPCLD", RunService.RenderStepped, tbl8.PCLDESP and tbl8.SmoothPCLD and next(tbl17) ~= nil, tbl12.UpdateSmoothPCLD)
+							featureUtils.SetRuntimeConnection("SmoothPCLD", RunService.RenderStepped, toggleStates.PCLDESP and toggleStates.SmoothPCLD and next(tbl17) ~= nil, featureUtils.UpdateSmoothPCLD)
 						end
 
-						tbl12.CleanupESP = function()
+						featureUtils.CleanupESP = function()
 							table.clear(tbl17)
-							tbl12.SetSmoothPCLDConnection()
+							featureUtils.SetSmoothPCLDConnection()
 
 							for k in pairs(obj) do
-								tbl12.RemovePlayerESP(k)
+								featureUtils.RemovePlayerESP(k)
 							end
 
 							for k, player in pairs(tbl16.Players) do
@@ -24689,18 +24690,18 @@ end
 			end
 
 			do
-				tbl12.UpdateCustomCrosshair = function()
-					local customCrosshair = tbl7.CustomCrosshair
-					local flag12 = tbl8.CustomCrosshair and type(tbl9.CustomCrosshairImage) == "string" and tbl9.CustomCrosshairImage ~= ""
+				featureUtils.UpdateCustomCrosshair = function()
+					local customCrosshair = sharedState.CustomCrosshair
+					local flag12 = toggleStates.CustomCrosshair and type(settings.CustomCrosshairImage) == "string" and settings.CustomCrosshairImage ~= ""
 
-					tbl12.SetRuntimeConnection("CustomCrosshairAdded", playerGui.ChildAdded, flag12, function(arg)
+					featureUtils.SetRuntimeConnection("CustomCrosshairAdded", playerGui.ChildAdded, flag12, function(arg)
 						if arg:IsA("ScreenGui") and arg.Name == "Crosshairs" then
-							tbl12.UpdateCustomCrosshair()
+							featureUtils.UpdateCustomCrosshair()
 						end
 					end)
 
 					if not flag12 then
-						tbl12.SetRuntimeConnection("CustomCrosshairEnabled", playerGui.ChildAdded, false)
+						featureUtils.SetRuntimeConnection("CustomCrosshairEnabled", playerGui.ChildAdded, false)
 						customCrosshair.GameScreen = nil
 
 						if customCrosshair.Gui then
@@ -24741,9 +24742,9 @@ end
 						customCrosshair.Image = imageLabel
 					end
 
-					customCrosshair.Image.Image = tbl9.CustomCrosshairImage
-					customCrosshair.Image.ImageColor3 = tbl9.CustomCrosshairColor
-					customCrosshair.Image.Size = UDim2.fromOffset(tbl9.CustomCrosshairSize, tbl9.CustomCrosshairSize)
+					customCrosshair.Image.Image = settings.CustomCrosshairImage
+					customCrosshair.Image.ImageColor3 = settings.CustomCrosshairColor
+					customCrosshair.Image.Size = UDim2.fromOffset(settings.CustomCrosshairSize, settings.CustomCrosshairSize)
 					local crosshairs = playerGui:FindFirstChild("Crosshairs")
 
 					if crosshairs and crosshairs:IsA("ScreenGui") then
@@ -24754,30 +24755,30 @@ end
 						crosshairs.Enabled = false
 
 						if customCrosshair.GameScreen ~= crosshairs then
-							tbl12.SetRuntimeConnection("CustomCrosshairEnabled", crosshairs:GetPropertyChangedSignal("Enabled"), false)
+							featureUtils.SetRuntimeConnection("CustomCrosshairEnabled", crosshairs:GetPropertyChangedSignal("Enabled"), false)
 							customCrosshair.GameScreen = crosshairs
 
-							tbl12.SetRuntimeConnection("CustomCrosshairEnabled", crosshairs:GetPropertyChangedSignal("Enabled"), true, function()
-								if tbl8.CustomCrosshair and crosshairs.Enabled then
+							featureUtils.SetRuntimeConnection("CustomCrosshairEnabled", crosshairs:GetPropertyChangedSignal("Enabled"), true, function()
+								if toggleStates.CustomCrosshair and crosshairs.Enabled then
 									crosshairs.Enabled = false
 								end
 							end)
 						end
 					elseif customCrosshair.GameScreen then
-						tbl12.SetRuntimeConnection("CustomCrosshairEnabled", playerGui.ChildAdded, false)
+						featureUtils.SetRuntimeConnection("CustomCrosshairEnabled", playerGui.ChildAdded, false)
 						customCrosshair.GameScreen = nil
 					end
 				end
 
-				tbl12.SetCustomCrosshair = function(customCrosshair)
-					tbl8.CustomCrosshair = customCrosshair
-					tbl12.UpdateCustomCrosshair()
+				featureUtils.SetCustomCrosshair = function(customCrosshair)
+					toggleStates.CustomCrosshair = customCrosshair
+					featureUtils.UpdateCustomCrosshair()
 				end
 
 				local tbl16 = {}
 
 				local function fn21(arg, arg2)
-					tbl7.CharacterHighlightParts[arg] = nil
+					sharedState.CharacterHighlightParts[arg] = nil
 					arg2.MaterialConnection:Disconnect()
 					arg2.ColorConnection:Disconnect()
 
@@ -24790,13 +24791,13 @@ end
 					end
 				end
 
-				tbl12.ApplyCharacterHighlightPart = function(arg, affect)
+				featureUtils.ApplyCharacterHighlightPart = function(arg, affect)
 					if not (arg and arg:IsA("BasePart")) then
 						return
 					end
-					local tbl17 = tbl7.CharacterHighlightParts[arg]
+					local tbl17 = sharedState.CharacterHighlightParts[arg]
 
-					if arg.Parent and not flag11 and tbl8.ForcefieldChar and tbl7.CharacterHighlightAffects[affect] then
+					if arg.Parent and not isUnloading and toggleStates.ForcefieldChar and sharedState.CharacterHighlightAffects[affect] then
 						if not tbl17 then
 							tbl17 = {
 								Material = arg.Material,
@@ -24806,17 +24807,17 @@ end
 								CurrentPhysical = arg.CurrentPhysicalProperties,
 							}
 
-							tbl7.CharacterHighlightParts[arg] = tbl17
+							sharedState.CharacterHighlightParts[arg] = tbl17
 
 							tbl17.MaterialConnection = arg:GetPropertyChangedSignal("Material"):Connect(function()
-								if arg.Material ~= Enum.Material.ForceField and tbl7.CharacterHighlightParts[arg] == tbl17 and not flag11 and tbl8.ForcefieldChar and tbl7.CharacterHighlightAffects[tbl17.Affect] then
+								if arg.Material ~= Enum.Material.ForceField and sharedState.CharacterHighlightParts[arg] == tbl17 and not isUnloading and toggleStates.ForcefieldChar and sharedState.CharacterHighlightAffects[tbl17.Affect] then
 									arg.Material = Enum.Material.ForceField
 								end
 							end)
 
 							tbl17.ColorConnection = arg:GetPropertyChangedSignal("Color"):Connect(function()
-								if arg.Color ~= tbl9.ForcefieldColor and tbl7.CharacterHighlightParts[arg] == tbl17 and not flag11 and tbl8.ForcefieldChar and tbl7.CharacterHighlightAffects[tbl17.Affect] then
-									arg.Color = tbl9.ForcefieldColor
+								if arg.Color ~= settings.ForcefieldColor and sharedState.CharacterHighlightParts[arg] == tbl17 and not isUnloading and toggleStates.ForcefieldChar and sharedState.CharacterHighlightAffects[tbl17.Affect] then
+									arg.Color = settings.ForcefieldColor
 								end
 							end)
 						end
@@ -24831,51 +24832,51 @@ end
 							arg.Material = Enum.Material.ForceField
 						end
 
-						if arg.Color ~= tbl9.ForcefieldColor then
-							arg.Color = tbl9.ForcefieldColor
+						if arg.Color ~= settings.ForcefieldColor then
+							arg.Color = settings.ForcefieldColor
 						end
 					elseif tbl17 then
 						fn21(arg, tbl17)
 					end
 				end
 
-				tbl12.UpdateCharacterHighlightAffects = function()
-					for k, characterHighlightPart in pairs(tbl7.CharacterHighlightParts) do
-						if not k.Parent or flag11 or not tbl8.ForcefieldChar or not tbl7.CharacterHighlightAffects[characterHighlightPart.Affect] then
+				featureUtils.UpdateCharacterHighlightAffects = function()
+					for k, characterHighlightPart in pairs(sharedState.CharacterHighlightParts) do
+						if not k.Parent or isUnloading or not toggleStates.ForcefieldChar or not sharedState.CharacterHighlightAffects[characterHighlightPart.Affect] then
 							fn21(k, characterHighlightPart)
 						end
 					end
 
-					if not flag11 and tbl8.ForcefieldChar and tbl7.CharacterHighlightAffects["Coconut Forms"] then
-						for _, v23 in tbl7.CoconutForms.Models, nil, nil do
+					if not isUnloading and toggleStates.ForcefieldChar and sharedState.CharacterHighlightAffects["Coconut Forms"] then
+						for _, v23 in sharedState.CoconutForms.Models, nil, nil do
 							for _, v24 in v23:QueryDescendants("BasePart") do
-								tbl12.ApplyCharacterHighlightPart(v24, "Coconut Forms")
+								featureUtils.ApplyCharacterHighlightPart(v24, "Coconut Forms")
 							end
 						end
 					end
 
-					if not flag11 and tbl8.ForcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"] and v18 then
+					if not isUnloading and toggleStates.ForcefieldChar and sharedState.CharacterHighlightAffects["Anti Kick"] and v18 then
 						for _, v23 in v18:GetChildren() do
-							tbl12.ApplyCharacterHighlightPart(v23, "Anti Kick")
+							featureUtils.ApplyCharacterHighlightPart(v23, "Anti Kick")
 						end
 					end
 
-					tbl12.UpdateChinaHat()
+					featureUtils.UpdateChinaHat()
 				end
 
-				tbl12.ClearChinaHat = function()
+				featureUtils.ClearChinaHat = function()
 					if tbl16.Hat then
 						tbl16.Hat:Destroy()
 						tbl16.Hat = nil
 					end
 				end
 
-				tbl12.UpdateChinaHat = function()
+				featureUtils.UpdateChinaHat = function()
 					local hat = tbl16.Hat
 					if not (hat and hat.Parent) then
 						return
 					end
-					local chinaHat = tbl8.ForcefieldChar and tbl7.CharacterHighlightAffects["China Hat"]
+					local chinaHat = toggleStates.ForcefieldChar and sharedState.CharacterHighlightAffects["China Hat"]
 					local forceField
 
 					if chinaHat then
@@ -24887,9 +24888,9 @@ end
 					local forcefieldColor
 
 					if chinaHat then
-						forcefieldColor = tbl9.ForcefieldColor
+						forcefieldColor = settings.ForcefieldColor
 					else
-						forcefieldColor = tbl9.ChinaHatColor
+						forcefieldColor = settings.ChinaHatColor
 					end
 
 					local transparency
@@ -24913,12 +24914,12 @@ end
 					end
 				end
 
-				tbl12.CreateChinaHat = function(arg)
+				featureUtils.CreateChinaHat = function(arg)
 					local head = arg and arg:WaitForChild("Head", 5)
-					if flag11 or not tbl8.ChinaHat or arg ~= localPlayer.Character or not head then
+					if isUnloading or not toggleStates.ChinaHat or arg ~= LocalPlayer.Character or not head then
 						return
 					end
-					tbl12.ClearChinaHat()
+					featureUtils.ClearChinaHat()
 					local meshPart = Instance.new("MeshPart")
 					tbl16.Hat = meshPart
 					meshPart.Name = "RSCChinaHat"
@@ -24937,17 +24938,17 @@ end
 					local weldConstraint = Instance.new("WeldConstraint", meshPart)
 					weldConstraint.Part0 = meshPart
 					weldConstraint.Part1 = head
-					tbl12.UpdateChinaHat()
+					featureUtils.UpdateChinaHat()
 				end
 
-				tbl12.SetChinaHat = function(chinaHat)
-					tbl8.ChinaHat = chinaHat
+				featureUtils.SetChinaHat = function(chinaHat)
+					toggleStates.ChinaHat = chinaHat
 
-					tbl12.SetRuntimeConnection("ChinaHatRespawn", localPlayer.CharacterAdded, chinaHat, function(arg)
-						task.defer(tbl12.CreateChinaHat, arg)
+					featureUtils.SetRuntimeConnection("ChinaHatRespawn", LocalPlayer.CharacterAdded, chinaHat, function(arg)
+						task.defer(featureUtils.CreateChinaHat, arg)
 					end)
 
-					tbl12.SetRuntimeConnection("ChinaHatVisibility", RunService.RenderStepped, chinaHat, function()
+					featureUtils.SetRuntimeConnection("ChinaHatVisibility", RunService.RenderStepped, chinaHat, function()
 						if tbl16.Hat then
 							local hat = tbl16.Hat
 							local localTransparencyModifier
@@ -24963,9 +24964,9 @@ end
 					end)
 
 					if chinaHat then
-						task.defer(tbl12.CreateChinaHat, localPlayer.Character)
+						task.defer(featureUtils.CreateChinaHat, LocalPlayer.Character)
 					else
-						tbl12.ClearChinaHat()
+						featureUtils.ClearChinaHat()
 					end
 				end
 
@@ -24977,7 +24978,7 @@ end
 
 					tbl16.Character = nil
 
-					for k, characterHighlightPart in pairs(tbl7.CharacterHighlightParts) do
+					for k, characterHighlightPart in pairs(sharedState.CharacterHighlightParts) do
 						if characterHighlightPart.Affect == "Character" then
 							fn21(k, characterHighlightPart)
 						end
@@ -24988,12 +24989,12 @@ end
 					if not tbl16.Character or not descendant:IsDescendantOf(tbl16.Character) then
 						return
 					end
-					tbl12.ApplyCharacterHighlightPart(descendant, "Character")
+					featureUtils.ApplyCharacterHighlightPart(descendant, "Character")
 				end
 
 				local function fn24(character)
 					fn22()
-					if flag11 or not tbl8.ForcefieldChar or not tbl7.CharacterHighlightAffects.Character or not character then
+					if isUnloading or not toggleStates.ForcefieldChar or not sharedState.CharacterHighlightAffects.Character or not character then
 						return
 					end
 					tbl16.Character = character
@@ -25004,51 +25005,51 @@ end
 					end
 				end
 
-				tbl12.UpdateCharacterHighlight = function()
-					if flag11 or not tbl8.ForcefieldChar then
+				featureUtils.UpdateCharacterHighlight = function()
+					if isUnloading or not toggleStates.ForcefieldChar then
 						return
 					end
 					local character = tbl16.Character
-					local forcefieldColor = tbl9.ForcefieldColor
+					local forcefieldColor = settings.ForcefieldColor
 
-					for k, characterHighlightPart in pairs(tbl7.CharacterHighlightParts) do
-						if not k.Parent or not tbl7.CharacterHighlightAffects[characterHighlightPart.Affect] or characterHighlightPart.Affect == "Character" and (not character or not k:IsDescendantOf(character)) then
+					for k, characterHighlightPart in pairs(sharedState.CharacterHighlightParts) do
+						if not k.Parent or not sharedState.CharacterHighlightAffects[characterHighlightPart.Affect] or characterHighlightPart.Affect == "Character" and (not character or not k:IsDescendantOf(character)) then
 							fn21(k, characterHighlightPart)
 						elseif k.Color ~= forcefieldColor then
 							k.Color = forcefieldColor
 						end
 					end
 
-					tbl12.UpdateChinaHat()
+					featureUtils.UpdateChinaHat()
 				end
 
-				tbl12.SetCharacterHighlight = function(forcefieldChar)
-					tbl8.ForcefieldChar = forcefieldChar
-					local character = forcefieldChar and tbl7.CharacterHighlightAffects.Character
+				featureUtils.SetCharacterHighlight = function(forcefieldChar)
+					toggleStates.ForcefieldChar = forcefieldChar
+					local character = forcefieldChar and sharedState.CharacterHighlightAffects.Character
 
-					tbl12.SetRuntimeConnection("CharacterHighlightRespawn", localPlayer.CharacterAdded, character, function(arg)
+					featureUtils.SetRuntimeConnection("CharacterHighlightRespawn", LocalPlayer.CharacterAdded, character, function(arg)
 						task.defer(fn24, arg)
 					end)
 
-					tbl12.SetRuntimeConnection("CharacterHighlightAppearance", localPlayer.CharacterAppearanceLoaded, character, function(arg)
+					featureUtils.SetRuntimeConnection("CharacterHighlightAppearance", LocalPlayer.CharacterAppearanceLoaded, character, function(arg)
 						if arg ~= tbl16.Character then
 							return
 						end
-						tbl12.UpdateCharacterHighlight()
+						featureUtils.UpdateCharacterHighlight()
 					end)
 
 					if not character then
 						fn22()
-					elseif tbl16.Character ~= localPlayer.Character then
-						fn24(localPlayer.Character)
+					elseif tbl16.Character ~= LocalPlayer.Character then
+						fn24(LocalPlayer.Character)
 					end
 
-					tbl12.UpdateCharacterHighlightAffects()
+					featureUtils.UpdateCharacterHighlightAffects()
 				end
 			end
 
-			tbl12.UpdateParticles = function(arg)
-				local particleSettings = tbl7.ParticleSettings
+			featureUtils.UpdateParticles = function(arg)
+				local particleSettings = sharedState.ParticleSettings
 				local flag12 = not arg
 
 				if flag12 or arg == "BoxSize" then
@@ -25100,21 +25101,21 @@ end
 				end
 			end
 
-			tbl12.UpdateParticlePosition = function()
+			featureUtils.UpdateParticlePosition = function()
 				if currentCamera then
 					part2.CFrame = currentCamera.CFrame
 				end
 			end
 
-			tbl12.SetParticlesEnabled = function(enabled)
-				tbl7.ParticleSettings.Enabled = enabled
-				local updateParticlePosition = tbl12.UpdateParticlePosition
-				tbl12.SetRuntimeConnection("Particles", currentCamera:GetPropertyChangedSignal("CFrame"), enabled, updateParticlePosition)
+			featureUtils.SetParticlesEnabled = function(enabled)
+				sharedState.ParticleSettings.Enabled = enabled
+				local updateParticlePosition = featureUtils.UpdateParticlePosition
+				featureUtils.SetRuntimeConnection("Particles", currentCamera:GetPropertyChangedSignal("CFrame"), enabled, updateParticlePosition)
 				particleEmitter.Enabled = enabled
 
 				if enabled then
-					tbl12.UpdateParticles()
-					tbl12.UpdateParticlePosition()
+					featureUtils.UpdateParticles()
+					featureUtils.UpdateParticlePosition()
 				else
 					particleEmitter:Clear()
 				end
@@ -25172,8 +25173,8 @@ end
 					end
 				end
 
-				tbl12.SetBoostFPS = function(arg)
-					flag12 = arg and not flag11
+				featureUtils.SetBoostFPS = function(arg)
+					flag12 = arg and not isUnloading
 					local v23 = flag14
 					local flag16
 
@@ -25200,7 +25201,7 @@ end
 									fn21(Lighting, "GlobalShadows", false)
 								end
 
-								tbl12.SetRuntimeConnection("BoostFPSAdded", workspace.DescendantAdded, true, fn22)
+								featureUtils.SetRuntimeConnection("BoostFPSAdded", workspace.DescendantAdded, true, fn22)
 
 								for _, v24 in workspace:QueryDescendants("BasePart, Decal, Texture, SpecialMesh") do
 									if flag12 then
@@ -25217,7 +25218,7 @@ end
 									break
 								end
 							else
-								tbl12.SetRuntimeConnection("BoostFPSAdded", nil, false)
+								featureUtils.SetRuntimeConnection("BoostFPSAdded", nil, false)
 
 								for k, v24 in tbl16, nil, nil do
 									if k.Parent then
@@ -25230,7 +25231,7 @@ end
 										end
 									end
 
-									if not flag11 and os.clock() - now3 > 0.004 then
+									if not isUnloading and os.clock() - now3 > 0.004 then
 										task.wait()
 										now3 = os.clock()
 									end
@@ -25254,10 +25255,10 @@ end
 					end)
 				end
 
-				tbl12.SetBoostFPSOptions = function(arg)
+				featureUtils.SetBoostFPSOptions = function(arg)
 					tbl17 = arg
 					flag15 = flag12
-					tbl12.SetBoostFPS(flag12)
+					featureUtils.SetBoostFPS(flag12)
 				end
 			end
 		end
@@ -25275,17 +25276,17 @@ end
 							local fn31
 
 							do
-								tbl12.SetCameraOcclusionMode = function(devCameraOcclusionMode)
+								featureUtils.SetCameraOcclusionMode = function(devCameraOcclusionMode)
 									if pcall(function()
-										localPlayer.DevCameraOcclusionMode = devCameraOcclusionMode
-									end) and localPlayer.DevCameraOcclusionMode == devCameraOcclusionMode then
+										LocalPlayer.DevCameraOcclusionMode = devCameraOcclusionMode
+									end) and LocalPlayer.DevCameraOcclusionMode == devCameraOcclusionMode then
 										return true
 									end
-									return sethiddenproperty and pcall(sethiddenproperty, localPlayer, "DevCameraOcclusionMode", devCameraOcclusionMode)
+									return sethiddenproperty and pcall(sethiddenproperty, LocalPlayer, "DevCameraOcclusionMode", devCameraOcclusionMode)
 								end
 
-								tbl12.SetCameraPopper = function(arg)
-									local states = tbl7.States
+								featureUtils.SetCameraPopper = function(arg)
+									local states = sharedState.States
 									local cameraPopperPatch = states.CameraPopperPatch
 
 									if not arg then
@@ -25305,7 +25306,7 @@ end
 										return true
 									end
 									local v22 = hookfunction or replaceclosure
-									local playerModule = localPlayer.PlayerScripts:FindFirstChild("PlayerModule")
+									local playerModule = LocalPlayer.PlayerScripts:FindFirstChild("PlayerModule")
 									playerModule = playerModule and playerModule:FindFirstChild("CameraModule")
 									playerModule = playerModule and playerModule:FindFirstChild("ZoomController")
 									playerModule = playerModule and playerModule:FindFirstChild("Popper")
@@ -25328,53 +25329,53 @@ end
 									return ok2
 								end
 
-								tbl12.SetCameraNoclip = function(cameraNoclip)
-									local states = tbl7.States
-									tbl8.CameraNoclip = cameraNoclip
-									local v22 = cameraNoclip and tbl12.SetCameraPopper(true)
+								featureUtils.SetCameraNoclip = function(cameraNoclip)
+									local states = sharedState.States
+									toggleStates.CameraNoclip = cameraNoclip
+									local v22 = cameraNoclip and featureUtils.SetCameraPopper(true)
 
 									if cameraNoclip then
 										if states.CameraOcclusionMode == nil then
-											states.CameraOcclusionMode = localPlayer.DevCameraOcclusionMode
+											states.CameraOcclusionMode = LocalPlayer.DevCameraOcclusionMode
 										end
 
 										if not v22 then
-											tbl12.SetCameraOcclusionMode(Enum.DevCameraOcclusionMode.Invisicam)
+											featureUtils.SetCameraOcclusionMode(Enum.DevCameraOcclusionMode.Invisicam)
 										end
 									end
 
-									tbl12.SetRuntimeConnection("CameraNoclip", localPlayer:GetPropertyChangedSignal("DevCameraOcclusionMode"), cameraNoclip and not v22, function()
-										if tbl8.CameraNoclip and localPlayer.DevCameraOcclusionMode ~= Enum.DevCameraOcclusionMode.Invisicam then
-											tbl12.SetCameraOcclusionMode(Enum.DevCameraOcclusionMode.Invisicam)
+									featureUtils.SetRuntimeConnection("CameraNoclip", LocalPlayer:GetPropertyChangedSignal("DevCameraOcclusionMode"), cameraNoclip and not v22, function()
+										if toggleStates.CameraNoclip and LocalPlayer.DevCameraOcclusionMode ~= Enum.DevCameraOcclusionMode.Invisicam then
+											featureUtils.SetCameraOcclusionMode(Enum.DevCameraOcclusionMode.Invisicam)
 										end
 									end)
 
 									if not cameraNoclip then
-										tbl12.SetCameraPopper(false)
+										featureUtils.SetCameraPopper(false)
 
 										if states.CameraOcclusionMode ~= nil then
-											tbl12.SetCameraOcclusionMode(states.CameraOcclusionMode)
+											featureUtils.SetCameraOcclusionMode(states.CameraOcclusionMode)
 											states.CameraOcclusionMode = nil
 										end
 									end
 								end
 
-								tbl12.UpdateAspectRatio = function()
-									currentCamera.CFrame = currentCamera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, tbl9.AspectRatio, 0, 0, 0, 1)
+								featureUtils.UpdateAspectRatio = function()
+									currentCamera.CFrame = currentCamera.CFrame * CFrame.new(0, 0, 0, 1, 0, 0, 0, settings.AspectRatio, 0, 0, 0, 1)
 								end
 
-								tbl12.SetAspectRatio = function(aspectRatio)
-									tbl9.AspectRatio = aspectRatio
+								featureUtils.SetAspectRatio = function(aspectRatio)
+									settings.AspectRatio = aspectRatio
 
 									if aspectRatio == 1 then
-										if tbl7.States.AspectRatio then
+										if sharedState.States.AspectRatio then
 											RunService:UnbindFromRenderStep("RSC-AR")
 										end
 
-										tbl7.States.AspectRatio = nil
-									elseif not tbl7.States.AspectRatio then
-										tbl7.States.AspectRatio = true
-										RunService:BindToRenderStep("RSC-AR", Enum.RenderPriority.Camera.Value + 1, tbl12.UpdateAspectRatio)
+										sharedState.States.AspectRatio = nil
+									elseif not sharedState.States.AspectRatio then
+										sharedState.States.AspectRatio = true
+										RunService:BindToRenderStep("RSC-AR", Enum.RenderPriority.Camera.Value + 1, featureUtils.UpdateAspectRatio)
 									end
 								end
 
@@ -25397,7 +25398,7 @@ end
 							end
 
 							fn30 = function(arg, arg2)
-								local v22 = tbl7.ShurikenLagWelds[arg]
+								local v22 = sharedState.ShurikenLagWelds[arg]
 								if not v22 then
 									return
 								end
@@ -25406,7 +25407,7 @@ end
 									v23:Disconnect()
 								end
 
-								tbl7.ShurikenLagWelds[arg] = nil
+								sharedState.ShurikenLagWelds[arg] = nil
 
 								if arg2 and not arg.Parent and v22.Parent and v22.Parent.Parent then
 									arg.Parent = v22.Parent
@@ -25415,14 +25416,14 @@ end
 
 							do
 								local function fn32(arg)
-									if not tbl8.AntiShurikenLag or not arg:IsA("WeldConstraint") or arg.Name ~= "StickyWeld" or tbl7.BreakPartWelds[arg] or tbl7.ShurikenLagWelds[arg] then
+									if not toggleStates.AntiShurikenLag or not arg:IsA("WeldConstraint") or arg.Name ~= "StickyWeld" or sharedState.BreakPartWelds[arg] or sharedState.ShurikenLagWelds[arg] then
 										return
 									end
 									local tbl17 = { Parent = arg.Parent, Connections = {} }
-									tbl7.ShurikenLagWelds[arg] = tbl17
+									sharedState.ShurikenLagWelds[arg] = tbl17
 
 									local function fn33()
-										if tbl7.BreakPartWelds[arg] then
+										if sharedState.BreakPartWelds[arg] then
 											if not arg.Parent and tbl17.Parent and tbl17.Parent.Parent then
 												arg.Parent = tbl17.Parent
 											end
@@ -25465,16 +25466,16 @@ end
 									fn33()
 								end
 
-								tbl12.SetAntiShurikenLag = function(antiShurikenLag)
-									tbl8.AntiShurikenLag = antiShurikenLag
-									tbl12.SetRuntimeConnection("AntiShurikenLag", workspace.DescendantAdded, antiShurikenLag, fn32)
+								featureUtils.SetAntiShurikenLag = function(antiShurikenLag)
+									toggleStates.AntiShurikenLag = antiShurikenLag
+									featureUtils.SetRuntimeConnection("AntiShurikenLag", workspace.DescendantAdded, antiShurikenLag, fn32)
 
 									if antiShurikenLag then
 										for _, v22 in workspace:QueryDescendants("WeldConstraint#StickyWeld") do
 											fn32(v22)
 										end
 									else
-										for k in table.clone(tbl7.ShurikenLagWelds), nil, nil do
+										for k in table.clone(sharedState.ShurikenLagWelds), nil, nil do
 											fn30(k, true)
 										end
 									end
@@ -25485,7 +25486,7 @@ end
 						do
 							do
 								local function fn31(adornee, arg)
-									if not tbl8.HighlightBrokenParts or not adornee.Parent then
+									if not toggleStates.HighlightBrokenParts or not adornee.Parent then
 										if arg.Highlight then
 											arg.Highlight:Destroy()
 											arg.Highlight = nil
@@ -25502,31 +25503,31 @@ end
 										arg.Highlight.Parent = adornee
 									end
 
-									local brokenPartHighlight = tbl7.BrokenPartHighlight
+									local brokenPartHighlight = sharedState.BrokenPartHighlight
 									arg.Highlight.FillColor = brokenPartHighlight.FillColor
 									arg.Highlight.OutlineColor = brokenPartHighlight.OutlineColor
 									arg.Highlight.FillTransparency = brokenPartHighlight.FillTransparency
 									arg.Highlight.OutlineTransparency = brokenPartHighlight.OutlineTransparency
 								end
 
-								tbl12.SetBrokenPartHighlights = function(highlightBrokenParts)
-									tbl8.HighlightBrokenParts = highlightBrokenParts
+								featureUtils.SetBrokenPartHighlights = function(highlightBrokenParts)
+									toggleStates.HighlightBrokenParts = highlightBrokenParts
 
-									for k, v22 in tbl7.BrokenParts, nil, nil do
+									for k, v22 in sharedState.BrokenParts, nil, nil do
 										fn31(k, v22)
 									end
 								end
 
-								tbl12.TrackBrokenPart = function(arg, arg2)
-									local tbl17 = tbl7.BrokenParts[arg]
+								featureUtils.TrackBrokenPart = function(arg, arg2)
+									local tbl17 = sharedState.BrokenParts[arg]
 
 									if not tbl17 then
 										tbl17 = { Welds = {} }
-										tbl7.BrokenParts[arg] = tbl17
+										sharedState.BrokenParts[arg] = tbl17
 									end
 
 									tbl17.Welds[arg2] = true
-									tbl7.BreakPartWelds[arg2] = true
+									sharedState.BreakPartWelds[arg2] = true
 									fn30(arg2, true)
 									fn31(arg, tbl17)
 								end
@@ -25534,9 +25535,9 @@ end
 						end
 					end
 
-					tbl12.UntrackBrokenPart = function(arg, arg2)
-						tbl7.BreakPartWelds[arg2] = nil
-						local v22 = tbl7.BrokenParts[arg]
+					featureUtils.UntrackBrokenPart = function(arg, arg2)
+						sharedState.BreakPartWelds[arg2] = nil
+						local v22 = sharedState.BrokenParts[arg]
 						if not v22 then
 							return
 						end
@@ -25549,28 +25550,28 @@ end
 							v22.Highlight:Destroy()
 						end
 
-						tbl7.BrokenParts[arg] = nil
+						sharedState.BrokenParts[arg] = nil
 					end
 
-					tbl12.SpawnToy = function(arg, arg2, arg3, arg4)
+					featureUtils.SpawnToy = function(arg, arg2, arg3, arg4)
 						if type(arg) ~= "string" or arg == "" then
 							return
 						end
 
-						if tbl7.FailedToys[arg] then
+						if sharedState.FailedToys[arg] then
 							return
 						end
 						local n37 = tonumber(arg3) or 0
 
-						if tbl7.States.Spawning or #tbl7.SpawnQueue > 0 then
+						if sharedState.States.Spawning or #sharedState.SpawnQueue > 0 then
 							if n37 <= 0 then
 								return
 							end
-							tbl7.SpawnOrder = tbl7.SpawnOrder + 1
-							local tbl17 = { Priority = n37, Order = tbl7.SpawnOrder }
-							table.insert(tbl7.SpawnQueue, tbl17)
+							sharedState.SpawnOrder = sharedState.SpawnOrder + 1
+							local tbl17 = { Priority = n37, Order = sharedState.SpawnOrder }
+							table.insert(sharedState.SpawnQueue, tbl17)
 
-							table.sort(tbl7.SpawnQueue, function(arg5, arg6)
+							table.sort(sharedState.SpawnQueue, function(arg5, arg6)
 								local flag12
 
 								if arg5.Priority == arg6.Priority then
@@ -25584,36 +25585,36 @@ end
 
 							while true do
 								task.wait()
-								if not (flag11 or not tbl7.States.Spawning and tbl7.SpawnQueue[1] == tbl17) then
+								if not (isUnloading or not sharedState.States.Spawning and sharedState.SpawnQueue[1] == tbl17) then
 									continue
 								end
 								break
 							end
 
-							table.remove(tbl7.SpawnQueue, table.find(tbl7.SpawnQueue, tbl17))
-							if flag11 then
+							table.remove(sharedState.SpawnQueue, table.find(sharedState.SpawnQueue, tbl17))
+							if isUnloading then
 								return
 							end
 						end
 
-						local v22, v23 = tbl12.Char()
+						local v22, v23 = featureUtils.Char()
 						if not v23 then
 							return
 						end
 						local flag12 = inPlot.Value and not inOwnedPlot.Value
-						if flag12 and tbl7.States.Owning then
+						if flag12 and sharedState.States.Owning then
 							return
 						end
-						tbl7.States.Spawning = true
+						sharedState.States.Spawning = true
 
 						if flag12 then
-							tbl7.States.Owning = true
+							sharedState.States.Owning = true
 						end
 
-						if localPlayer.CanSpawnToy.Value == false then
+						if LocalPlayer.CanSpawnToy.Value == false then
 							repeat
 								task.wait()
-							until localPlayer.CanSpawnToy.Value
+							until LocalPlayer.CanSpawnToy.Value
 						end
 
 						local cframe
@@ -25637,12 +25638,12 @@ end
 						local v25 = nil
 						local connection = nil
 
-						connection = v17.ChildAdded:Connect(function(child)
+						connection = spawnedToysFolder.ChildAdded:Connect(function(child)
 							if child.Name == arg then
 								v25 = child
 
 								if arg4 then
-									tbl7.ToyAuraReserved[child] = true
+									sharedState.ToyAuraReserved[child] = true
 								end
 
 								if connection then
@@ -25669,7 +25670,7 @@ end
 						local now3 = tick()
 
 						task.spawn(function()
-							tbl11.SpawnToy:InvokeServer(arg, n38, v24)
+							remotes.SpawnToy:InvokeServer(arg, n38, v24)
 						end)
 
 						while true do
@@ -25677,7 +25678,7 @@ end
 
 							if flag12 then
 								task.spawn(function()
-									tbl11.SpawnToy:InvokeServer(arg, n38, v24)
+									remotes.SpawnToy:InvokeServer(arg, n38, v24)
 								end)
 							end
 
@@ -25704,29 +25705,29 @@ end
 						end
 
 						if not v25 then
-							tbl7.FailedToys[arg] = true
+							sharedState.FailedToys[arg] = true
 
 							task.delay(2, function()
-								tbl7.FailedToys[arg] = nil
+								sharedState.FailedToys[arg] = nil
 							end)
 						end
 
-						tbl7.States.Spawning = false
+						sharedState.States.Spawning = false
 
 						if flag12 then
-							tbl7.States.Owning = false
+							sharedState.States.Owning = false
 						end
 
 						return v25
 					end
 
-					tbl12.DestroyToy = function(arg)
+					featureUtils.DestroyToy = function(arg)
 						if arg and arg:IsA("Model") then
-							tbl11.DestroyToy:FireServer(arg)
+							remotes.DestroyToy:FireServer(arg)
 						end
 					end
 
-					tbl12.GetInventory = function(arg)
+					featureUtils.GetInventory = function(arg)
 						local v22 = workspace:FindFirstChild(arg.Name .. "SpawnedInToys")
 						local v23 = nil
 
@@ -25741,8 +25742,8 @@ end
 						return v22, v23
 					end
 
-					tbl12.BreakHoldable = function(arg, arg2, arg3)
-						local v22, v23, v24 = tbl12.Char()
+					featureUtils.BreakHoldable = function(arg, arg2, arg3)
+						local v22, v23, v24 = featureUtils.Char()
 						local leftGripAttachment = v22 and v22:FindFirstChild("Left Arm") and v22["Left Arm"]:FindFirstChild("LeftGripAttachment")
 						local holdPart = arg and arg:FindFirstChild("HoldPart")
 						local holdItemRemoteFunction = holdPart and holdPart:WaitForChild("HoldItemRemoteFunction", 0.45)
@@ -25799,7 +25800,7 @@ end
 						for _, v25 in v24:GetPlayingAnimationTracks() do
 							local match = v25.Animation and v25.Animation.AnimationId:match("%d+")
 
-							if not (match and tbl7.AnimationWhitelist[match]) then
+							if not (match and sharedState.AnimationWhitelist[match]) then
 								v25:Stop()
 							end
 						end
@@ -25807,9 +25808,9 @@ end
 						return rigidConstraint.Parent and rigidConstraint.Attachment1 ~= leftGripAttachment
 					end
 
-					tbl12.SpawnCoconutForms = function()
-						local coconutForms = tbl7.CoconutForms
-						if coconutForms.Spawning or not tbl8.CoconutForms or #coconutForms.Models >= #coconutForms.Offsets then
+					featureUtils.SpawnCoconutForms = function()
+						local coconutForms = sharedState.CoconutForms
+						if coconutForms.Spawning or not toggleStates.CoconutForms or #coconutForms.Models >= #coconutForms.Offsets then
 							return
 						end
 						coconutForms.Spawning = true
@@ -25817,14 +25818,14 @@ end
 
 						task.spawn(function()
 							while true do
-								if not flag11 and tbl8.CoconutForms and generation == coconutForms.Generation and #coconutForms.Models < #coconutForms.Offsets then
-									local FoodCoconut = tbl12.SpawnToy("FoodCoconut", nil, 1, true)
+								if not isUnloading and toggleStates.CoconutForms and generation == coconutForms.Generation and #coconutForms.Models < #coconutForms.Offsets then
+									local FoodCoconut = featureUtils.SpawnToy("FoodCoconut", nil, 1, true)
 									local soundPart = FoodCoconut and FoodCoconut:WaitForChild("SoundPart", 0.5)
 									local holdPart = FoodCoconut and FoodCoconut:WaitForChild("HoldPart", 0.5)
 									holdPart = holdPart and holdPart:WaitForChild("RigidConstraint", 0.5)
 
-									if not (soundPart and holdPart and tbl12.BreakHoldable(FoodCoconut) and tbl12.SNO(soundPart, 0.4)) then
-										tbl12.DestroyToy(FoodCoconut)
+									if not (soundPart and holdPart and featureUtils.BreakHoldable(FoodCoconut) and featureUtils.SNO(soundPart, 0.4)) then
+										featureUtils.DestroyToy(FoodCoconut)
 										break
 									else
 										for _, v22 in FoodCoconut:QueryDescendants("BasePart") do
@@ -25833,16 +25834,16 @@ end
 											v22.CanTouch = false
 											v22.LocalTransparencyModifier = coconutForms.Transparency
 
-											if tbl12.ApplyCharacterHighlightPart then
-												tbl12.ApplyCharacterHighlightPart(v22, "Coconut Forms")
+											if featureUtils.ApplyCharacterHighlightPart then
+												featureUtils.ApplyCharacterHighlightPart(v22, "Coconut Forms")
 											end
 										end
 
-										if tbl8.CoconutForms and generation == coconutForms.Generation and #coconutForms.Models < #coconutForms.Offsets then
+										if toggleStates.CoconutForms and generation == coconutForms.Generation and #coconutForms.Models < #coconutForms.Offsets then
 											coconutForms.Parts[FoodCoconut] = { Root = soundPart, Rigid = holdPart }
 											coconutForms.Models[#coconutForms.Models + 1] = FoodCoconut
 										else
-											tbl12.DestroyToy(FoodCoconut)
+											featureUtils.DestroyToy(FoodCoconut)
 										end
 
 										continue
@@ -25854,19 +25855,19 @@ end
 
 							coconutForms.Spawning = false
 
-							if tbl8.CoconutForms and #coconutForms.Models < #coconutForms.Offsets then
-								task.delay(0.5, tbl12.SpawnCoconutForms)
+							if toggleStates.CoconutForms and #coconutForms.Models < #coconutForms.Offsets then
+								task.delay(0.5, featureUtils.SpawnCoconutForms)
 							end
 						end)
 					end
 
-					tbl12.UpdateCoconutForms = function()
-						local coconutForms = tbl7.CoconutForms
-						local v22, v23, v24 = tbl12.Char()
+					featureUtils.UpdateCoconutForms = function()
+						local coconutForms = sharedState.CoconutForms
+						local v22, v23, v24 = featureUtils.Char()
 						if not (v23 and v24 and v24.Health > 0) then
 							return
 						end
-						local flight = tbl8.Flight
+						local flight = toggleStates.Flight
 						local now3 = os.clock()
 						local n37 = math.min(now3 - (coconutForms.WingClock or now3), 0.1)
 						coconutForms.WingClock = now3
@@ -25948,7 +25949,7 @@ end
 						local vector3 = Vector3.zero
 
 						if coconutForms.CapeStart then
-							local v25 = tbl12.GetCustomVelocity(v23)
+							local v25 = featureUtils.GetCustomVelocity(v23)
 
 							if not flight and v24.MoveDirection.Magnitude > 0.01 then
 								local n43 = v24.MoveDirection * v24.WalkSpeed
@@ -26051,12 +26052,12 @@ end
 
 							if not (v25.Parent and root and root.Parent and rigid and rigid.Parent) or rigid.Attachment1 then
 								if v25 and v25.Parent then
-									tbl12.DestroyToy(v25)
+									featureUtils.DestroyToy(v25)
 								end
 
 								coconutForms.Parts[v25] = nil
 								table.remove(coconutForms.Models, i)
-							elseif tbl12.IsPartOwner(root) then
+							elseif featureUtils.IsPartOwner(root) then
 								local n49 = coconutForms.Offsets[i]
 								local v26
 
@@ -26124,25 +26125,25 @@ end
 									root.CFrame = cFrame3
 								end
 
-								tbl12.ResetVelocity(root)
+								featureUtils.ResetVelocity(root)
 							elseif not coconutForms.Acquiring[root] then
 								coconutForms.Acquiring[root] = true
 
 								task.spawn(function()
-									tbl12.SNO(root, 0.25)
+									featureUtils.SNO(root, 0.25)
 									coconutForms.Acquiring[root] = nil
 								end)
 							end
 						end
 
 						if #coconutForms.Models < #coconutForms.Offsets then
-							tbl12.SpawnCoconutForms()
+							featureUtils.SpawnCoconutForms()
 						end
 					end
 
-					tbl12.RefreshCoconutForms = function()
-						local coconutForms = tbl7.CoconutForms
-						local selected = tbl7.CoconutForms.Selected
+					featureUtils.RefreshCoconutForms = function()
+						local coconutForms = sharedState.CoconutForms
+						local selected = sharedState.CoconutForms.Selected
 						local offsets = {}
 						local counts = coconutForms.Counts
 						local cape
@@ -26251,8 +26252,8 @@ end
 							options.CoconutFormsDropdown:SetDisabledValues(tbl17)
 						end
 
-						if lib.Labels.CoconutFormsLimit then
-							local coconutFormsLimit = lib.Labels.CoconutFormsLimit
+						if uiLibrary.Labels.CoconutFormsLimit then
+							local coconutFormsLimit = uiLibrary.Labels.CoconutFormsLimit
 							local setText = coconutFormsLimit.SetText
 							local str5 = ("%*/%* coconuts used"):format(#offsets, coconutForms.Limit)
 							setText(coconutFormsLimit, str5)
@@ -26261,15 +26262,15 @@ end
 						for i = #coconutForms.Models, #offsets + 1, -1 do
 							local v22 = table.remove(coconutForms.Models, i)
 							coconutForms.Parts[v22] = nil
-							tbl12.DestroyToy(v22)
+							featureUtils.DestroyToy(v22)
 						end
 
-						tbl12.SetRuntimeConnection("CoconutForms", RunService.Heartbeat, tbl8.CoconutForms and #offsets > 0, tbl12.UpdateCoconutForms)
-						tbl12.SpawnCoconutForms()
+						featureUtils.SetRuntimeConnection("CoconutForms", RunService.Heartbeat, toggleStates.CoconutForms and #offsets > 0, featureUtils.UpdateCoconutForms)
+						featureUtils.SpawnCoconutForms()
 					end
 
-					tbl12.SetCoconutTransparency = function(transparency)
-						local coconutForms = tbl7.CoconutForms
+					featureUtils.SetCoconutTransparency = function(transparency)
+						local coconutForms = sharedState.CoconutForms
 						coconutForms.Transparency = transparency
 
 						for _, v22 in coconutForms.Models, nil, nil do
@@ -26279,8 +26280,8 @@ end
 						end
 					end
 
-					tbl12.SetCoconutShaftLength = function(arg)
-						local coconutForms = tbl7.CoconutForms
+					featureUtils.SetCoconutShaftLength = function(arg)
+						local coconutForms = sharedState.CoconutForms
 						local n37 = 11
 
 						if coconutForms.Selected.Penis then
@@ -26308,17 +26309,17 @@ end
 							end)
 						end
 
-						tbl12.RefreshCoconutForms()
+						featureUtils.RefreshCoconutForms()
 					end
 
-					tbl12.ClearCoconutForms = function()
-						local coconutForms = tbl7.CoconutForms
-						tbl8.CoconutForms = false
+					featureUtils.ClearCoconutForms = function()
+						local coconutForms = sharedState.CoconutForms
+						toggleStates.CoconutForms = false
 						coconutForms.Generation = coconutForms.Generation + 1
-						tbl12.SetRuntimeConnection("CoconutForms", RunService.Heartbeat, false)
+						featureUtils.SetRuntimeConnection("CoconutForms", RunService.Heartbeat, false)
 
 						for _, v22 in coconutForms.Models, nil, nil do
-							tbl12.DestroyToy(v22)
+							featureUtils.DestroyToy(v22)
 						end
 
 						table.clear(coconutForms.Models)
@@ -26327,31 +26328,31 @@ end
 						table.clear(coconutForms.Acquiring)
 					end
 
-					tbl12.SetCoconutForms = function(coconutForms)
-						if tbl8.CoconutForms == coconutForms then
+					featureUtils.SetCoconutForms = function(coconutForms)
+						if toggleStates.CoconutForms == coconutForms then
 							return
 						end
-						tbl8.CoconutForms = coconutForms
+						toggleStates.CoconutForms = coconutForms
 
 						if coconutForms then
-							tbl12.RefreshCoconutForms()
+							featureUtils.RefreshCoconutForms()
 						else
-							tbl12.ClearCoconutForms()
+							featureUtils.ClearCoconutForms()
 						end
 					end
 
-					tbl12.BlackHole = function(arg, arg2)
-						local v22, v23, v24 = tbl12.Char()
+					featureUtils.BlackHole = function(arg, arg2)
+						local v22, v23, v24 = featureUtils.Char()
 
 						if v23 and v24.Health ~= 0 and arg then
 							local tbl17 = {}
 
 							for i = 1, 12 do
-								local NinjaShuriken = tbl12.SpawnToy("NinjaShuriken")
+								local NinjaShuriken = featureUtils.SpawnToy("NinjaShuriken")
 								local stickyPart = NinjaShuriken and NinjaShuriken:WaitForChild("StickyPart", 0.25)
 								local soundPart = NinjaShuriken and NinjaShuriken:WaitForChild("SoundPart", 0.25)
 
-								if stickyPart and soundPart and tbl12.SNO(soundPart) then
+								if stickyPart and soundPart and featureUtils.SNO(soundPart) then
 									soundPart.CFrame = CFrame.new(0, 1e10, 0)
 									table.insert(tbl17, NinjaShuriken)
 								end
@@ -26359,39 +26360,39 @@ end
 
 							for _, v25 in pairs(tbl17) do
 								if v25.Parent and v25:FindFirstChild("StickyPart") and v25:FindFirstChild("SoundPart") then
-									tbl11.StickyPartEvent:FireServer(v25.StickyPart, arg, arg2 or CFrame.new(0, 0, 0))
+									remotes.StickyPartEvent:FireServer(v25.StickyPart, arg, arg2 or CFrame.new(0, 0, 0))
 								end
 							end
 						end
 					end
 
-					tbl12.FindNicePart = function(arg)
+					featureUtils.FindNicePart = function(arg)
 						if not arg or not arg:IsA("Model") then
 							return
 						end
-						local v22 = tbl7.GrabbableParts[arg]
+						local v22 = sharedState.GrabbableParts[arg]
 						if v22 and v22:IsDescendantOf(arg) and v22.CanQuery and not v22.Anchored then
 							return v22
 						end
-						tbl7.GrabbableParts[arg] = nil
+						sharedState.GrabbableParts[arg] = nil
 						local v23 = nil
 
 						for _, v24 in ipairs(arg:QueryDescendants("BasePart")) do
 							if v24.CanQuery and not v24.Anchored and v24.Name ~= "Button" then
 								v23 = v23 or v24
 								if (v24.AssemblyRootPart or v24) == v24 then
-									tbl7.GrabbableParts[arg] = v24
+									sharedState.GrabbableParts[arg] = v24
 									return v24
 								end
 							end
 						end
 
-						tbl7.GrabbableParts[arg] = v23
+						sharedState.GrabbableParts[arg] = v23
 						return v23
 					end
 
-					tbl12.MakeFoodEaten = function(arg, arg2)
-						local v22, v23, v24 = tbl12.Char()
+					featureUtils.MakeFoodEaten = function(arg, arg2)
+						local v22, v23, v24 = featureUtils.Char()
 						local holdPart = arg and arg:WaitForChild("HoldPart", 0.15)
 						local ediblePart = arg and arg:WaitForChild("EdiblePart", 0.15)
 
@@ -26422,7 +26423,7 @@ end
 							if not (holdPart.AssemblyRootPart == v23) then
 								return
 							end
-							tbl11.UseFood:FireServer(arg, v22)
+							remotes.UseFood:FireServer(arg, v22)
 							local now4 = tick()
 
 							while true do
@@ -26462,7 +26463,7 @@ end
 							for _, v25 in v24:GetPlayingAnimationTracks() do
 								local match = v25.Animation and v25.Animation.AnimationId:match("%d+")
 
-								if not (match and tbl7.AnimationWhitelist[match]) then
+								if not (match and sharedState.AnimationWhitelist[match]) then
 									v25:Stop()
 								end
 							end
@@ -26473,9 +26474,9 @@ end
 						end
 					end
 
-					tbl12.ExplodeMissile = function(arg, arg2, arg3)
+					featureUtils.ExplodeMissile = function(arg, arg2, arg3)
 						local v22
-						v22, v22 = tbl12.Char()
+						v22, v22 = featureUtils.Char()
 						if not v22 or not arg then
 							return false
 						end
@@ -26483,7 +26484,7 @@ end
 						arg3 = arg3 or 1
 
 						for i = 1, arg3 do
-							local v23 = tbl12.SpawnToy(arg2)
+							local v23 = featureUtils.SpawnToy(arg2)
 
 							if v23 then
 								local partHitDetector, wedge
@@ -26507,7 +26508,7 @@ end
 									end
 								end
 
-								if partHitDetector and wedge and tbl12.SNO(wedge) then
+								if partHitDetector and wedge and featureUtils.SNO(wedge) then
 									local bodyPosition = Instance.new("BodyPosition")
 									bodyPosition.Parent = wedge
 									bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -26515,7 +26516,7 @@ end
 									bodyPosition.Position = Vector3.new(math.random(-1000, 1000), 1000000, random(-1000, 1000))
 									table.insert(tbl17, v23)
 								else
-									tbl12.DestroyToy(v23)
+									featureUtils.DestroyToy(v23)
 								end
 							end
 						end
@@ -26547,9 +26548,9 @@ end
 							if wedge then
 								if arg2 ~= "BallSnowball" then
 									if typeof(arg) == "Instance" then
-										tbl11.Explode:FireServer({ Hitbox = partHitDetector, PositionPart = arg }, arg.Position)
+										remotes.Explode:FireServer({ Hitbox = partHitDetector, PositionPart = arg }, arg.Position)
 									elseif typeof(arg) == "Vector3" then
-										tbl11.Explode:FireServer({
+										remotes.Explode:FireServer({
 											Hitbox = partHitDetector,
 											PositionPart = { Position = arg, AssemblyLinearVelocity = Vector3.zero },
 										}, arg)
@@ -26575,56 +26576,56 @@ end
 								end
 							end
 
-							task.delay(0.25, tbl12.DestroyToy, v23)
+							task.delay(0.25, featureUtils.DestroyToy, v23)
 						end
 					end
 
-					tbl12.IsBarrierBroken = function()
-						if tbl9.IsBarrierBroken then
+					featureUtils.IsBarrierBroken = function()
+						if settings.IsBarrierBroken then
 							return true
 						end
-						local Boombox = tbl12.SpawnToy("Boombox", workspace.Waypoints.BlueHouse.CFrame, 4)
+						local Boombox = featureUtils.SpawnToy("Boombox", workspace.Waypoints.BlueHouse.CFrame, 4)
 						task.wait(2)
 
 						if Boombox and Boombox.Parent then
-							tbl12.DestroyToy(Boombox)
-							tbl9.IsBarrierBroken = true
+							featureUtils.DestroyToy(Boombox)
+							settings.IsBarrierBroken = true
 
 							task.spawn(function()
 								while true do
 									task.wait()
-									if not (lib.Labels and lib.Labels.BarrierStatus) then
+									if not (uiLibrary.Labels and uiLibrary.Labels.BarrierStatus) then
 										continue
 									end
 									break
 								end
 
-								lib.Labels.BarrierStatus:SetText("Current barrier status: 🔴")
+								uiLibrary.Labels.BarrierStatus:SetText("Current barrier status: 🔴")
 							end)
 
 							return true
 						end
 
-						tbl12.DestroyToy(Boombox)
+						featureUtils.DestroyToy(Boombox)
 					end
 
-					task.spawn(tbl12.IsBarrierBroken)
+					task.spawn(featureUtils.IsBarrierBroken)
 
-					tbl12.ExtraEscape = function()
-						local v22, v23, v24 = tbl12.Char()
-						if not v23 or not v24 or v24.Health == 0 or tbl7.States.Escaping or localPlayer.InPlot.Value then
+					featureUtils.ExtraEscape = function()
+						local v22, v23, v24 = featureUtils.Char()
+						if not v23 or not v24 or v24.Health == 0 or sharedState.States.Escaping or LocalPlayer.InPlot.Value then
 							return
 						end
-						tbl7.States.Escaping = true
-						local TractorGreen = tbl12.SpawnToy("TractorGreen", workspace.Waypoints.TudorHouse.CFrame)
+						sharedState.States.Escaping = true
+						local TractorGreen = featureUtils.SpawnToy("TractorGreen", workspace.Waypoints.TudorHouse.CFrame)
 						if not TractorGreen then
-							tbl7.States.Escaping = false
+							sharedState.States.Escaping = false
 							return
 						end
 						local vehicleSeat = TractorGreen:WaitForChild("VehicleSeat", 1)
 						if not vehicleSeat then
-							tbl7.States.Escaping = false
-							return tbl12.DestroyToy(TractorGreen)
+							sharedState.States.Escaping = false
+							return featureUtils.DestroyToy(TractorGreen)
 						end
 						local now3 = tick()
 						local flag12 = false
@@ -26640,7 +26641,7 @@ end
 						end)
 
 						while true do
-							fn20()
+							waitForHeartbeatElapsed()
 							if not (flag12 or tick() - now3 > 0.7) then
 								continue
 							end
@@ -26649,15 +26650,15 @@ end
 
 						connection:Disconnect()
 						v24.Sit = false
-						tbl7.States.Escaping = false
-						return tbl12.DestroyToy(TractorGreen)
+						sharedState.States.Escaping = false
+						return featureUtils.DestroyToy(TractorGreen)
 					end
 
-					tbl12.DestroyTrain = function()
-						if tbl8.GucciAntiGrab then
+					featureUtils.DestroyTrain = function()
+						if toggleStates.GucciAntiGrab then
 							return
 						end
-						local v22, v23, v24 = tbl12.Char()
+						local v22, v23, v24 = featureUtils.Char()
 						if not v23 or not v24 then
 							return
 						end
@@ -26667,11 +26668,11 @@ end
 						end
 						local objectModel = alwaysHereTweenedObjects.Train.Object:FindFirstChild("ObjectModel")
 						if not objectModel then
-							return fn18("Train doesn't exist!")
+							return notify("Train doesn't exist!")
 						end
 						local seat = objectModel:FindFirstChild("Seat")
 						if not seat then
-							return fn18("Train seat doesn't exist!")
+							return notify("Train seat doesn't exist!")
 						end
 
 						if v24.Sit then
@@ -26693,16 +26694,16 @@ end
 						if tick() - now3 > 1.5 then
 							return
 						end
-						local FoodHamburger = tbl12.SpawnToy("FoodHamburger")
+						local FoodHamburger = featureUtils.SpawnToy("FoodHamburger")
 						local holdPart = FoodHamburger and FoodHamburger:WaitForChild("HoldPart", 0.25)
 						if not holdPart then
-							return tbl12.DestroyToy(FoodHamburger)
+							return featureUtils.DestroyToy(FoodHamburger)
 						end
 						local holdItemRemoteFunction = holdPart:WaitForChild("HoldItemRemoteFunction", 0.45)
 						local dropItemRemoteFunction = holdItemRemoteFunction and holdPart:WaitForChild("DropItemRemoteFunction", 0.45)
 						local rigidConstraint = dropItemRemoteFunction and holdPart:WaitForChild("RigidConstraint", 0.45)
 						if not rigidConstraint then
-							return tbl12.DestroyToy(FoodHamburger)
+							return featureUtils.DestroyToy(FoodHamburger)
 						end
 						local now4 = tick()
 
@@ -26711,7 +26712,7 @@ end
 								holdItemRemoteFunction:InvokeServer(FoodHamburger, v22)
 							end)
 
-							fn20()
+							waitForHeartbeatElapsed()
 						end
 
 						task.spawn(function()
@@ -26724,53 +26725,53 @@ end
 						end
 						task.wait(0.5)
 						workspace.FallenPartsDestroyHeight = fallenPartsDestroyHeight
-						tbl12.Teleport(v23, CFrame.new(0, -250, 0))
+						featureUtils.Teleport(v23, CFrame.new(0, -250, 0))
 						task.wait(0.5)
 						v24.Sit = false
 						task.wait(0.25)
-						tbl12.Teleport(v23, cFrame2)
+						featureUtils.Teleport(v23, cFrame2)
 						local v25 = workspace
 						local fallenPartsDestroyHeight2
 
-						if tbl8.DestroyVoid then
+						if toggleStates.DestroyVoid then
 							fallenPartsDestroyHeight2 = (0/0)
 						else
 							fallenPartsDestroyHeight2 = -100
 						end
 
 						v25.FallenPartsDestroyHeight = fallenPartsDestroyHeight2
-						tbl12.DestroyToy(FoodHamburger)
+						featureUtils.DestroyToy(FoodHamburger)
 					end
 
-					tbl12.DestroyObject = function(arg, arg2)
+					featureUtils.DestroyObject = function(arg, arg2)
 						if not arg or not arg:IsA("Model") then
 							return
 						end
-						arg2 = arg2 or tbl12.FindNicePart(arg)
-						if not arg2 or arg2.Anchored or not tbl12.SNO(arg2) then
+						arg2 = arg2 or featureUtils.FindNicePart(arg)
+						if not arg2 or arg2.Anchored or not featureUtils.SNO(arg2) then
 							return
 						end
-						tbl12.ReleaseObject(arg)
-						tbl12.ClearObjectAura(arg)
+						featureUtils.ReleaseObject(arg)
+						featureUtils.ClearObjectAura(arg)
 
 						if toggles.DisblVoid then
 							toggles.DisblVoid:SetDisabled(true)
 						end
 
 						workspace.FallenPartsDestroyHeight = fallenPartsDestroyHeight
-						tbl12.PivotTo(arg, CFrame.new(0, -11111, 0))
+						featureUtils.PivotTo(arg, CFrame.new(0, -11111, 0))
 
-						if tbl9.DestroyThread then
-							task.cancel(tbl9.DestroyThread)
+						if settings.DestroyThread then
+							task.cancel(settings.DestroyThread)
 						end
 
-						tbl9.DestroyThread = task.delay(math.clamp(localPlayer:GetNetworkPing() + 0.05, 0.08, 0.25), function()
+						settings.DestroyThread = task.delay(math.clamp(LocalPlayer:GetNetworkPing() + 0.05, 0.08, 0.25), function()
 							workspace.FallenPartsDestroyHeight = -10000
 							task.wait()
 							local v22 = workspace
 							local fallenPartsDestroyHeight2
 
-							if tbl8.DestroyVoid then
+							if toggleStates.DestroyVoid then
 								fallenPartsDestroyHeight2 = (0/0)
 							else
 								fallenPartsDestroyHeight2 = -100
@@ -26782,23 +26783,23 @@ end
 								toggles.DisblVoid:SetDisabled(false)
 							end
 
-							tbl9.DestroyThread = nil
+							settings.DestroyThread = nil
 						end)
 
-						task.delay(0.5, tbl12.RNO, arg2)
+						task.delay(0.5, featureUtils.RNO, arg2)
 						return true
 					end
 
-					tbl12.ClearDestroyObjects = function()
-						if tbl9.DestroyThread then
-							task.cancel(tbl9.DestroyThread)
-							tbl9.DestroyThread = nil
+					featureUtils.ClearDestroyObjects = function()
+						if settings.DestroyThread then
+							task.cancel(settings.DestroyThread)
+							settings.DestroyThread = nil
 						end
 
 						local v22 = workspace
 						local fallenPartsDestroyHeight2
 
-						if tbl8.DestroyVoid then
+						if toggleStates.DestroyVoid then
 							fallenPartsDestroyHeight2 = (0/0)
 						else
 							fallenPartsDestroyHeight2 = -100
@@ -26807,16 +26808,16 @@ end
 						v22.FallenPartsDestroyHeight = fallenPartsDestroyHeight2
 					end
 
-					anchorSettings = tbl7.AnchorSettings
-					objectStates = tbl7.ObjectStates
-					objectGroups = tbl7.ObjectGroups
+					anchorSettings = sharedState.AnchorSettings
+					objectStates = sharedState.ObjectStates
+					objectGroups = sharedState.ObjectGroups
 					tbl16 = {}
 					n36 = 0
 					vector = Vector3.new(0, 0.002, 0)
 					vector2 = Vector3.new(0, 0.05, 0)
 
 					fn21 = function(arg)
-						return tbl12.IsPartOwner(arg) or tbl12.IsNetworkOwner(arg)
+						return featureUtils.IsPartOwner(arg) or featureUtils.IsNetworkOwner(arg)
 					end
 
 					fn22 = function(arg)
@@ -26880,7 +26881,7 @@ end
 						end
 
 						if arg:IsA("Player") then
-							local v22, v23 = tbl12.Char(arg)
+							local v22, v23 = featureUtils.Char(arg)
 							if v22 == arg.Character then
 								return v22, v23
 							end
@@ -26893,11 +26894,11 @@ end
 						local primaryPart = arg.PrimaryPart
 
 						if not (primaryPart and primaryPart:IsDescendantOf(arg) and primaryPart.CanQuery and not primaryPart.Anchored) then
-							primaryPart = tbl12.FindNicePart(arg)
+							primaryPart = featureUtils.FindNicePart(arg)
 						end
 
 						if not (primaryPart and primaryPart:IsDescendantOf(arg)) then
-							tbl7.GrabbableParts[arg] = nil
+							sharedState.GrabbableParts[arg] = nil
 							primaryPart = arg:FindFirstChildWhichIsA("BasePart", true)
 						end
 
@@ -26981,7 +26982,7 @@ end
 							if arg.Part.Parent then
 								arg.Part.CustomPhysicalProperties = arg.Physics
 								arg.Part.Massless = arg.Massless
-								tbl12.ResetVelocity(arg.Part)
+								featureUtils.ResetVelocity(arg.Part)
 							end
 						end
 
@@ -27230,7 +27231,7 @@ end
 					do
 						do
 							local function fn33()
-								tbl12.SetRuntimeConnection("Anchors", RunService.Heartbeat, not flag11 and next(objectStates) ~= nil, tbl12.UpdateAnchors)
+								featureUtils.SetRuntimeConnection("Anchors", RunService.Heartbeat, not isUnloading and next(objectStates) ~= nil, featureUtils.UpdateAnchors)
 							end
 
 							fn30 = function(arg)
@@ -27253,8 +27254,8 @@ end
 								end
 								local tbl17 = { Target = arg, CFrame = v24.CFrame, Nodes = {}, Connections = {}, RetryAt = 0 }
 
-								if tbl12.ClearObjectAura then
-									tbl12.ClearObjectAura(v23)
+								if featureUtils.ClearObjectAura then
+									featureUtils.ClearObjectAura(v23)
 								end
 
 								objectStates[arg] = tbl17
@@ -27271,7 +27272,7 @@ end
 								local weldConstraint = grabPart and grabPart:FindFirstChild("WeldConstraint")
 
 								if weldConstraint and fn22(weldConstraint.Part1) == arg then
-									tbl12.HandleAnchorGrab(weldConstraint.Part1, grabParts)
+									featureUtils.HandleAnchorGrab(weldConstraint.Part1, grabParts)
 								end
 
 								fn33()
@@ -27283,7 +27284,7 @@ end
 									return
 								end
 								arg.Anchored = anchored
-								local anchored2 = tbl7.Anchored
+								local anchored2 = sharedState.Anchored
 								local target = arg.Target
 								local v22
 
@@ -27321,7 +27322,7 @@ end
 										if node.Part.Parent then
 											node.Part.CustomPhysicalProperties = node.Physics
 											node.Part.Massless = node.Massless
-											tbl12.ResetVelocity(node.Part)
+											featureUtils.ResetVelocity(node.Part)
 										end
 									end
 								end
@@ -27331,7 +27332,7 @@ end
 
 							fn32 = function(arg)
 								objectStates[arg.Target] = nil
-								tbl7.Anchored[arg.Target] = nil
+								sharedState.Anchored[arg.Target] = nil
 
 								if arg.Target:IsA("Player") then
 									tbl16[arg.Target.UserId] = nil
@@ -27343,15 +27344,15 @@ end
 						end
 					end
 
-					tbl12.GetObjectTarget = function()
+					featureUtils.GetObjectTarget = function()
 						local grabParts = workspace:FindFirstChild("GrabParts")
 						local grabPart = grabParts and grabParts:FindFirstChild("GrabPart")
 						grabPart = grabPart and grabPart:FindFirstChild("WeldConstraint")
 						local part1 = grabPart and grabPart.Part1
-						return fn22(part1 or tbl12.GetTarget()), part1 and grabParts
+						return fn22(part1 or featureUtils.GetTarget()), part1 and grabParts
 					end
 
-					tbl12.SetAnchored = function(arg, anchored)
+					featureUtils.SetAnchored = function(arg, anchored)
 						local v22
 
 						if objectStates[arg] then
@@ -27360,7 +27361,7 @@ end
 							v22 = fn22(arg)
 						end
 
-						if not v22 or anchored and flag11 then
+						if not v22 or anchored and isUnloading then
 							return false
 						end
 						local v23 = objectStates[v22]
@@ -27396,10 +27397,10 @@ end
 						return true
 					end
 
-					tbl12.ToggleAnchor = function()
-						local v22 = tbl12.GetObjectTarget()
+					featureUtils.ToggleAnchor = function()
+						local v22 = featureUtils.GetObjectTarget()
 						if v22 then
-							return tbl12.SetAnchored(v22, not tbl7.Anchored[v22])
+							return featureUtils.SetAnchored(v22, not sharedState.Anchored[v22])
 						end
 					end
 
@@ -27439,17 +27440,17 @@ end
 
 							arg.GrabConnections = nil
 
-							if not flag11 and not arg3 then
-								tbl12.UpdateAnchors()
+							if not isUnloading and not arg3 then
+								featureUtils.UpdateAnchors()
 							end
 						end
 
-						tbl12.HandleAnchorGrab = function(heldRoot, held)
+						featureUtils.HandleAnchorGrab = function(heldRoot, held)
 							local v22 = objectStates[fn22(heldRoot)]
 							if not v22 or v22.Held == held then
 								return
 							end
-							tbl12.DisableEndGrabEarly()
+							featureUtils.DisableEndGrabEarly()
 							local v23 = ipairs
 							local grabConnections = v22.GrabConnections or {}
 
@@ -27512,7 +27513,7 @@ end
 							return flag12, arg2 and not arg4.Anchored
 						end
 
-						tbl12.UpdateAnchors = function()
+						featureUtils.UpdateAnchors = function()
 							local now3 = os.clock()
 
 							for k, v22 in pairs(tbl16) do
@@ -27521,12 +27522,12 @@ end
 
 									if playerByUserId then
 										objectStates[v22.Target] = nil
-										tbl7.Anchored[v22.Target] = nil
+										sharedState.Anchored[v22.Target] = nil
 										fn28(v22)
 										v22.Target = playerByUserId
 										v22.RetryAt = 0
 										objectStates[playerByUserId] = v22
-										tbl7.Anchored[playerByUserId] = v22
+										sharedState.Anchored[playerByUserId] = v22
 									end
 								end
 							end
@@ -27540,7 +27541,7 @@ end
 											fn28(objectState)
 										end
 									else
-										tbl12.RemoveObjectFromGroup(k)
+										featureUtils.RemoveObjectFromGroup(k)
 
 										if objectStates[k] then
 											fn32(objectState)
@@ -27568,7 +27569,7 @@ end
 
 							for _, objectGroup in pairs(objectGroups) do
 								if objectGroup.CollisionDirty then
-									tbl12.UpdateGroupCollisions(objectGroup)
+									featureUtils.UpdateGroupCollisions(objectGroup)
 								end
 
 								local leader = objectGroup.Leader
@@ -27668,7 +27669,7 @@ end
 												for _, v22 in ipairs(tbl17) do
 													if fn35() then
 														if v22.Parent and fn35(v22) and not fn21(v22) then
-															if pcall(tbl12.SNO, v22, 0.75, function()
+															if pcall(featureUtils.SNO, v22, 0.75, function()
 																return fn35(v22)
 															end) then
 																continue
@@ -27785,7 +27786,7 @@ end
 						end
 					end
 
-					tbl12.ClearAnchors = function()
+					featureUtils.ClearAnchors = function()
 						for _, objectGroup in pairs(objectGroups) do
 							objectGroup.Anchored = false
 						end
@@ -27799,13 +27800,13 @@ end
 						end
 					end
 
-					tbl12.UpdateAnchorColors = function()
-						for _, v22 in pairs(tbl7.Anchored) do
+					featureUtils.UpdateAnchorColors = function()
+						for _, v22 in pairs(sharedState.Anchored) do
 							fn24(v22)
 						end
 					end
 
-					tbl12.UpdateGroupCollisions = function(arg)
+					featureUtils.UpdateGroupCollisions = function(arg)
 						if arg.CollisionFolder then
 							arg.CollisionFolder:Destroy()
 						end
@@ -27841,14 +27842,14 @@ end
 						end
 					end
 
-					tbl12.UpdateObjectGroup = function(arg)
+					featureUtils.UpdateObjectGroup = function(arg)
 						for k in pairs(arg.Members) do
 							fn24(k)
 						end
 					end
 
-					tbl12.RefreshObjectGroups = function()
-						if flag11 then
+					featureUtils.RefreshObjectGroups = function()
+						if isUnloading then
 							return
 						end
 						local tbl17 = {}
@@ -27862,7 +27863,7 @@ end
 						end)
 
 						local objectGroup = options.ObjectGroup
-						local objectGroup2 = tbl9.ObjectGroup
+						local objectGroup2 = settings.ObjectGroup
 
 						if objectGroup then
 							objectGroup:SetValues(tbl17)
@@ -27876,7 +27877,7 @@ end
 							setValue(v22, objectGroup2)
 						end
 
-						local v22 = objectGroups[tbl9.ObjectGroup]
+						local v22 = objectGroups[settings.ObjectGroup]
 						local objects = 0
 
 						if v22 then
@@ -27885,12 +27886,12 @@ end
 							end
 						end
 
-						if tbl9.ObjectGroupLabel then
-							tbl9.ObjectGroupLabel:SetText("Objects: " .. objects)
+						if settings.ObjectGroupLabel then
+							settings.ObjectGroupLabel:SetText("Objects: " .. objects)
 						end
 					end
 
-					tbl12.CreateObjectGroup = function()
+					featureUtils.CreateObjectGroup = function()
 						n36 += 1
 						local objectGroup = "Group " .. n36
 
@@ -27905,11 +27906,11 @@ end
 							OutlineColor = anchorSettings.OutlineColor,
 						}
 
-						tbl9.ObjectGroup = objectGroup
-						tbl12.RefreshObjectGroups()
+						settings.ObjectGroup = objectGroup
+						featureUtils.RefreshObjectGroups()
 					end
 
-					tbl12.RemoveObjectFromGroup = function(arg)
+					featureUtils.RemoveObjectFromGroup = function(arg)
 						if not objectStates[arg] then
 							arg = fn22(arg) or arg
 						end
@@ -27921,7 +27922,7 @@ end
 						end
 						group.Members[v22] = nil
 						v22.Group = nil
-						tbl12.UpdateGroupCollisions(group)
+						featureUtils.UpdateGroupCollisions(group)
 						fn24(v22)
 
 						if group.Leader == v22 then
@@ -27936,26 +27937,26 @@ end
 							fn32(v22)
 						end
 
-						tbl12.RefreshObjectGroups()
+						featureUtils.RefreshObjectGroups()
 						return true
 					end
 
-					tbl12.AddObjectToGroup = function()
-						if flag11 then
+					featureUtils.AddObjectToGroup = function()
+						if isUnloading then
 							return
 						end
-						local v22 = tbl12.GetObjectTarget()
-						local v23 = objectGroups[tbl9.ObjectGroup]
+						local v22 = featureUtils.GetObjectTarget()
+						local v23 = objectGroups[settings.ObjectGroup]
 						if not v23 then
-							return fn18("Select an object group first.")
+							return notify("Select an object group first.")
 						end
 
 						if not v22 or v22:IsA("Player") then
-							return fn18("Grab a movable toy first.")
+							return notify("Grab a movable toy first.")
 						end
 						local v24 = fn30(v22)
 						if not v24 then
-							return fn18("This object cannot be grouped.")
+							return notify("This object cannot be grouped.")
 						end
 
 						if v24.Group == v23 then
@@ -27963,7 +27964,7 @@ end
 						end
 
 						if v24.Group then
-							return fn18("Remove this object from its current group first.")
+							return notify("Remove this object from its current group first.")
 						end
 						local leader = v23.Leader
 
@@ -27972,7 +27973,7 @@ end
 						end
 
 						if leader then
-							tbl12.RemoveObjectFromGroup(v23.Leader.Target)
+							featureUtils.RemoveObjectFromGroup(v23.Leader.Target)
 						end
 
 						v23.Leader = v23.Leader or v24
@@ -27994,7 +27995,7 @@ end
 							v23.Driver = v25
 						end
 
-						tbl12.UpdateGroupCollisions(v23)
+						featureUtils.UpdateGroupCollisions(v23)
 
 						if v23.Anchored or v24.Anchored then
 							v23.Anchored = true
@@ -28005,10 +28006,10 @@ end
 						end
 
 						fn24(v24)
-						tbl12.RefreshObjectGroups()
+						featureUtils.RefreshObjectGroups()
 					end
 
-					tbl12.DeleteObjectGroup = function(arg)
+					featureUtils.DeleteObjectGroup = function(arg)
 						local v22 = objectGroups[arg]
 						if not v22 then
 							return
@@ -28016,7 +28017,7 @@ end
 						v22.Deleting = true
 
 						while next(v22.Members) do
-							tbl12.RemoveObjectFromGroup(next(v22.Members).Target)
+							featureUtils.RemoveObjectFromGroup(next(v22.Members).Target)
 						end
 
 						if v22.CollisionFolder then
@@ -28024,15 +28025,15 @@ end
 						end
 
 						objectGroups[arg] = nil
-						tbl12.RefreshObjectGroups()
+						featureUtils.RefreshObjectGroups()
 					end
 
-					tbl12.ReleaseObject = function(arg)
+					featureUtils.ReleaseObject = function(arg)
 						if not objectStates[arg] then
 							arg = fn22(arg) or arg
 						end
 
-						tbl12.RemoveObjectFromGroup(arg)
+						featureUtils.RemoveObjectFromGroup(arg)
 						local v22 = objectStates[arg]
 
 						if v22 then
@@ -28043,31 +28044,31 @@ end
 
 				do
 					do
-						tbl12.ClearObjectGroups = function()
+						featureUtils.ClearObjectGroups = function()
 							for k in pairs(objectGroups) do
-								tbl12.DeleteObjectGroup(k)
+								featureUtils.DeleteObjectGroup(k)
 							end
 						end
 
-						tbl12.BananaRagdoll = function(arg)
-							local v22, v23, v24 = tbl12.Char()
-							local rightLeg, v25, v26 = tbl12.Char(arg)
+						featureUtils.BananaRagdoll = function(arg)
+							local v22, v23, v24 = featureUtils.Char()
+							local rightLeg, v25, v26 = featureUtils.Char(arg)
 							rightLeg = rightLeg and rightLeg:FindFirstChild("Right Leg")
 
-							if rightLeg and v25 and v26 and v26.Health > 0 and v23 and v24.Health > 0 and tbl12.GetMagnitude(v25, workspace.SpawnLocation) < 3000 then
-								local rscBanana = v17:FindFirstChild("RSCBanana") or tbl12.SpawnToy("FoodBanana")
+							if rightLeg and v25 and v26 and v26.Health > 0 and v23 and v24.Health > 0 and featureUtils.GetMagnitude(v25, workspace.SpawnLocation) < 3000 then
+								local rscBanana = spawnedToysFolder:FindFirstChild("RSCBanana") or featureUtils.SpawnToy("FoodBanana")
 								local weight = rscBanana and rscBanana:WaitForChild("Weight", 0.25)
 								local hitboxPart = weight and rscBanana:WaitForChild("HitboxPart", 0.25)
 								local main = hitboxPart and rscBanana:WaitForChild("Main", 0.25)
-								if not main or not tbl12.MakeFoodEaten(rscBanana, true) or not v25 then
-									return tbl12.DestroyToy(rscBanana)
+								if not main or not featureUtils.MakeFoodEaten(rscBanana, true) or not v25 then
+									return featureUtils.DestroyToy(rscBanana)
 								end
 
 								if weight.ReceiveAge ~= 0 then
-									if not tbl12.SNO(hitboxPart) then
-										return tbl12.DestroyToy(rscBanana)
+									if not featureUtils.SNO(hitboxPart) then
+										return featureUtils.DestroyToy(rscBanana)
 									end
-									tbl12.RNO(hitboxPart)
+									featureUtils.RNO(hitboxPart)
 								end
 
 								if rscBanana.Name ~= "RSCBanana" then
@@ -28088,37 +28089,37 @@ end
 									main.CFrame = rightLeg.CFrame
 									main.Velocity = Vector3.new(0.1, 0.1, 0.1)
 									RunService.Heartbeat:Wait()
-									tbl12.ResetVelocity(main)
+									featureUtils.ResetVelocity(main)
 								end
 							end
 						end
 
-						tbl12.MakeBlack = function(arg)
-							local v22, v23, v24 = tbl12.Char()
-							local v25, v26, v27 = tbl12.Char(arg)
+						featureUtils.MakeBlack = function(arg)
+							local v22, v23, v24 = featureUtils.Char()
+							local v25, v26, v27 = featureUtils.Char(arg)
 
-							if v24 and v24.Health > 0 and v23 and v26 and v27 and v27.Health > 0 and tbl12.GetMagnitude(v26, workspace.SpawnLocation) < 3000 and (not localPlayer.InPlot.Value or tbl9.IsBarrierBroken) then
-								local rscOven = v17:FindFirstChild("RSCOven") or tbl12.SpawnToy("OvenDarkGray")
+							if v24 and v24.Health > 0 and v23 and v26 and v27 and v27.Health > 0 and featureUtils.GetMagnitude(v26, workspace.SpawnLocation) < 3000 and (not LocalPlayer.InPlot.Value or settings.IsBarrierBroken) then
+								local rscOven = spawnedToysFolder:FindFirstChild("RSCOven") or featureUtils.SpawnToy("OvenDarkGray")
 								if not rscOven then
 									return
 								end
 								local buttonOven = rscOven:WaitForChild("ButtonOven", 0.25)
 								if not buttonOven then
-									return tbl12.DestroyToy(rscOven)
+									return featureUtils.DestroyToy(rscOven)
 								end
 								local main = rscOven:WaitForChild("Main", 0.25)
 								if not main then
-									return tbl12.DestroyToy(rscOven)
+									return featureUtils.DestroyToy(rscOven)
 								end
-								local v28 = tbl12.FindNicePart(rscOven)
-								if not tbl12.SNO(v28) then
-									return tbl12.DestroyToy(rscOven)
+								local v28 = featureUtils.FindNicePart(rscOven)
+								if not featureUtils.SNO(v28) then
+									return featureUtils.DestroyToy(rscOven)
 								end
 
 								if buttonOven.Transparency ~= 1 then
 									main.CFrame = v23.CFrame * CFrame.new(0, 5, 0)
 									task.wait(0.15)
-									tbl12.Grab(buttonOven)
+									featureUtils.Grab(buttonOven)
 									task.wait(0.15)
 								end
 
@@ -28138,35 +28139,35 @@ end
 								local now3 = tick()
 
 								while tick() - now3 <= 0.1 do
-									tbl12.Teleport(main, v26)
+									featureUtils.Teleport(main, v26)
 									RunService.Heartbeat:Wait()
 								end
 							end
 						end
 
-						tbl12.Microwave = function(arg)
-							local v22, v23, v24 = tbl12.Char()
-							local v25, v26, v27 = tbl12.Char(arg)
+						featureUtils.Microwave = function(arg)
+							local v22, v23, v24 = featureUtils.Char()
+							local v25, v26, v27 = featureUtils.Char(arg)
 
-							if v24 and v24.Health > 0 and v23 and v26 and v27 and v27.Health > 0 and tbl12.GetMagnitude(v26, workspace.SpawnLocation) < 3000 and (not localPlayer.InPlot.Value or tbl9.IsBarrierBroken) then
-								local rscMicrowave = v17:FindFirstChild("RSCMicrowave") or tbl12.SpawnToy("OvenMicrowaveWhite")
+							if v24 and v24.Health > 0 and v23 and v26 and v27 and v27.Health > 0 and featureUtils.GetMagnitude(v26, workspace.SpawnLocation) < 3000 and (not LocalPlayer.InPlot.Value or settings.IsBarrierBroken) then
+								local rscMicrowave = spawnedToysFolder:FindFirstChild("RSCMicrowave") or featureUtils.SpawnToy("OvenMicrowaveWhite")
 								if not rscMicrowave then
 									return
 								end
 								local button = rscMicrowave:WaitForChild("Button", 0.25)
 								local primaryPart = rscMicrowave.PrimaryPart
 								if not (button and primaryPart) then
-									return tbl12.DestroyToy(rscMicrowave)
+									return featureUtils.DestroyToy(rscMicrowave)
 								end
-								local v28 = tbl12.FindNicePart(rscMicrowave)
-								if not tbl12.SNO(v28) then
-									return tbl12.DestroyToy(rscMicrowave)
+								local v28 = featureUtils.FindNicePart(rscMicrowave)
+								if not featureUtils.SNO(v28) then
+									return featureUtils.DestroyToy(rscMicrowave)
 								end
 
 								if button.Transparency ~= 1 then
 									primaryPart.CFrame = v23.CFrame * CFrame.new(0, 5, 0)
 									task.wait(0.15)
-									tbl12.Grab(button)
+									featureUtils.Grab(button)
 									task.wait(0.15)
 								end
 
@@ -28186,22 +28187,22 @@ end
 								local now3 = tick()
 
 								while tick() - now3 <= 0.1 do
-									tbl12.Teleport(primaryPart, v26)
+									featureUtils.Teleport(primaryPart, v26)
 									RunService.Heartbeat:Wait()
 								end
 							end
 						end
 
-						tbl12.Campfire = function(arg)
-							local v22, v23, v24 = tbl12.Char()
-							local v25, v26, v27 = tbl12.Char(arg)
+						featureUtils.Campfire = function(arg)
+							local v22, v23, v24 = featureUtils.Char()
+							local v25, v26, v27 = featureUtils.Char(arg)
 
-							if v26 and v27 and v27.Health > 0 and v23 and v24.Health > 0 and tbl12.GetMagnitude(v26, workspace.SpawnLocation) < 3000 then
-								local rscCampfire = v17:FindFirstChild("RSCCampfire") or tbl12.SpawnToy("Campfire")
+							if v26 and v27 and v27.Health > 0 and v23 and v24.Health > 0 and featureUtils.GetMagnitude(v26, workspace.SpawnLocation) < 3000 then
+								local rscCampfire = spawnedToysFolder:FindFirstChild("RSCCampfire") or featureUtils.SpawnToy("Campfire")
 								local soundPart = rscCampfire and rscCampfire:WaitForChild("SoundPart", 0.25)
 								local main = soundPart and rscCampfire:WaitForChild("Main", 0.25)
-								if not main or not v26 or not tbl12.SNO(soundPart) then
-									return tbl12.DestroyToy(rscCampfire)
+								if not main or not v26 or not featureUtils.SNO(soundPart) then
+									return featureUtils.DestroyToy(rscCampfire)
 								end
 
 								if rscCampfire.Name ~= "RSCCampfire" then
@@ -28219,16 +28220,16 @@ end
 								local now3 = tick()
 
 								while tick() - now3 <= 0.1 do
-									tbl12.Teleport(main, v26.CFrame - Vector3.new(0, 2, 0))
+									featureUtils.Teleport(main, v26.CFrame - Vector3.new(0, 2, 0))
 									RunService.Heartbeat:Wait()
 								end
 							end
 						end
 
 						do
-							local flingState = tbl7.FlingState
+							local flingState = sharedState.FlingState
 
-							tbl12.ClearFling = function()
+							featureUtils.ClearFling = function()
 								local toy = flingState.Toy
 								local part4 = flingState.Part
 								local v22 = flingState
@@ -28238,24 +28239,24 @@ end
 								v23.ActiveMethod = nil
 
 								if part4 and part4.Parent then
-									tbl12.ResetVelocity(part4)
+									featureUtils.ResetVelocity(part4)
 								end
 
 								if toy and toy.Parent then
-									tbl12.DestroyToy(toy)
+									featureUtils.DestroyToy(toy)
 								end
 							end
 
-							tbl12.Fling = function(arg)
+							featureUtils.Fling = function(arg)
 								if flingState.Busy then
 									return
 								end
 								flingState.Busy = true
 
 								local ok, result = pcall(function()
-									local v22, v23, v24 = tbl12.Char()
-									local v25, v26, v27 = tbl12.Char(arg)
-									if not (v23 and v24 and v24.Health > 0 and v26 and v27 and v27.Health > 0 and tbl12.GetMagnitude(v26, workspace.SpawnLocation) < 3000) then
+									local v22, v23, v24 = featureUtils.Char()
+									local v25, v26, v27 = featureUtils.Char(arg)
+									if not (v23 and v24 and v24.Health > 0 and v26 and v27 and v27.Health > 0 and featureUtils.GetMagnitude(v26, workspace.SpawnLocation) < 3000) then
 										return
 									end
 									local method = flingState.Method
@@ -28263,8 +28264,8 @@ end
 									local part4 = flingState.Part
 
 									if not (toy and toy.Parent and part4 and part4.Parent and flingState.ActiveMethod == method) then
-										tbl12.ClearFling()
-										toy = tbl12.SpawnToy(method, nil, 1)
+										featureUtils.ClearFling()
+										toy = featureUtils.SpawnToy(method, nil, 1)
 										local v28
 
 										if toy then
@@ -28299,8 +28300,8 @@ end
 											part4 = toy
 										end
 
-										if not (v28 and part4 and tbl12.SNO(part4)) or flingState.Method ~= method or flag11 then
-											tbl12.DestroyToy(toy)
+										if not (v28 and part4 and featureUtils.SNO(part4)) or flingState.Method ~= method or isUnloading then
+											featureUtils.DestroyToy(toy)
 											return
 										end
 										local v29 = flingState
@@ -28308,8 +28309,8 @@ end
 										flingState.Toy = toy
 										v29.Part = part4
 										v30.ActiveMethod = method
-									elseif not tbl12.IsPartOwner(part4) and not tbl12.SNO(part4, 0.35) then
-										tbl12.ClearFling()
+									elseif not featureUtils.IsPartOwner(part4) and not featureUtils.SNO(part4, 0.35) then
+										featureUtils.ClearFling()
 										return
 									end
 
@@ -28319,7 +28320,7 @@ end
 									local n37 = 1
 
 									while true do
-										local flag12 = flag11 or flingState.Toy ~= toy or flingState.Method ~= method
+										local flag12 = isUnloading or flingState.Toy ~= toy or flingState.Method ~= method
 
 										if not flag12 then
 											flag12 = not (toy.Parent and v26.Parent and v27.Health > 0)
@@ -28327,7 +28328,7 @@ end
 
 										if not flag12 then
 											n37 = -n37
-											tbl12.PivotTo(toy, tbl12.PredictCFrame(v26) * CFrame.new(n37 * 0.75, 0, 0), BasePart, tbl17)
+											featureUtils.PivotTo(toy, featureUtils.PredictCFrame(v26) * CFrame.new(n37 * 0.75, 0, 0), BasePart, tbl17)
 											part4.AssemblyLinearVelocity = Vector3.new(n37 * 250, 120, -n37 * 250)
 											part4.AssemblyAngularVelocity = Vector3.new(n37 * 1500, 1500, -n37 * 1500)
 											RunService.Heartbeat:Wait()
@@ -28340,8 +28341,8 @@ end
 									end
 
 									if flingState.Toy == toy and toy.Parent and part4.Parent then
-										tbl12.ResetVelocity(part4)
-										tbl12.PivotTo(toy, CFrame.new(0, 100000, 0), BasePart, tbl17)
+										featureUtils.ResetVelocity(part4)
+										featureUtils.PivotTo(toy, CFrame.new(0, 100000, 0), BasePart, tbl17)
 									end
 
 									return true
@@ -28362,7 +28363,7 @@ end
 						local toysAuraSettings
 
 						do
-							tbl13 = {
+							modelState = {
 								Shapes = {},
 								ShapeNames = {},
 								ShapeCache = {},
@@ -28375,49 +28376,49 @@ end
 								CharacterRoots = {},
 							}
 
-							toysAuraSettings = tbl7.ToysAuraSettings
+							toysAuraSettings = sharedState.ToysAuraSettings
 
-							tbl13.ClearCharacterRoots = function()
-								tbl12.SetRuntimeConnection("ToyAuraCharacterAdded", nil, false)
-								tbl12.SetRuntimeConnection("ToyAuraCharacterRemoved", nil, false)
-								tbl13.Character = nil
-								table.clear(tbl13.CharacterParts)
-								table.clear(tbl13.CharacterRoots)
+							modelState.ClearCharacterRoots = function()
+								featureUtils.SetRuntimeConnection("ToyAuraCharacterAdded", nil, false)
+								featureUtils.SetRuntimeConnection("ToyAuraCharacterRemoved", nil, false)
+								modelState.Character = nil
+								table.clear(modelState.CharacterParts)
+								table.clear(modelState.CharacterRoots)
 							end
 
-							tbl13.UpdateCharacterRoots = function()
-								local character = localPlayer.Character
+							modelState.UpdateCharacterRoots = function()
+								local character = LocalPlayer.Character
 
-								if character ~= tbl13.Character then
-									tbl13.ClearCharacterRoots()
-									tbl13.Character = character
+								if character ~= modelState.Character then
+									modelState.ClearCharacterRoots()
+									modelState.Character = character
 
 									if character then
-										tbl12.SetRuntimeConnection("ToyAuraCharacterAdded", character.DescendantAdded, true, function(arg)
+										featureUtils.SetRuntimeConnection("ToyAuraCharacterAdded", character.DescendantAdded, true, function(arg)
 											if arg:IsA("BasePart") then
-												tbl13.CharacterParts[arg] = true
+												modelState.CharacterParts[arg] = true
 											end
 										end)
 
-										tbl12.SetRuntimeConnection("ToyAuraCharacterRemoved", character.DescendantRemoving, true, function(arg)
-											tbl13.CharacterParts[arg] = nil
+										featureUtils.SetRuntimeConnection("ToyAuraCharacterRemoved", character.DescendantRemoving, true, function(arg)
+											modelState.CharacterParts[arg] = nil
 										end)
 
 										for _, v22 in character:QueryDescendants("BasePart") do
-											tbl13.CharacterParts[v22] = true
+											modelState.CharacterParts[v22] = true
 										end
 									end
 								end
 
-								local characterRoots = tbl13.CharacterRoots
+								local characterRoots = modelState.CharacterRoots
 								table.clear(characterRoots)
 
-								for k in pairs(tbl13.CharacterParts) do
+								for k in pairs(modelState.CharacterParts) do
 									characterRoots[k.AssemblyRootPart or k] = true
 								end
 							end
 
-							tbl13.AddCandidate = function(arg, arg2)
+							modelState.AddCandidate = function(arg, arg2)
 								if not arg:IsA("Model") then
 									arg = arg:FindFirstAncestorOfClass("Model")
 								end
@@ -28427,54 +28428,54 @@ end
 								end
 
 								if arg and (arg == arg2 or arg:IsDescendantOf(arg2)) then
-									tbl13.Candidates[arg] = arg2
+									modelState.Candidates[arg] = arg2
 								end
 							end
 
-							tbl13.UntrackInventory = function(arg)
-								local v22 = tbl13.Inventories[arg]
+							modelState.UntrackInventory = function(arg)
+								local v22 = modelState.Inventories[arg]
 								if not v22 then
 									return
 								end
-								tbl13.Inventories[arg] = nil
+								modelState.Inventories[arg] = nil
 
 								for _, v23 in ipairs(v22) do
 									v23:Disconnect()
 								end
 
-								for k, candidate in pairs(tbl13.Candidates) do
+								for k, candidate in pairs(modelState.Candidates) do
 									if candidate == arg then
-										tbl13.Candidates[k] = nil
-										tbl7.ToyAuraRoots[k] = nil
+										modelState.Candidates[k] = nil
+										sharedState.ToyAuraRoots[k] = nil
 									end
 								end
 							end
 
-							tbl13.TrackInventory = function(arg)
-								if not (arg and arg.Parent) or tbl13.Inventories[arg] then
+							modelState.TrackInventory = function(arg)
+								if not (arg and arg.Parent) or modelState.Inventories[arg] then
 									return
 								end
 
 								local tbl17 = {
 									arg.DescendantAdded:Connect(function(descendant)
-										tbl13.AddCandidate(descendant, arg)
+										modelState.AddCandidate(descendant, arg)
 									end),
 									arg.DescendantRemoving:Connect(function(descendant)
-										if tbl13.Candidates[descendant] == arg then
-											tbl13.Candidates[descendant] = nil
-											tbl7.ToyAuraRoots[descendant] = nil
+										if modelState.Candidates[descendant] == arg then
+											modelState.Candidates[descendant] = nil
+											sharedState.ToyAuraRoots[descendant] = nil
 										end
 									end),
 								}
 
-								tbl13.Inventories[arg] = tbl17
+								modelState.Inventories[arg] = tbl17
 
 								task.spawn(function()
 									for i, descendant in ipairs(arg:GetDescendants()) do
-										if tbl13.Inventories[arg] ~= tbl17 then
+										if modelState.Inventories[arg] ~= tbl17 then
 											return
 										end
-										tbl13.AddCandidate(descendant, arg)
+										modelState.AddCandidate(descendant, arg)
 
 										if i % 100 == 0 then
 											task.wait()
@@ -28483,47 +28484,47 @@ end
 								end)
 							end
 
-							tbl13.RefreshInventories = function(arg)
-								local activeInventories = tbl13.ActiveInventories
+							modelState.RefreshInventories = function(arg)
+								local activeInventories = modelState.ActiveInventories
 								table.clear(activeInventories)
 
-								for _, inventory in ipairs(tbl7.Inventories) do
+								for _, inventory in ipairs(sharedState.Inventories) do
 									if inventory and inventory.Parent then
 										activeInventories[inventory] = true
-										tbl13.TrackInventory(inventory)
+										modelState.TrackInventory(inventory)
 									end
 								end
 
 								if arg and arg.Parent then
 									activeInventories[arg] = true
-									tbl13.TrackInventory(arg)
+									modelState.TrackInventory(arg)
 								end
 
-								for k in pairs(tbl13.Inventories) do
+								for k in pairs(modelState.Inventories) do
 									if not activeInventories[k] then
-										tbl13.UntrackInventory(k)
+										modelState.UntrackInventory(k)
 									end
 								end
 							end
 
-							tbl13.CleanupCandidates = function()
-								for k in pairs(tbl13.Inventories) do
-									tbl13.UntrackInventory(k)
+							modelState.CleanupCandidates = function()
+								for k in pairs(modelState.Inventories) do
+									modelState.UntrackInventory(k)
 								end
 
-								table.clear(tbl13.Candidates)
-								table.clear(tbl13.ActiveInventories)
+								table.clear(modelState.Candidates)
+								table.clear(modelState.ActiveInventories)
 
-								if flag11 or not toysAuraSettings.Enabled then
-									tbl13.ClearCharacterRoots()
+								if isUnloading or not toysAuraSettings.Enabled then
+									modelState.ClearCharacterRoots()
 								end
 							end
 
-							tbl13.GetRoot = function(arg)
-								if not arg or not arg.Parent or tbl7.ToyAuraReserved[arg] or arg.Name:find("RSC", 1, true) then
+							modelState.GetRoot = function(arg)
+								if not arg or not arg.Parent or sharedState.ToyAuraReserved[arg] or arg.Name:find("RSC", 1, true) then
 									return
 								end
-								local v22 = tbl7.ToyAuraRoots[arg]
+								local v22 = sharedState.ToyAuraRoots[arg]
 								local parent2 = v22 and v22.Parent
 								local flag12
 
@@ -28549,7 +28550,7 @@ end
 									if arg:IsA("BasePart") then
 										primaryPart = arg
 									elseif arg:IsA("Model") then
-										primaryPart = tbl12.FindNicePart(arg) or arg.PrimaryPart or arg:FindFirstChildWhichIsA("BasePart")
+										primaryPart = featureUtils.FindNicePart(arg) or arg.PrimaryPart or arg:FindFirstChildWhichIsA("BasePart")
 									end
 								end
 
@@ -28557,20 +28558,20 @@ end
 									return
 								end
 								local assemblyRootPart = primaryPart.AssemblyRootPart or primaryPart
-								if tbl13.CharacterRoots[assemblyRootPart] or assemblyRootPart ~= arg and not assemblyRootPart:IsDescendantOf(arg) then
+								if modelState.CharacterRoots[assemblyRootPart] or assemblyRootPart ~= arg and not assemblyRootPart:IsDescendantOf(arg) then
 									return
 								end
 
 								if v22 and v22 ~= assemblyRootPart then
-									tbl13.ClearMovers(arg)
+									modelState.ClearMovers(arg)
 								end
 
-								tbl7.ToyAuraRoots[arg] = assemblyRootPart
+								sharedState.ToyAuraRoots[arg] = assemblyRootPart
 								return assemblyRootPart
 							end
 
-							tbl13.SetCollisions = function(arg, canCollide)
-								local v22 = tbl13.Movers[arg]
+							modelState.SetCollisions = function(arg, canCollide)
+								local v22 = modelState.Movers[arg]
 								if not v22 then
 									return
 								end
@@ -28603,41 +28604,41 @@ end
 								end
 							end
 
-							tbl13.ClearMovers = function(arg)
+							modelState.ClearMovers = function(arg)
 								if not arg then
-									for k in tbl13.Movers, nil, nil do
-										tbl13.ClearMovers(k)
+									for k in modelState.Movers, nil, nil do
+										modelState.ClearMovers(k)
 									end
 
 									return
 								end
 
-								local v22 = tbl13.Movers[arg]
+								local v22 = modelState.Movers[arg]
 								if not v22 then
 									return
 								end
-								tbl13.SetCollisions(arg, nil)
+								modelState.SetCollisions(arg, nil)
 								v22.Position:Destroy()
 								v22.Orientation:Destroy()
 								v22.Attachment:Destroy()
-								tbl13.Movers[arg] = nil
+								modelState.Movers[arg] = nil
 							end
 
-							tbl12.ClearObjectAura = function(arg)
+							featureUtils.ClearObjectAura = function(arg)
 								if arg then
-									tbl13.ClearMovers(arg)
+									modelState.ClearMovers(arg)
 								end
 							end
 
-							tbl13.EnsureMovers = function(arg, arg2)
-								if tbl7.ObjectStates[arg] then
+							modelState.EnsureMovers = function(arg, arg2)
+								if sharedState.ObjectStates[arg] then
 									return
 								end
-								local v22 = arg2 or tbl13.GetRoot(arg)
+								local v22 = arg2 or modelState.GetRoot(arg)
 								if not v22 or v22.Anchored then
 									return
 								end
-								local tbl17 = tbl13.Movers[arg]
+								local tbl17 = modelState.Movers[arg]
 								local flag12
 
 								if tbl17 then
@@ -28647,7 +28648,7 @@ end
 								end
 
 								if flag12 then
-									tbl13.ClearMovers(arg)
+									modelState.ClearMovers(arg)
 									tbl17 = nil
 								end
 
@@ -28673,7 +28674,7 @@ end
 									auraAlignOri.RigidityEnabled = false
 									auraAlignOri.Parent = v22
 									tbl17 = { Root = v22, Attachment = auraAttachment, Position = auraAlignPos, Orientation = auraAlignOri, Parts = {} }
-									tbl13.Movers[arg] = tbl17
+									modelState.Movers[arg] = tbl17
 								end
 
 								local responsiveness = toysAuraSettings.Responsiveness or 55
@@ -28685,15 +28686,15 @@ end
 								end
 
 								if tbl17.Collisions ~= toysAuraSettings.Collisions then
-									tbl13.SetCollisions(arg, toysAuraSettings.Collisions)
+									modelState.SetCollisions(arg, toysAuraSettings.Collisions)
 									tbl17.Collisions = toysAuraSettings.Collisions
 								end
 
 								return tbl17.Position, tbl17.Orientation, v22, tbl17
 							end
 
-							tbl13.UpdatePhysics = function(arg, arg2, arg3, arg4, arg5)
-								local v22, v23, v24, v25 = tbl13.EnsureMovers(arg, arg2)
+							modelState.UpdatePhysics = function(arg, arg2, arg3, arg4, arg5)
+								local v22, v23, v24, v25 = modelState.EnsureMovers(arg, arg2)
 								if not v22 then
 									return
 								end
@@ -28719,7 +28720,7 @@ end
 								end
 							end
 
-							tbl13.GetPath = function(arg, arg2, arg3)
+							modelState.GetPath = function(arg, arg2, arg3)
 								local tbl17 = {}
 								local tbl18 = {}
 								local n37
@@ -28774,27 +28775,27 @@ end
 								return tbl17
 							end
 
-							tbl13.AddShape = function(arg, arg2, arg3)
-								if not tbl13.Shapes[arg] then
-									table.insert(tbl13.ShapeNames, arg)
+							modelState.AddShape = function(arg, arg2, arg3)
+								if not modelState.Shapes[arg] then
+									table.insert(modelState.ShapeNames, arg)
 								end
 
-								tbl13.Shapes[arg] = { Generate = arg2, Closed = arg3 }
-								table.clear(tbl13.ShapeCache)
+								modelState.Shapes[arg] = { Generate = arg2, Closed = arg3 }
+								table.clear(modelState.ShapeCache)
 							end
 
-							tbl13.GetShape = function(count)
-								local circle = tbl13.Shapes[toysAuraSettings.Shape] or tbl13.Shapes.Circle
+							modelState.GetShape = function(count)
+								local circle = modelState.Shapes[toysAuraSettings.Shape] or modelState.Shapes.Circle
 								local rows = math.clamp(math.floor(toysAuraSettings.Rows or 1), 1, math.max(count, 1))
 								local rotations = math.max(toysAuraSettings.Rotations or 1, 0)
-								local shapeCache = tbl13.ShapeCache
+								local shapeCache = modelState.ShapeCache
 								if shapeCache.Shape == circle and shapeCache.Count == count and shapeCache.Rows == rows and shapeCache.Rotations == rotations then
 									return shapeCache.Points
 								end
 								local v22
 
 								if type(circle.Generate) == "table" then
-									v22 = tbl13.GetPath(circle.Generate, count, circle.Closed)
+									v22 = modelState.GetPath(circle.Generate, count, circle.Closed)
 								else
 									local n37
 
@@ -28813,7 +28814,7 @@ end
 									if circle.Closed == nil then
 										v22 = v23
 									else
-										v22 = tbl13.GetPath(v23, count, circle.Closed)
+										v22 = modelState.GetPath(v23, count, circle.Closed)
 									end
 								end
 
@@ -28825,7 +28826,7 @@ end
 								return v22
 							end
 
-							tbl13.GetRow = function(arg, arg2, arg3)
+							modelState.GetRow = function(arg, arg2, arg3)
 								local n37 = math.floor(arg2 / arg3)
 								local n38 = arg2 % arg3
 								local n39 = (n37 + 1) * n38
@@ -28836,18 +28837,18 @@ end
 								return n38 + math.floor(n40 / n37), n40 % n37, n37
 							end
 
-							tbl13.GetOffset = function(arg)
+							modelState.GetOffset = function(arg)
 								local n37 = (toysAuraSettings.Radius or 20) * (toysAuraSettings.Spacing or 1)
 								return Vector3.new(arg.X * n37, arg.Y * (toysAuraSettings.Height or toysAuraSettings.Radius or 20), arg.Z * n37)
 							end
 
-							tbl13.GetCenter = function(arg)
+							modelState.GetCenter = function(arg)
 								local center = toysAuraSettings.Center or CFrame.new(0, 50, 0)
 
 								if toysAuraSettings.PosType == "You" and arg then
 									center = arg.CFrame * toysAuraSettings.Offset
-								elseif toysAuraSettings.PosType == "Players" and tbl9.SelectedTAPlayer then
-									local v22, v23 = tbl12.Char(tbl9.SelectedTAPlayer)
+								elseif toysAuraSettings.PosType == "Players" and settings.SelectedTAPlayer then
+									local v22, v23 = featureUtils.Char(settings.SelectedTAPlayer)
 
 									if v23 then
 										center = v23.CFrame * toysAuraSettings.Offset
@@ -28861,16 +28862,16 @@ end
 								return center * CFrame.Angles(math.rad(toysAuraSettings.Rotation.X), math.rad(toysAuraSettings.Rotation.Y), rad(z))
 							end
 
-							tbl13.AddModel = function(arg, arg2, arg3, arg4)
-								if flag11 or not arg or not arg.Parent or not arg:IsA("Model") or tbl13.Models[arg] then
+							modelState.AddModel = function(arg, arg2, arg3, arg4)
+								if isUnloading or not arg or not arg.Parent or not arg:IsA("Model") or modelState.Models[arg] then
 									return
 								end
 
-								if tbl7.ObjectStates[arg] then
+								if sharedState.ObjectStates[arg] then
 									return
 								end
 
-								if toysAuraSettings.OwnInventoryOnly and not arg:IsDescendantOf(v17) then
+								if toysAuraSettings.OwnInventoryOnly and not arg:IsDescendantOf(spawnedToysFolder) then
 									return
 								end
 
@@ -28879,25 +28880,25 @@ end
 								end
 
 								if not arg4 then
-									tbl13.UpdateCharacterRoots()
-									arg4 = tbl13.GetRoot(arg)
+									modelState.UpdateCharacterRoots()
+									arg4 = modelState.GetRoot(arg)
 								end
 
 								if not arg4 then
 									return
 								end
 
-								if arg2 and not tbl12.IsPartOwner(arg4) then
-									if not tbl12.SNO(arg4, arg3 or 0.35) then
+								if arg2 and not featureUtils.IsPartOwner(arg4) then
+									if not featureUtils.SNO(arg4, arg3 or 0.35) then
 										return
 									end
-									tbl13.UpdateCharacterRoots()
-									if tbl13.GetRoot(arg) ~= arg4 then
+									modelState.UpdateCharacterRoots()
+									if modelState.GetRoot(arg) ~= arg4 then
 										return
 									end
 								end
 
-								if flag11 or not arg.Parent or tbl13.Models[arg] or tbl7.ObjectStates[arg] then
+								if isUnloading or not arg.Parent or modelState.Models[arg] or sharedState.ObjectStates[arg] then
 									return
 								end
 
@@ -28905,50 +28906,50 @@ end
 									return
 								end
 								table.insert(toysAuraSettings.Models, arg)
-								tbl13.Models[arg] = true
+								modelState.Models[arg] = true
 								return true
 							end
 
-							tbl13.RemoveModel = function(arg, arg2, arg3)
+							modelState.RemoveModel = function(arg, arg2, arg3)
 								local v22 = arg3 or table.find(toysAuraSettings.Models, arg)
 
 								if v22 then
 									table.remove(toysAuraSettings.Models, v22)
 								end
 
-								tbl13.Models[arg] = nil
-								tbl13.ClearMovers(arg)
+								modelState.Models[arg] = nil
+								modelState.ClearMovers(arg)
 
 								if arg2 then
-									local v23 = tbl13.GetRoot(arg)
+									local v23 = modelState.GetRoot(arg)
 
 									if v23 then
 										task.delay(0.1, function()
-											if v23.Parent and not tbl13.Models[arg] and not tbl7.ObjectStates[arg] then
-												tbl12.RNO(v23)
+											if v23.Parent and not modelState.Models[arg] and not sharedState.ObjectStates[arg] then
+												featureUtils.RNO(v23)
 											end
 										end)
 									end
 								end
 
-								tbl7.ToyAuraRoots[arg] = nil
+								sharedState.ToyAuraRoots[arg] = nil
 							end
 
-							tbl13.TrimModels = function()
+							modelState.TrimModels = function()
 								while toysAuraSettings.LimitEnabled and #toysAuraSettings.Models > toysAuraSettings.Limit do
-									tbl13.RemoveModel(toysAuraSettings.Models[#toysAuraSettings.Models], true)
+									modelState.RemoveModel(toysAuraSettings.Models[#toysAuraSettings.Models], true)
 								end
 							end
 
-							tbl13.ClearModels = function(arg)
+							modelState.ClearModels = function(arg)
 								for i = #toysAuraSettings.Models, 1, -1 do
-									tbl13.RemoveModel(toysAuraSettings.Models[i], arg, i)
+									modelState.RemoveModel(toysAuraSettings.Models[i], arg, i)
 								end
 
-								tbl13.ClearMovers()
+								modelState.ClearMovers()
 							end
 
-							tbl13.AddShape("Line", function(arg, arg2)
+							modelState.AddShape("Line", function(arg, arg2)
 								local n37
 
 								if arg2 == 1 then
@@ -28960,7 +28961,7 @@ end
 								return Vector3.new(-1 + 2 * n37, 0, 0)
 							end)
 
-							tbl13.AddShape("Circle", function(arg, arg2)
+							modelState.AddShape("Circle", function(arg, arg2)
 								local n37 = (arg - 1) / arg2 * 3.1415926535897931 * 2
 								local sin = math.sin
 								return Vector3.new(math.cos(n37), 0, sin(n37))
@@ -28981,10 +28982,10 @@ end
 									tbl17[i] = Vector3.new(math.cos(n37), 0, sin(n37))
 								end
 
-								tbl13.AddShape(v22[1], tbl17, true)
+								modelState.AddShape(v22[1], tbl17, true)
 							end
 
-							tbl13.AddShape("Diamond", {
+							modelState.AddShape("Diamond", {
 								Vector3.new(0, 0, -1),
 								Vector3.new(1, 0, 0),
 								Vector3.new(0, 0, 1),
@@ -29007,16 +29008,16 @@ end
 									tbl17[i] = Vector3.new(math.cos(n38) * n37, 0, math.sin(n38) * n37)
 								end
 
-								tbl13.AddShape("Star", tbl17, true)
+								modelState.AddShape("Star", tbl17, true)
 							end
 						end
 
-						tbl13.AddShape("Heart", function(arg, arg2)
+						modelState.AddShape("Heart", function(arg, arg2)
 							local n37 = (arg - 1) / arg2 * 3.1415926535897931 * 2
 							return Vector3.new(16 * math.sin(n37) ^ 3 / 17, 0, -(13 * math.cos(n37) - 5 * math.cos(2 * n37) - 2 * math.cos(3 * n37) - math.cos(4 * n37)) / 17)
 						end, true)
 
-						tbl13.AddShape("Penis", function(arg, arg2)
+						modelState.AddShape("Penis", function(arg, arg2)
 							local n37 = (arg - 1) / math.max(arg2 - 1, 1)
 							if n37 < 0.22 then
 								local n38 = n37 / 0.22 * 3.1415926535897931 * 2
@@ -29041,35 +29042,35 @@ end
 							return Vector3.new(math.cos(n39) * n40, 0.78 + n38 * 0.34, math.sin(n39) * n40)
 						end)
 
-						tbl13.AddShape("Flower", function(arg, arg2)
+						modelState.AddShape("Flower", function(arg, arg2)
 							local n37 = (arg - 1) / arg2 * 3.1415926535897931 * 2
 							local n38 = 0.62 + math.cos(n37 * 6) * 0.32
 							return Vector3.new(math.cos(n37) * n38, 0, math.sin(n37) * n38)
 						end, true)
 
-						tbl13.AddShape("Clover", function(arg, arg2)
+						modelState.AddShape("Clover", function(arg, arg2)
 							local n37 = (arg - 1) / arg2 * 3.1415926535897931 * 2
 							local n38 = 0.35 + math.abs(math.sin(n37 * 2)) * 0.65
 							return Vector3.new(math.cos(n37) * n38, 0, math.sin(n37) * n38)
 						end, true)
 
-						tbl13.AddShape("Infinity", function(arg, arg2)
+						modelState.AddShape("Infinity", function(arg, arg2)
 							local n37 = (arg - 1) / arg2 * 3.1415926535897931 * 2
 							return Vector3.new(math.sin(n37), 0, math.sin(n37) * math.cos(n37))
 						end, true)
 
-						tbl13.AddShape("Spiral", function(arg, arg2, arg3, arg4)
+						modelState.AddShape("Spiral", function(arg, arg2, arg3, arg4)
 							local n37 = (arg - 1) / math.max(arg2 - 1, 1)
 							local n38 = n37 * 3.1415926535897931 * 2 * arg4
 							return Vector3.new(math.cos(n38) * n37, 0, math.sin(n38) * n37)
 						end, false)
 
-						tbl13.AddShape("Wave", function(arg, arg2, arg3, arg4)
+						modelState.AddShape("Wave", function(arg, arg2, arg3, arg4)
 							local n37 = (arg - 1) / math.max(arg2 - 1, 1)
 							return Vector3.new(-1 + 2 * n37, math.sin(n37 * 3.1415926535897931 * 2 * arg4) * 0.5, 0)
 						end, false)
 
-						tbl13.AddShape("Cross", {
+						modelState.AddShape("Cross", {
 							Vector3.new(0.24, 0, -1),
 							Vector3.new(0.24, 0, -0.24),
 							Vector3.new(1, 0, -0.24),
@@ -29084,7 +29085,7 @@ end
 							Vector3.new(-0.24, 0, -1),
 						}, true)
 
-						tbl13.AddShape("Arrow", {
+						modelState.AddShape("Arrow", {
 							Vector3.new(-1, 0, -0.25),
 							Vector3.new(0.2, 0, -0.25),
 							Vector3.new(0.2, 0, -0.65),
@@ -29094,7 +29095,7 @@ end
 							Vector3.new(-1, 0, 0.25),
 						}, true)
 
-						tbl13.AddShape("Crown", function(arg, arg2)
+						modelState.AddShape("Crown", function(arg, arg2)
 							local n37 = (arg - 1) / arg2 * 3.1415926535897931 * 2
 							local vector3 = Vector3.new
 							local n38 = 0.15 + (0.5 + 0.5 * math.cos(n37 * 5)) ^ 1.5 * 0.75
@@ -29102,21 +29103,21 @@ end
 							return vector3(math.cos(n37), n38, sin(n37))
 						end, true)
 
-						tbl13.AddShape("Sphere", function(arg, arg2)
+						modelState.AddShape("Sphere", function(arg, arg2)
 							local n37 = 1 - 2 * (arg - 0.5) / arg2
 							local v22 = math.sqrt(math.max(0, 1 - n37 * n37))
 							local n38 = 2.3999632297286531 * arg
 							return Vector3.new(math.cos(n38) * v22, n37, math.sin(n38) * v22)
 						end)
 
-						tbl13.AddShape("Dome", function(arg, arg2)
+						modelState.AddShape("Dome", function(arg, arg2)
 							local n37 = (arg - 0.5) / arg2
 							local v22 = math.sqrt(1 - n37 * n37)
 							local n38 = 2.3999632297286531 * arg
 							return Vector3.new(math.cos(n38) * v22, n37, math.sin(n38) * v22)
 						end)
 
-						tbl13.AddShape("Box", {
+						modelState.AddShape("Box", {
 							Vector3.new(-1, -1, -1),
 							Vector3.new(1, -1, -1),
 							Vector3.new(1, -1, 1),
@@ -29135,7 +29136,7 @@ end
 							Vector3.new(-1, 1, -1),
 						}, false)
 
-						tbl13.AddShape("Pyramid", {
+						modelState.AddShape("Pyramid", {
 							Vector3.new(-1, -1, -1),
 							Vector3.new(1, -1, -1),
 							Vector3.new(1, -1, 1),
@@ -29149,16 +29150,16 @@ end
 							Vector3.new(-1, -1, 1),
 						}, false)
 
-						tbl13.AddShape("Cone", function(arg, arg2, arg3, arg4)
+						modelState.AddShape("Cone", function(arg, arg2, arg3, arg4)
 							local n37 = (arg - 1) / math.max(arg2 - 1, 1)
 							local n38 = n37 * 3.1415926535897931 * 2 * arg4
 							local n39 = 1 - n37
 							return Vector3.new(math.cos(n38) * n39, -1 + 2 * n37, math.sin(n38) * n39)
 						end, false)
 
-						tbl13.AddShape("Cylinder", function(arg, arg2, arg3)
+						modelState.AddShape("Cylinder", function(arg, arg2, arg3)
 							local n37 = math.min(arg3, math.max(1, math.floor(arg2 / 3)))
-							local v22, v23, v24 = tbl13.GetRow(arg, arg2, n37)
+							local v22, v23, v24 = modelState.GetRow(arg, arg2, n37)
 							local n38
 
 							if n37 == 1 then
@@ -29172,7 +29173,7 @@ end
 							return Vector3.new(math.cos(n39), n38, sin(n39))
 						end)
 
-						tbl13.AddShape("Helix", function(arg, arg2, arg3, arg4)
+						modelState.AddShape("Helix", function(arg, arg2, arg3, arg4)
 							local n37 = (arg - 1) / math.max(arg2 - 1, 1)
 							local n38 = n37 * 3.1415926535897931 * 2 * arg4
 							local n39 = -1 + 2 * n37
@@ -29180,7 +29181,7 @@ end
 							return Vector3.new(math.cos(n38), n39, sin(n38))
 						end)
 
-						tbl13.AddShape("Double Helix", function(arg, arg2, arg3, arg4)
+						modelState.AddShape("Double Helix", function(arg, arg2, arg3, arg4)
 							local n37 = math.ceil(arg2 / 2)
 							local flag12 = arg > n37
 
@@ -29208,14 +29209,14 @@ end
 							return Vector3.new(math.cos(n41), n42, sin(n41))
 						end)
 
-						tbl13.AddShape("Torus", function(arg, arg2, arg3, arg4)
+						modelState.AddShape("Torus", function(arg, arg2, arg3, arg4)
 							local n37 = (arg - 1) / arg2 * 3.1415926535897931 * 2
 							local n38 = n37 * math.max(1, math.floor(arg4))
 							local n39 = 0.72 + 0.28 * math.cos(n38)
 							return Vector3.new(n39 * math.cos(n37), 0.28 * math.sin(n38), n39 * math.sin(n37))
 						end, true)
 
-						tbl13.AddShape("Galaxy", function(arg, arg2, arg3, arg4)
+						modelState.AddShape("Galaxy", function(arg, arg2, arg3, arg4)
 							local n37 = math.min(arg2, math.clamp(arg3, 2, 8))
 							local n38 = (arg - 1) % n37
 							local v22 = math.sqrt((math.floor((arg - 1) / n37) + 0.5) / (math.floor((arg2 - n38 - 1) / n37) + 1))
@@ -29223,8 +29224,8 @@ end
 							return Vector3.new(math.cos(n39) * v22, math.sin(v22 * 3.1415926535897931 * 4 + n38) * 0.12, math.sin(n39) * v22)
 						end)
 
-						tbl13.AddShape("Grid", function(arg, arg2, arg3)
-							local v22, v23, v24 = tbl13.GetRow(arg, arg2, arg3)
+						modelState.AddShape("Grid", function(arg, arg2, arg3)
+							local v22, v23, v24 = modelState.GetRow(arg, arg2, arg3)
 							local n37
 							if v24 == 1 then
 								n37 = 0
@@ -29243,14 +29244,14 @@ end
 							return Vector3.new(n37, 0, n38)
 						end)
 
-						tbl13.AddShape("Wall", function(arg, arg2, arg3)
-							local v22 = tbl13.Shapes.Grid.Generate(arg, arg2, arg3)
+						modelState.AddShape("Wall", function(arg, arg2, arg3)
+							local v22 = modelState.Shapes.Grid.Generate(arg, arg2, arg3)
 							return Vector3.new(v22.X, v22.Z, 0)
 						end)
 
-						tbl13.AddShape("Ring Stack", function(arg, arg2, arg3)
+						modelState.AddShape("Ring Stack", function(arg, arg2, arg3)
 							local n37 = math.min(arg3, math.max(1, math.floor(arg2 / 3)))
-							local v22, v23, v24 = tbl13.GetRow(arg, arg2, n37)
+							local v22, v23, v24 = modelState.GetRow(arg, arg2, n37)
 							local n38
 
 							if n37 == 1 then
@@ -29267,8 +29268,8 @@ end
 						do
 							local tbl17 = { ShapePhase = 0, MovePhase = 0, BobPhase = 0, Valid = {}, Roots = {} }
 
-							tbl12.UpdateToysAura = function(arg)
-								local v22, v23, v24 = tbl12.Char()
+							featureUtils.UpdateToysAura = function(arg)
+								local v22, v23, v24 = featureUtils.Char()
 								local flag12 = not toysAuraSettings.Enabled or #toysAuraSettings.Models == 0
 								local flag13
 
@@ -29279,7 +29280,7 @@ end
 								end
 
 								if flag13 then
-									tbl13.ClearMovers()
+									modelState.ClearMovers()
 									tbl17.MovePhase = 0
 									return
 								end
@@ -29288,50 +29289,50 @@ end
 								local roots = tbl17.Roots
 								table.clear(valid)
 								table.clear(roots)
-								tbl13.UpdateCharacterRoots()
+								modelState.UpdateCharacterRoots()
 								local n37 = 1
 
 								while n37 <= #toysAuraSettings.Models do
 									local v25 = toysAuraSettings.Models[n37]
-									local parent2 = v25.Parent and tbl13.GetRoot(v25)
+									local parent2 = v25.Parent and modelState.GetRoot(v25)
 
-									if tbl7.ObjectStates[v25] then
-										tbl13.ClearMovers(v25)
+									if sharedState.ObjectStates[v25] then
+										modelState.ClearMovers(v25)
 										n37 += 1
 										continue
 									end
 
-									local flag14 = parent2 and tbl12.IsPartOwner(parent2)
+									local flag14 = parent2 and featureUtils.IsPartOwner(parent2)
 
-									if parent2 and not flag14 and tbl12.SNO(parent2, 0.18) then
-										tbl13.UpdateCharacterRoots()
-										flag14 = tbl13.GetRoot(v25) == parent2
+									if parent2 and not flag14 and featureUtils.SNO(parent2, 0.18) then
+										modelState.UpdateCharacterRoots()
+										flag14 = modelState.GetRoot(v25) == parent2
 									end
 
-									local v26 = flag11
+									local v26 = isUnloading
 									local flag15
 
-									if flag11 then
+									if isUnloading then
 										flag15 = v26
 									else
 										flag15 = not toysAuraSettings.Enabled
 									end
 
 									if flag15 then
-										tbl13.ClearMovers()
+										modelState.ClearMovers()
 										return
 									end
 
 									if toysAuraSettings.Models[n37] == v25 then
-										if tbl7.ObjectStates[v25] then
-											tbl13.ClearMovers(v25)
+										if sharedState.ObjectStates[v25] then
+											modelState.ClearMovers(v25)
 											n37 += 1
 										elseif flag14 then
 											valid[#valid + 1] = v25
 											roots[#roots + 1] = parent2
 											n37 += 1
 										else
-											tbl13.RemoveModel(v25, false, n37)
+											modelState.RemoveModel(v25, false, n37)
 										end
 									end
 								end
@@ -29359,13 +29360,13 @@ end
 									tbl17.BobPhase = 0
 								end
 
-								local v25 = tbl13.GetCenter(v23)
+								local v25 = modelState.GetCenter(v23)
 
 								if toysAuraSettings.Bob then
 									v25 *= CFrame.new(0, math.sin(tbl17.BobPhase) * (toysAuraSettings.BobHeight or 0), 0)
 								end
 
-								local v26 = tbl13.GetShape(n38)
+								local v26 = modelState.GetShape(n38)
 								local n39 = #v26
 								if n39 == 0 then
 									return
@@ -29393,16 +29394,16 @@ end
 
 									local faceCenter = toysAuraSettings.FaceCenter
 									local position = v25.Position
-									tbl13.UpdatePhysics(valid[i], roots[i], v25 * CFrame.new(tbl13.GetOffset(n40)), faceCenter, position)
+									modelState.UpdatePhysics(valid[i], roots[i], v25 * CFrame.new(modelState.GetOffset(n40)), faceCenter, position)
 								end
 							end
 
-							tbl12.StepToysAura = function(arg)
+							featureUtils.StepToysAura = function(arg)
 								if tbl17.Updating then
 									return
 								end
 								tbl17.Updating = true
-								local ok, result = pcall(tbl12.UpdateToysAura, arg)
+								local ok, result = pcall(featureUtils.UpdateToysAura, arg)
 								tbl17.Updating = false
 
 								if not ok then
@@ -29410,17 +29411,17 @@ end
 								end
 							end
 
-							tbl12.SetToysAuraConnection = function(arg)
-								tbl12.SetRuntimeConnection("ToysAura", RunService.Heartbeat, arg, tbl12.StepToysAura)
+							featureUtils.SetToysAuraConnection = function(arg)
+								featureUtils.SetRuntimeConnection("ToysAura", RunService.Heartbeat, arg, featureUtils.StepToysAura)
 								if arg then
 									return
 								end
 
-								if not tbl12.IsToyAuraEffectsEnabled() then
-									tbl13.ClearCharacterRoots()
+								if not featureUtils.IsToyAuraEffectsEnabled() then
+									modelState.ClearCharacterRoots()
 								end
 
-								tbl13.ClearMovers()
+								modelState.ClearMovers()
 								tbl17.MovePhase = 0
 							end
 						end
@@ -29429,33 +29430,33 @@ end
 			end
 
 			do
-				tbl12.CaptureACPose = function(arg)
-					local tbl16 = { BodyOffset = tbl9.AutoClickerOffset, Rotation = {}, LimbOffsets = {} }
+				featureUtils.CaptureACPose = function(arg)
+					local tbl16 = { BodyOffset = settings.AutoClickerOffset, Rotation = {}, LimbOffsets = {} }
 
-					for k, v22 in tbl7.ACRotation, nil, nil do
+					for k, v22 in sharedState.ACRotation, nil, nil do
 						tbl16.Rotation[k] = v22
 					end
 
-					for k, v22 in tbl7.ACOffset, nil, nil do
+					for k, v22 in sharedState.ACOffset, nil, nil do
 						tbl16.LimbOffsets[k] = v22
 					end
 
 					if arg then
-						tbl7.AutoClickerTargetPoses[arg.UserId] = tbl16
+						sharedState.AutoClickerTargetPoses[arg.UserId] = tbl16
 					end
 
 					return tbl16
 				end
 
-				tbl12.GetACPose = function(arg)
-					if not tbl8.IndependentACPoses or arg == tbl9.SelectedACPoseTarget then
-						return tbl9.AutoClickerOffset, tbl7.ACRotation, tbl7.ACOffset
+				featureUtils.GetACPose = function(arg)
+					if not toggleStates.IndependentACPoses or arg == settings.SelectedACPoseTarget then
+						return settings.AutoClickerOffset, sharedState.ACRotation, sharedState.ACOffset
 					end
-					local v22 = tbl7.AutoClickerTargetPoses[arg.UserId] or tbl12.CaptureACPose(arg)
+					local v22 = sharedState.AutoClickerTargetPoses[arg.UserId] or featureUtils.CaptureACPose(arg)
 					return v22.BodyOffset, v22.Rotation, v22.LimbOffsets
 				end
 
-				tbl12.LoadACEditorPose = function(arg)
+				featureUtils.LoadACEditorPose = function(arg)
 					if not arg then
 						return
 					end
@@ -29486,7 +29487,7 @@ end
 
 					local rotation = arg.Rotation or arg
 
-					for k in tbl7.ACRotation, nil, nil do
+					for k in sharedState.ACRotation, nil, nil do
 						local v22 = rotation[k]
 
 						if v22 then
@@ -29530,7 +29531,7 @@ end
 					end
 
 					if arg.LimbOffsets then
-						for k in tbl7.ACOffset, nil, nil do
+						for k in sharedState.ACOffset, nil, nil do
 							local v22 = arg.LimbOffsets[k]
 
 							if v22 then
@@ -29573,7 +29574,7 @@ end
 							end
 						end
 					else
-						for k in tbl7.ACOffset, nil, nil do
+						for k in sharedState.ACOffset, nil, nil do
 							options["ACOSecXO" .. k]:SetValue(options["ACOSecXO" .. k].Default)
 							options["ACOSecYO" .. k]:SetValue(options["ACOSecYO" .. k].Default)
 							options["ACOSecZO" .. k]:SetValue(options["ACOSecZO" .. k].Default)
@@ -29583,10 +29584,10 @@ end
 					return true
 				end
 
-				tbl12.BringPlayer = function(arg)
-					local v22, v23, v24 = tbl12.Char(arg)
-					local v25, v26, v27 = tbl12.Char()
-					local flag12 = arg == localPlayer or tbl12.IsProtectedPlayer(arg)
+				featureUtils.BringPlayer = function(arg)
+					local v22, v23, v24 = featureUtils.Char(arg)
+					local v25, v26, v27 = featureUtils.Char()
+					local flag12 = arg == LocalPlayer or featureUtils.IsProtectedPlayer(arg)
 
 					if not flag12 then
 						flag12 = not (v23 and v24 and v24.Health > 0 and v26 and v27 and v27.Health > 0)
@@ -29596,7 +29597,7 @@ end
 						return
 					end
 
-					if not tbl12.IsNetworkOwner(v23) and not tbl12.SNO(v23) then
+					if not featureUtils.IsNetworkOwner(v23) and not featureUtils.SNO(v23) then
 						return
 					end
 					local n36 = v26.CFrame * CFrame.new(0, 0, -5)
@@ -29604,17 +29605,17 @@ end
 					local tbl16 = {}
 
 					for i = 1, 3 do
-						local flag13 = flag11
+						local flag13 = isUnloading
 
-						if not flag11 then
+						if not isUnloading then
 							flag13 = not (v23.Parent and v22.Parent)
 						end
 
 						if not (flag13 or v24.Health <= 0) then
-							tbl12.PivotTo(v22, n36 * v23.CFrame:Inverse() * v22:GetPivot(), BasePart, tbl16)
+							featureUtils.PivotTo(v22, n36 * v23.CFrame:Inverse() * v22:GetPivot(), BasePart, tbl16)
 
 							for _, v28 in BasePart, nil, nil do
-								tbl12.ResetVelocity(v28)
+								featureUtils.ResetVelocity(v28)
 							end
 
 							RunService.Heartbeat:Wait()
@@ -29626,12 +29627,12 @@ end
 
 					for _, v28 in BasePart, nil, nil do
 						if v28.Parent then
-							tbl12.ResetVelocity(v28)
+							featureUtils.ResetVelocity(v28)
 						end
 					end
 
 					if v23.Parent then
-						tbl12.RNO(v23)
+						featureUtils.RNO(v23)
 					end
 
 					return v23.Parent ~= nil and v24.Health > 0
@@ -29640,13 +29641,13 @@ end
 				do
 					local tbl16 = {}
 
-					tbl12.Kill = function(arg)
-						local v22, v23, v24 = tbl12.Char(arg)
+					featureUtils.Kill = function(arg)
+						local v22, v23, v24 = featureUtils.Char(arg)
 
-						if v24 and v24.Health ~= 0 and v23 and tbl12.GetMagnitude(workspace.SpawnLocation, v23) < 15000 and not tbl16[v22] then
+						if v24 and v24.Health ~= 0 and v23 and featureUtils.GetMagnitude(workspace.SpawnLocation, v23) < 15000 and not tbl16[v22] then
 							v24.BreakJointsOnDeath = false
 							v24:ChangeState(Enum.HumanoidStateType.Dead)
-							tbl12.DestroyObject(v22, v23)
+							featureUtils.DestroyObject(v22, v23)
 							tbl16[v22] = true
 
 							task.delay(1, function()
@@ -29657,29 +29658,29 @@ end
 				end
 			end
 
-			tbl12.Void = function(arg)
-				local v22, v23, v24 = tbl12.Char(arg)
+			featureUtils.Void = function(arg)
+				local v22, v23, v24 = featureUtils.Char(arg)
 
-				if v24 and v24.Health ~= 0 and v23 and tbl12.GetMagnitude(workspace.SpawnLocation, v23) < 15000 and tbl12.SNO(v23) then
+				if v24 and v24.Health ~= 0 and v23 and featureUtils.GetMagnitude(workspace.SpawnLocation, v23) < 15000 and featureUtils.SNO(v23) then
 					local cframe = CFrame.new(0, 9e9, 0)
-					tbl12.PivotTo(v22, cframe * v23.CFrame:Inverse() * v22:GetPivot())
-					tbl12.Teleport(v23, cframe)
+					featureUtils.PivotTo(v22, cframe * v23.CFrame:Inverse() * v22:GetPivot())
+					featureUtils.Teleport(v23, cframe)
 					v23.Velocity = Vector3.new(0, 9e9, 0)
-					task.delay(0.35, tbl12.RNO, v23)
+					task.delay(0.35, featureUtils.RNO, v23)
 				end
 			end
 
-			tbl12.EatAntiInput = function(arg)
-				local v22 = tbl12.Char(arg)
+			featureUtils.EatAntiInput = function(arg)
+				local v22 = featureUtils.Char(arg)
 
 				if v22 and v22:FindFirstChild("Left Arm") then
 					local leftArm = v22:FindFirstChild("Left Arm")
-					local v23, v24, v25 = tbl12.Char()
+					local v23, v24, v25 = featureUtils.Char()
 
 					if leftArm and v25 and v25.Health ~= 0 then
 						for _, v26 in pairs(leftArm:GetConnectedParts()) do
-							if v26.Name == "HoldPart" and not v26:IsDescendantOf(v17) then
-								tbl12.BreakHoldable(v26.Parent, 1, true)
+							if v26.Name == "HoldPart" and not v26:IsDescendantOf(spawnedToysFolder) then
+								featureUtils.BreakHoldable(v26.Parent, 1, true)
 							end
 						end
 					end
@@ -29690,15 +29691,15 @@ end
 				local obj = setmetatable({}, { __mode = "k" })
 				local obj2 = setmetatable({}, { __mode = "k" })
 
-				tbl12.ResetGucciSeat = function(arg)
+				featureUtils.ResetGucciSeat = function(arg)
 					obj[arg] = nil
 				end
 
-				tbl12.RemoveGucci = function(arg)
-					local v22, v23, v24 = tbl12.Char()
-					local v25, v26, v27 = tbl12.Char(arg)
-					local v28, v29 = tbl12.GetInventory(arg)
-					local gucciAntiGrab = tbl8.GucciAntiGrab
+				featureUtils.RemoveGucci = function(arg)
+					local v22, v23, v24 = featureUtils.Char()
+					local v25, v26, v27 = featureUtils.Char(arg)
+					local v28, v29 = featureUtils.GetInventory(arg)
+					local gucciAntiGrab = toggleStates.GucciAntiGrab
 
 					if not gucciAntiGrab then
 						gucciAntiGrab = not (v24 and v24.Health > 0 and v23 and v28)
@@ -29720,8 +29721,8 @@ end
 						if (arg2:IsA("VehicleSeat") or arg2:IsA("Seat")) and not arg2.Occupant then
 							obj2[arg2] = true
 
-							if tbl8.RagdollInRG and v26 then
-								tbl12.SNO(v26, 1.5)
+							if toggleStates.RagdollInRG and v26 then
+								featureUtils.SNO(v26, 1.5)
 							end
 
 							if v24.Sit then
@@ -29733,7 +29734,7 @@ end
 							local flag12 = false
 							local flag13 = false
 
-							tbl12.SetRuntimeConnection(arg2, v22.ChildAdded, true, function(arg3)
+							featureUtils.SetRuntimeConnection(arg2, v22.ChildAdded, true, function(arg3)
 								if arg3:IsA("LocalScript") and arg3.Name:lower():find("control") then
 									arg3.Enabled = false
 									arg3:Destroy()
@@ -29751,8 +29752,8 @@ end
 
 							while true do
 								arg2:Sit(v24)
-								fn20()
-								if not (flag12 or tick() - now3 > 0.5 or not arg2.Parent or v24.Health <= 0 or flag11) then
+								waitForHeartbeatElapsed()
+								if not (flag12 or tick() - now3 > 0.5 or not arg2.Parent or v24.Health <= 0 or isUnloading) then
 									continue
 								end
 								break
@@ -29763,12 +29764,12 @@ end
 							if flag12 then
 								local now4 = tick()
 
-								while not flag13 and not flag11 and v22.Parent and v24.Health > 0 and tick() - now4 < 0.5 do
+								while not flag13 and not isUnloading and v22.Parent and v24.Health > 0 and tick() - now4 < 0.5 do
 									task.wait()
 								end
 							end
 
-							tbl12.SetRuntimeConnection(arg2, nil, false)
+							featureUtils.SetRuntimeConnection(arg2, nil, false)
 							obj2[arg2] = nil
 
 							if not flag12 then
@@ -29783,7 +29784,7 @@ end
 
 							connection = arg2.ChildAdded:Connect(function(child)
 								local v30
-								v30, v30 = tbl12.Char()
+								v30, v30 = featureUtils.Char()
 
 								if child.Name == "SeatWeld" and child.Part1 ~= v30 then
 									obj[arg2] = nil
@@ -29824,16 +29825,16 @@ end
 			end
 		end
 
-		tbl12.DeleteSeatables = function(arg)
-			local v22, v23, v24 = tbl12.Char()
-			local v25 = tbl12.GetInventory(arg)
+		featureUtils.DeleteSeatables = function(arg)
+			local v22, v23, v24 = featureUtils.Char()
+			local v25 = featureUtils.GetInventory(arg)
 			if not (v24 and v24.Health > 0 and v23 and v25) then
 				return false
 			end
 
 			local function fn21(arg2)
 				if arg2:IsA("Model") then
-					local primaryPart = arg2.PrimaryPart or tbl12.FindNicePart(arg2)
+					local primaryPart = arg2.PrimaryPart or featureUtils.FindNicePart(arg2)
 					if not primaryPart or not primaryPart:IsA("BasePart") or primaryPart.Velocity.Magnitude > 100 then
 						return
 					end
@@ -29841,7 +29842,7 @@ end
 					if not vehicleSeat or vehicleSeat.Occupant then
 						return
 					end
-					tbl12.DestroyObject(arg2)
+					featureUtils.DestroyObject(arg2)
 				end
 			end
 
@@ -29850,10 +29851,10 @@ end
 			end
 		end
 
-		tbl12.StopControlCharacter = function(arg)
-			local controlCharacter = arg or tbl7.States.ControlCharacter
+		featureUtils.StopControlCharacter = function(arg)
+			local controlCharacter = arg or sharedState.States.ControlCharacter
 			if not controlCharacter then
-				tbl8.ControllingSomeone = false
+				toggleStates.ControllingSomeone = false
 				return
 			end
 
@@ -29881,10 +29882,10 @@ end
 			end
 
 			if controlCharacter.Root.Parent then
-				tbl12.RNO(controlCharacter.Root)
+				featureUtils.RNO(controlCharacter.Root)
 			end
 
-			local v22, v23, v24 = tbl12.Char()
+			local v22, v23, v24 = featureUtils.Char()
 
 			if v24 then
 				currentCamera.CameraSubject = v24
@@ -29893,21 +29894,21 @@ end
 			end
 
 			if controlCharacter.LocalRoot.Parent and controlCharacter.LocalHumanoid.Parent and controlCharacter.LocalHumanoid.Health > 0 then
-				tbl12.Teleport(controlCharacter.LocalRoot, controlCharacter.ReturnCFrame)
+				featureUtils.Teleport(controlCharacter.LocalRoot, controlCharacter.ReturnCFrame)
 			end
 
-			if tbl7.States.ControlCharacter == controlCharacter then
-				tbl7.States.ControlCharacter = nil
-				tbl8.ControllingSomeone = false
+			if sharedState.States.ControlCharacter == controlCharacter then
+				sharedState.States.ControlCharacter = nil
+				toggleStates.ControllingSomeone = false
 			end
 		end
 
-		tbl12.ControlCharacter = function(arg)
-			if tbl7.States.ControlCharacter then
-				tbl12.StopControlCharacter()
+		featureUtils.ControlCharacter = function(arg)
+			if sharedState.States.ControlCharacter then
+				featureUtils.StopControlCharacter()
 				return
 			end
-			local v22, v23, v24 = tbl12.Char()
+			local v22, v23, v24 = featureUtils.Char()
 			if not (v22 and v23 and v24 and v24.Health > 0) then
 				return
 			end
@@ -29939,10 +29940,10 @@ end
 				Parts = {},
 			}
 
-			tbl7.States.ControlCharacter = controlCharacter
-			tbl8.ControllingSomeone = true
-			if not tbl12.SNO(humanoidRootPart) or not controlCharacter.Active or tbl7.States.ControlCharacter ~= controlCharacter then
-				tbl12.StopControlCharacter(controlCharacter)
+			sharedState.States.ControlCharacter = controlCharacter
+			toggleStates.ControllingSomeone = true
+			if not featureUtils.SNO(humanoidRootPart) or not controlCharacter.Active or sharedState.States.ControlCharacter ~= controlCharacter then
+				featureUtils.StopControlCharacter(controlCharacter)
 				return
 			end
 
@@ -29970,8 +29971,8 @@ end
 
 			local ok, result = pcall(function()
 				while true do
-					if controlCharacter.Active and not flag11 and tbl7.States.ControlCharacter == controlCharacter and arg.Parent and humanoidRootPart.Parent and humanoid.Health > 0 and v22.Parent and v23.Parent and v24.Health > 0 then
-						if not (not tbl12.IsPartOwner(humanoidRootPart) and not tbl12.SNO(humanoidRootPart, 0.2)) then
+					if controlCharacter.Active and not isUnloading and sharedState.States.ControlCharacter == controlCharacter and arg.Parent and humanoidRootPart.Parent and humanoid.Health > 0 and v22.Parent and v23.Parent and v24.Health > 0 then
+						if not (not featureUtils.IsPartOwner(humanoidRootPart) and not featureUtils.SNO(humanoidRootPart, 0.2)) then
 							currentCamera.CameraSubject = humanoid
 							humanoid.Sit = false
 							local lookVector = currentCamera.CFrame.LookVector
@@ -30000,7 +30001,7 @@ end
 				end
 			end)
 
-			tbl12.StopControlCharacter(controlCharacter)
+			featureUtils.StopControlCharacter(controlCharacter)
 
 			if not ok then
 				warn(result)
@@ -30026,7 +30027,7 @@ end
 				v22 = nil
 			end
 
-			tbl14 = {
+			gameHelpers = {
 				GetBlobmanComponents = function()
 					if not parent then
 						return
@@ -30078,11 +30079,11 @@ end
 						v28.D = 500
 					end
 
-					tbl12.ResetVelocity(humanoidRootPart)
+					featureUtils.ResetVelocity(humanoidRootPart)
 				end,
 				SetFrozen = function(freezeBlobman)
-					tbl8.FreezeBlobman = freezeBlobman
-					tbl12.SetRuntimeConnection("FreezeBlobman", RunService.Heartbeat, freezeBlobman, tbl14.UpdateFreeze)
+					toggleStates.FreezeBlobman = freezeBlobman
+					featureUtils.SetRuntimeConnection("FreezeBlobman", RunService.Heartbeat, freezeBlobman, gameHelpers.UpdateFreeze)
 
 					if not freezeBlobman then
 						fn21()
@@ -30091,27 +30092,27 @@ end
 			}
 		end
 
-		tbl14.Sit = function()
-			local v22, v23, v24 = tbl12.Char()
+		gameHelpers.Sit = function()
+			local v22, v23, v24 = featureUtils.Char()
 			local flag12 = v24 and v24.Health > 0 and v23
 
 			if flag12 then
-				flag12 = not (parent or v24.Sit and v24.SeatPart or tbl8.GucciAntiGrab)
+				flag12 = not (parent or v24.Sit and v24.SeatPart or toggleStates.GucciAntiGrab)
 			end
 
 			if not flag12 then
 				return
 			end
-			local creatureBlobman = v17:FindFirstChild("CreatureBlobman")
+			local creatureBlobman = spawnedToysFolder:FindFirstChild("CreatureBlobman")
 			local vehicleSeat = creatureBlobman and creatureBlobman:FindFirstChild("VehicleSeat")
 			local flag13 = vehicleSeat and (vehicleSeat.Occupant == nil or vehicleSeat.Occupant == v24)
 
 			if vehicleSeat and not flag13 then
-				tbl12.DestroyToy(creatureBlobman)
+				featureUtils.DestroyToy(creatureBlobman)
 			end
 
 			if not (flag13 and creatureBlobman) then
-				creatureBlobman = tbl12.SpawnToy("CreatureBlobman")
+				creatureBlobman = featureUtils.SpawnToy("CreatureBlobman")
 			end
 
 			if not (flag13 and vehicleSeat) then
@@ -30119,7 +30120,7 @@ end
 			end
 
 			if not vehicleSeat then
-				tbl12.DestroyToy(creatureBlobman)
+				featureUtils.DestroyToy(creatureBlobman)
 				return
 			end
 			local cFrame2 = v23.CFrame
@@ -30135,30 +30136,30 @@ end
 			end
 
 			if parent then
-				tbl12.Teleport(v23, cFrame2)
+				featureUtils.Teleport(v23, cFrame2)
 			end
 		end
 
-		tbl14.Grab = function(arg, arg2)
+		gameHelpers.Grab = function(arg, arg2)
 			if not parent then
 				return
 			end
-			local v22 = tbl14.GetBlobmanComponents()
+			local v22 = gameHelpers.GetBlobmanComponents()
 			if not (v22.CreatureGrab and v22.RightWeld) then
 				return
 			end
-			local v23, v24, v25 = tbl12.Char()
+			local v23, v24, v25 = featureUtils.Char()
 			if not (v24 and v25 and v25.Health > 0) or not parent then
 				return
 			end
-			local v26, v27, v28 = tbl12.Char(arg)
+			local v26, v27, v28 = featureUtils.Char(arg)
 			local rootAttachment = v27 and v27:FindFirstChild("RootAttachment")
 			if not (rootAttachment and v28 and v28.Health > 0) or not parent then
 				return
 			end
 			local now3 = tick()
 
-			if tbl12.GetMagnitude(v24, v27) > 40 then
+			if featureUtils.GetMagnitude(v24, v27) > 40 then
 				local cFrame2 = v24.CFrame
 				currentCamera.CameraType = Enum.CameraType.Scriptable
 
@@ -30170,7 +30171,7 @@ end
 					end
 
 					if flag12 then
-						tbl12.Teleport(v24, tbl12.PredictCFrame(v27) - Vector3.new(0, 15, 0))
+						featureUtils.Teleport(v24, featureUtils.PredictCFrame(v27) - Vector3.new(0, 15, 0))
 						task.wait()
 						v22.CreatureGrab:FireServer(nil, v27, v22.RightWeld)
 						continue
@@ -30179,7 +30180,7 @@ end
 					break
 				end
 
-				tbl12.Teleport(v24, cFrame2, CFrame.new(0, 5, 0))
+				featureUtils.Teleport(v24, cFrame2, CFrame.new(0, 5, 0))
 				currentCamera.CameraType = Enum.CameraType.Custom
 			else
 				v22.CreatureGrab:FireServer(nil, v27, v22.RightWeld)
@@ -30191,36 +30192,36 @@ end
 			end
 		end
 
-		tbl14.Release = function(arg, arg2)
+		gameHelpers.Release = function(arg, arg2)
 			if not parent then
 				return
 			end
-			local v22 = tbl14.GetBlobmanComponents()
+			local v22 = gameHelpers.GetBlobmanComponents()
 			if not (v22.CreatureGrab and v22.CreatureRelease and v22.RightWeld) then
 				return
 			end
-			local v23, v24, v25 = tbl12.Char()
+			local v23, v24, v25 = featureUtils.Char()
 			if not (v24 and v25 and v25.Health > 0) or not parent then
 				return
 			end
-			local v26, v27, v28 = tbl12.Char(arg)
+			local v26, v27, v28 = featureUtils.Char(arg)
 			if not (v27 and v28 and v28.Health > 0) or not parent then
 				return
 			end
 
-			if tbl12.IsNetworkOwner(v27) then
+			if featureUtils.IsNetworkOwner(v27) then
 				return true
 			end
 			local now3 = tick()
-			local flag12 = tbl12.GetMagnitude(v24, v27) >= 40
-			if flag12 and tbl7.States.Owning then
+			local flag12 = featureUtils.GetMagnitude(v24, v27) >= 40
+			if flag12 and sharedState.States.Owning then
 				return
 			end
 			v22.RightWeld.Enabled = false
 			local cframe = CFrame.new()
 			local cframe2 = CFrame.new()
 			local connection = nil
-			tbl7.States.Owning = true
+			sharedState.States.Owning = true
 
 			local function fn21()
 				cframe = v24.CFrame
@@ -30248,21 +30249,21 @@ end
 				end
 			end
 
-			if tbl12.GetMagnitude(workspace.SpawnLocation, v27) < 15000 then
+			if featureUtils.GetMagnitude(workspace.SpawnLocation, v27) < 15000 then
 				pcall(function()
 					if flag12 then
 						fn21()
 					end
 
 					while true do
-						local flag13 = parent and v27 and v27.Parent and v25.Health > 0 and v28.Health > 0 and not tbl12.IsNetworkOwner(v27)
+						local flag13 = parent and v27 and v27.Parent and v25.Health > 0 and v28.Health > 0 and not featureUtils.IsNetworkOwner(v27)
 
 						if flag13 then
 							flag13 = tick() - now3 < (arg2 or 0.7)
 						end
 
 						if flag13 then
-							local v29 = tbl12.PredictCFrame(v27)
+							local v29 = featureUtils.PredictCFrame(v27)
 							v22.RightWeld.Enabled = false
 
 							if flag12 then
@@ -30290,18 +30291,18 @@ end
 				v22.RightWeld.Enabled = true
 			end)
 
-			tbl7.States.Owning = false
+			sharedState.States.Owning = false
 			task.wait()
-			if v27 and tbl12.IsNetworkOwner(v27) then
+			if v27 and featureUtils.IsNetworkOwner(v27) then
 				return true
 			end
 		end
 
-		tbl14.KickServerCooldowns = setmetatable({}, { __mode = "k" })
+		gameHelpers.KickServerCooldowns = setmetatable({}, { __mode = "k" })
 
-		tbl14.KickTargets = function(arg, arg2)
-			local v22 = tbl14.GetBlobmanComponents()
-			local v23, v24, v25 = tbl12.Char()
+		gameHelpers.KickTargets = function(arg, arg2)
+			local v22 = gameHelpers.GetBlobmanComponents()
+			local v23, v24, v25 = featureUtils.Char()
 			if not (v22 and v22.CreatureGrab and v22.CreatureDrop and v22.RightWeld and v24 and v25 and v25.Health > 0) then
 				return
 			end
@@ -30313,24 +30314,24 @@ end
 				local flag12
 
 				if arg2 then
-					flag12 = os.clock() - (tbl14.KickServerCooldowns[v26] or -math.huge) < 7
+					flag12 = os.clock() - (gameHelpers.KickServerCooldowns[v26] or -math.huge) < 7
 				else
 					flag12 = arg2
 				end
 
 				if not flag12 then
-					local v27, v28, v29 = tbl12.Char(v26)
-					local flag13 = v26 ~= localPlayer and not tbl12.IsProtectedPlayer(v26, arg2) and v28 and v29 and v29.Health > 0
+					local v27, v28, v29 = featureUtils.Char(v26)
+					local flag13 = v26 ~= LocalPlayer and not featureUtils.IsProtectedPlayer(v26, arg2) and v28 and v29 and v29.Health > 0
 
 					if flag13 then
 						flag13 = not (v28.AssemblyRootPart or v28).Massless
 					end
 
-					if flag13 and not v29.SeatPart and tbl14.Release(v26) then
+					if flag13 and not v29.SeatPart and gameHelpers.Release(v26) then
 						tbl16[#tbl16 + 1] = { Character = v27, Root = v28 }
 
 						if arg2 then
-							tbl14.KickServerCooldowns[v26] = os.clock()
+							gameHelpers.KickServerCooldowns[v26] = os.clock()
 						end
 					end
 				end
@@ -30344,8 +30345,8 @@ end
 			for i, v26 in ipairs(tbl16) do
 				local cFrame2 = v24.CFrame * CFrame.Angles(0, i / #tbl16 * 3.1415926535897931 * 2, 0) * CFrame.new(0, 5, -20)
 				v26.CFrame = cFrame2
-				tbl12.Teleport(v26.Root, cFrame2)
-				local v27, v28 = tbl12.CreateAlign(v26.Root, true)
+				featureUtils.Teleport(v26.Root, cFrame2)
+				local v27, v28 = featureUtils.CreateAlign(v26.Root, true)
 				local position = cFrame2.Position
 				local cFrame3 = cFrame2 - cFrame2.Position
 				v27.Position = position
@@ -30360,12 +30361,12 @@ end
 
 			for _, v26 in ipairs(tbl16) do
 				if v26.Root.Parent then
-					tbl12.Grab(v26.Root)
-					tbl12.RNO(v26.Root)
+					featureUtils.Grab(v26.Root)
+					featureUtils.RNO(v26.Root)
 					v22.CreatureGrab:FireServer(nil, v26.Root, v22.RightWeld)
 
-					if tbl8.DeleteShurInBlobK then
-						task.spawn(tbl12.RemoveSticky, v26.Character)
+					if toggleStates.DeleteShurInBlobK then
+						task.spawn(featureUtils.RemoveSticky, v26.Character)
 					end
 
 					task.wait()
@@ -30394,7 +30395,7 @@ end
 				for _, v26 in ipairs(tbl16) do
 					if v26.Root.Parent then
 						v26.Root.CFrame = v26.CFrame
-						tbl12.ResetVelocity(v26.Root)
+						featureUtils.ResetVelocity(v26.Root)
 					end
 				end
 
@@ -30409,31 +30410,31 @@ end
 			return true
 		end
 
-		tbl14.Kick = function(arg)
-			return tbl14.KickTargets({ arg })
+		gameHelpers.Kick = function(arg)
+			return gameHelpers.KickTargets({ arg })
 		end
 
-		tbl14.KickServer = function()
-			return tbl14.KickTargets(tbl12.GetTargets(true, tbl7.SelectedPlayersBlob), true)
+		gameHelpers.KickServer = function()
+			return gameHelpers.KickTargets(featureUtils.GetTargets(true, sharedState.SelectedPlayersBlob), true)
 		end
 
-		tbl12.KickServer = function(arg)
-			local kickServerState = tbl7.KickServerState
+		featureUtils.KickServer = function(arg)
+			local kickServerState = sharedState.KickServerState
 			local tbl16 = {}
 			if kickServerState.Running then
 				return false
 			end
 			local now3 = os.clock()
 
-			for _, v22 in ipairs(tbl12.GetTargets(true, tbl7.SelectedPlayers)) do
-				local v23, v24, v25 = tbl12.Char(v22)
+			for _, v22 in ipairs(featureUtils.GetTargets(true, sharedState.SelectedPlayers)) do
+				local v23, v24, v25 = featureUtils.Char(v22)
 				local flag12 = v24 and v25 and v25.Health > 0
 
 				if flag12 then
 					flag12 = not arg
 
 					if not flag12 then
-						flag12 = now3 - (tbl7.KickServerCooldowns[v22] or -math.huge) >= 15
+						flag12 = now3 - (sharedState.KickServerCooldowns[v22] or -math.huge) >= 15
 					end
 				end
 
@@ -30458,7 +30459,7 @@ end
 				end
 
 				toggles.LineLagToggle:SetDisabled(true)
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 				if not (v23 and v24 and v24.Health > 0) then
 					return
 				end
@@ -30468,7 +30469,7 @@ end
 					for k, v25 in tbl18, nil, nil do
 						if k.Parent then
 							k.CFrame = v25
-							tbl12.ResetVelocity(k)
+							featureUtils.ResetVelocity(k)
 						else
 							tbl18[k] = nil
 						end
@@ -30476,15 +30477,15 @@ end
 				end)
 
 				for i, v25 in ipairs(tbl16) do
-					if not flag11 then
-						local v26, v27, v28 = tbl12.Char(v25)
+					if not isUnloading then
+						local v26, v27, v28 = featureUtils.Char(v25)
 
 						if v27 and v28 and v28.Health > 0 then
 							if arg then
-								tbl7.KickServerCooldowns[v25] = os.clock()
+								sharedState.KickServerCooldowns[v25] = os.clock()
 							end
 
-							if tbl12.SNO(v27) then
+							if featureUtils.SNO(v27) then
 								local n36 = i / #tbl16 * 3.1415926535897931 * 2
 								local v29 = tbl17
 								local n37 = #tbl17 + 1
@@ -30492,7 +30493,7 @@ end
 								local cframe = CFrame.new(position + Vector3.new(math.cos(n36) * 15, 15, math.sin(n36) * 15))
 								v29[n37] = v27
 								v30[v27] = cframe
-								tbl12.Teleport(v27, tbl18[v27])
+								featureUtils.Teleport(v27, tbl18[v27])
 							end
 						end
 
@@ -30513,7 +30514,7 @@ end
 			task.spawn(function()
 				local n36 = os.clock() + 3
 
-				while not flag11 and os.clock() < n36 do
+				while not isUnloading and os.clock() < n36 do
 					RunService.Heartbeat:Wait()
 				end
 
@@ -30527,19 +30528,19 @@ end
 
 			for _, v22 in ipairs(tbl17) do
 				if v22.Parent then
-					tbl12.RNO(v22)
+					featureUtils.RNO(v22)
 				end
 			end
 
 			for _, v22 in ipairs(tbl17) do
-				if not flag11 and v22.Parent then
-					task.spawn(tbl12.RemoveSticky, v22.Parent)
+				if not isUnloading and v22.Parent then
+					task.spawn(featureUtils.RemoveSticky, v22.Parent)
 				end
 			end
 
 			task.wait(6)
 
-			if not flag11 then
+			if not isUnloading then
 				toggles.LineLagToggle:SetDisabled(false)
 				toggles.LineLagToggle:SetValue(false)
 			end
@@ -30553,59 +30554,59 @@ end
 			return ok and #tbl17 > 0
 		end
 
-		tbl14.Bring = function(arg)
+		gameHelpers.Bring = function(arg)
 			if not parent then
 				return
 			end
-			local v22, v23, v24 = tbl12.Char()
+			local v22, v23, v24 = featureUtils.Char()
 			if not (v23 and v24 and v24.Health > 0) then
 				return
 			end
-			local v25, v26, v27 = tbl12.Char(arg)
+			local v25, v26, v27 = featureUtils.Char(arg)
 			if not (v26 and v27 and v27.Health > 0) then
 				return
 			end
 
-			if tbl14.Release(arg) then
-				return tbl12.BringPlayer(arg)
+			if gameHelpers.Release(arg) then
+				return featureUtils.BringPlayer(arg)
 			end
 		end
 
-		tbl14.Kill = function(arg)
+		gameHelpers.Kill = function(arg)
 			if not parent then
 				return
 			end
-			local v22, v23, v24 = tbl12.Char()
+			local v22, v23, v24 = featureUtils.Char()
 			if not (v23 and v24 and v24.Health > 0) then
 				return
 			end
-			local v25, v26, v27 = tbl12.Char(arg)
+			local v25, v26, v27 = featureUtils.Char(arg)
 			if not (v26 and v27 and v27.Health > 0) then
 				return
 			end
 
-			if not (v27.Sit and v27.SeatPart) and tbl14.Release(arg) then
+			if not (v27.Sit and v27.SeatPart) and gameHelpers.Release(arg) then
 				v27.BreakJointsOnDeath = false
 				v27:ChangeState(Enum.HumanoidStateType.Dead)
 				task.wait()
 				return true
 			end
 
-			if v27.Sit and v27.SeatPart and tbl14.Bring(arg) then
-				tbl12.Kill(arg)
+			if v27.Sit and v27.SeatPart and gameHelpers.Bring(arg) then
+				featureUtils.Kill(arg)
 				return true
 			end
 		end
 
-		tbl14.RemoveGucci = function(arg)
+		gameHelpers.RemoveGucci = function(arg)
 			if not parent then
 				return
 			end
-			local v22, v23, v24 = tbl12.Char()
+			local v22, v23, v24 = featureUtils.Char()
 			if not (v23 and v24 and v24.Health > 0) then
 				return
 			end
-			local v25, v26, v27 = tbl12.Char(arg)
+			local v25, v26, v27 = featureUtils.Char(arg)
 			local flag12 = v26 and v27 and v27.Health > 0
 
 			if flag12 then
@@ -30616,7 +30617,7 @@ end
 				return
 			end
 
-			if tbl14.Release(arg) then
+			if gameHelpers.Release(arg) then
 				v27.Sit = true
 
 				task.delay(0.1, function()
@@ -30625,24 +30626,24 @@ end
 			end
 		end
 
-		tbl14.Lock = function(arg)
+		gameHelpers.Lock = function(arg)
 			if not parent then
 				return
 			end
-			local v22 = tbl14.GetBlobmanComponents()
+			local v22 = gameHelpers.GetBlobmanComponents()
 			if not v22.RightWeld then
 				return
 			end
-			local v23, v24, v25 = tbl12.Char()
+			local v23, v24, v25 = featureUtils.Char()
 			if not (v24 and v25 and v25.Health > 0) then
 				return
 			end
-			local v26, v27, v28 = tbl12.Char(arg)
+			local v26, v27, v28 = featureUtils.Char(arg)
 			if not (v27 and v28 and v28.Health > 0) then
 				return
 			end
 
-			if tbl14.Grab(arg) then
+			if gameHelpers.Grab(arg) then
 				v22.RightWeld.Attachment0 = nil
 				task.wait(0.45)
 				v25.Sit = false
@@ -30651,24 +30652,24 @@ end
 			end
 		end
 
-		tbl14.Follow = function(arg)
+		gameHelpers.Follow = function(arg)
 			if not parent then
 				return
 			end
-			local v22, v23, v24 = tbl12.Char()
+			local v22, v23, v24 = featureUtils.Char()
 			if not (v23 and v24 and v24.Health > 0) then
 				return
 			end
-			local v25, v26, v27 = tbl12.Char(arg)
+			local v25, v26, v27 = featureUtils.Char(arg)
 			if not (v26 and v27 and v27.Health > 0) then
 				return
 			end
 
-			if tbl14.Release(arg) then
+			if gameHelpers.Release(arg) then
 				task.spawn(function()
-					while v23.Parent and v24.Health > 0 and v27.Parent and v27.Health > 0 and tbl12.IsNetworkOwner(v26) do
-						if tbl12.GetMagnitude(v26, v23) > 50 then
-							tbl12.Teleport(v26, v23, CFrame.new(0, 10, 0))
+					while v23.Parent and v24.Health > 0 and v27.Parent and v27.Health > 0 and featureUtils.IsNetworkOwner(v26) do
+						if featureUtils.GetMagnitude(v26, v23) > 50 then
+							featureUtils.Teleport(v26, v23, CFrame.new(0, 10, 0))
 						end
 
 						v27.WalkToPoint = v23.Position
@@ -30678,15 +30679,15 @@ end
 			end
 		end
 
-		tbl14.LoopKick = function(arg)
+		gameHelpers.LoopKick = function(arg)
 			if not parent then
 				return
 			end
-			local v22, v23, v24 = tbl12.Char()
+			local v22, v23, v24 = featureUtils.Char()
 			if not (v23 and v24 and v24.SeatPart) then
 				return
 			end
-			local v25, v26, v27 = tbl12.Char(arg)
+			local v25, v26, v27 = featureUtils.Char(arg)
 			local rootAttachment = v26 and v26:FindFirstChild("RootAttachment")
 			local flag12 = v26 and v27 and v27.Health > 0
 
@@ -30702,14 +30703,14 @@ end
 			if not (firePlayerPart and weldConstraint and weldConstraint.Enabled) then
 				return
 			end
-			local v28 = tbl14.GetBlobmanComponents()
+			local v28 = gameHelpers.GetBlobmanComponents()
 			if not (v28.CreatureGrab and v28.CreatureDrop and v28.CreatureRelease and v28.RightWeld and v28.RightOri) then
 				return
 			end
 			v28.RightWeld.Enabled = false
 			v28.RightOri.Enabled = false
 
-			if tbl12.SNO(v26) or tbl14.Release(arg) then
+			if featureUtils.SNO(v26) or gameHelpers.Release(arg) then
 				v27.Sit = true
 
 				task.delay(0.5, function()
@@ -30717,13 +30718,13 @@ end
 				end)
 
 				local n36 = v23.CFrame * CFrame.new(options.BlobKickX.Value, options.BlobKickY.Value, options.BlobKickZ.Value)
-				tbl12.Teleport(v26, n36)
-				local v29, v30 = tbl12.CreateAlign(v26, true)
+				featureUtils.Teleport(v26, n36)
+				local v29, v30 = featureUtils.CreateAlign(v26, true)
 				v29.Position = n36.Position
 
 				task.delay(0.2, function()
-					tbl12.Grab(v26)
-					tbl12.RNO(v26)
+					featureUtils.Grab(v26)
+					featureUtils.RNO(v26)
 				end)
 
 				v28.CreatureDrop:FireServer(v28.RightWeld)
@@ -30731,44 +30732,44 @@ end
 				task.wait(0.06)
 				rootAttachment.Parent = v25
 
-				while arg.Parent and v26.Parent and v27.Parent and v27.Health > 0 and parent and parent.Parent and tbl7.SelectedPlayersBlob[arg] and tbl8.LoopApplyMethod and tbl9.BlobMethod == "Kick" and tbl12.GetMagnitude(v23, v26) <= 41 and not v27.SeatPart and v24.Sit do
+				while arg.Parent and v26.Parent and v27.Parent and v27.Health > 0 and parent and parent.Parent and sharedState.SelectedPlayersBlob[arg] and toggleStates.LoopApplyMethod and settings.BlobMethod == "Kick" and featureUtils.GetMagnitude(v23, v26) <= 41 and not v27.SeatPart and v24.Sit do
 					task.spawn(function()
 						v27.RequiresNeck = false
-						tbl12.ToggleMotor6D(v25, false, true)
-						tbl12.RepositionLimbs(v25)
+						featureUtils.ToggleMotor6D(v25, false, true)
+						featureUtils.RepositionLimbs(v25)
 					end)
 
-					task.spawn(tbl12.ToggleCollisions, v25, false)
+					task.spawn(featureUtils.ToggleCollisions, v25, false)
 					v28.RightOri.Enabled = false
 					v28.RightWeld.Enabled = false
 					v28.RightOri.Attachment0 = nil
 					v28.RightWeld.Attachment0 = nil
 					v29.Position = (v23.CFrame * CFrame.new(options.BlobKickX.Value, options.BlobKickY.Value, options.BlobKickZ.Value)).Position
-					tbl12.ResetVelocity(v26)
+					featureUtils.ResetVelocity(v26)
 
-					if tbl8.DeleteShurInBlobK then
-						task.spawn(tbl12.RemoveSticky, v25)
+					if toggleStates.DeleteShurInBlobK then
+						task.spawn(featureUtils.RemoveSticky, v25)
 					end
 
-					if tbl9.BKMethod == 1 then
+					if settings.BKMethod == 1 then
 						v28.CreatureGrab:FireServer(nil, v26, v28.RightWeld)
 						task.wait()
 						v28.CreatureDrop:FireServer(v28.RightWeld)
 						task.wait()
 
-						if tbl8.NetworkOwnerInKick then
-							tbl12.Grab(v26)
-							tbl12.RNO(v26)
+						if toggleStates.NetworkOwnerInKick then
+							featureUtils.Grab(v26)
+							featureUtils.RNO(v26)
 						end
 					else
 						v28.CreatureGrab:FireServer(nil, v26, v28.RightWeld)
 						task.wait()
 						v28.CreatureRelease:FireServer(v28.RightWeld)
-						tbl12.Grab(v26)
-						task.spawn(tbl12.Ragdoll, v25)
+						featureUtils.Grab(v26)
+						task.spawn(featureUtils.Ragdoll, v25)
 
 						if weldConstraint.Enabled then
-							tbl12.RNO(v26)
+							featureUtils.RNO(v26)
 						end
 
 						task.wait()
@@ -30776,19 +30777,19 @@ end
 				end
 
 				rootAttachment.Parent = v26
-				task.spawn(tbl12.ToggleMotor6D, v25, true)
-				task.spawn(tbl12.ToggleCollisions, v25, true)
+				task.spawn(featureUtils.ToggleMotor6D, v25, true)
+				task.spawn(featureUtils.ToggleCollisions, v25, true)
 				v30:Destroy()
 				v29:Destroy()
 			end
 		end
 
-		tbl14.LoopLock = function(arg, arg2)
+		gameHelpers.LoopLock = function(arg, arg2)
 			if not parent then
 				return
 			end
-			local v22, v23 = tbl12.Char()
-			local v24, v25, v26 = tbl12.Char(arg)
+			local v22, v23 = featureUtils.Char()
+			local v24, v25, v26 = featureUtils.Char(arg)
 			if not v26 or v26.Health == 0 or not v25 then
 				return false
 			end
@@ -30797,20 +30798,20 @@ end
 			local creatureRelease = blobmanSeatAndOwnerScript.CreatureRelease
 			local leftWeld = parent.LeftDetector.LeftWeld
 
-			if (not v25.Massless or v26.Sit and v26.SeatPart) and tbl14.Release(arg) then
-				tbl12.Teleport(v25, v23, CFrame.new(0, 0, -5))
+			if (not v25.Massless or v26.Sit and v26.SeatPart) and gameHelpers.Release(arg) then
+				featureUtils.Teleport(v25, v23, CFrame.new(0, 0, -5))
 				local bodyPosition = Instance.new("BodyPosition")
 				bodyPosition.Name = "BlobLockBP"
 				bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
 				bodyPosition.D = 250
 				bodyPosition.Position = v23.Position + Vector3.new(options.BlobKickX.Value, options.BlobKickY.Value, options.BlobKickZ.Value)
 				bodyPosition.Parent = v25
-				tbl12.ResetVelocity(v25)
+				featureUtils.ResetVelocity(v25)
 				leftWeld.Enabled = false
 
-				while arg.Parent and v25.Parent and v26.Health ~= 0 and tbl8[arg2] and parent and tbl9.BlobMethod == "Lock" and tbl12.GetMagnitude(v23, v25) < 45 do
+				while arg.Parent and v25.Parent and v26.Health ~= 0 and toggleStates[arg2] and parent and settings.BlobMethod == "Lock" and featureUtils.GetMagnitude(v23, v25) < 45 do
 					bodyPosition.Position = (v23.CFrame * CFrame.new(0, 0, -5)).Position
-					tbl12.ResetVelocity(v25)
+					featureUtils.ResetVelocity(v25)
 					creatureGrab:FireServer(nil, v25, leftWeld)
 					task.wait()
 					creatureRelease:FireServer(leftWeld)
@@ -30825,7 +30826,7 @@ end
 			end
 		end
 
-		tbl12.NormalizeServerHopServer = function(arg)
+		featureUtils.NormalizeServerHopServer = function(arg)
 			if typeof(arg) ~= "table" then
 				return
 			end
@@ -30845,37 +30846,37 @@ end
 			}
 		end
 
-		tbl12.IsServerHopCandidate = function(arg, arg2)
-			if arg.Id == jobId or tbl7.ServerHop.Rejected[arg.Id] then
+		featureUtils.IsServerHopCandidate = function(arg, arg2)
+			if arg.Id == jobId or sharedState.ServerHop.Rejected[arg.Id] then
 				return false
 			end
 
 			if arg2 and not arg2[arg.Id] then
 				return false
 			end
-			local n36 = math.min(tbl9.ServerHopMinPlayers, tbl9.ServerHopMaxPlayers)
-			local n37 = math.max(tbl9.ServerHopMinPlayers, tbl9.ServerHopMaxPlayers)
+			local n36 = math.min(settings.ServerHopMinPlayers, settings.ServerHopMaxPlayers)
+			local n37 = math.max(settings.ServerHopMinPlayers, settings.ServerHopMaxPlayers)
 			if arg.Playing < n36 or arg.Playing > n37 then
 				return false
 			end
 
-			if not tbl8.ServerHopIncludeFull and arg.Playing >= arg.MaxPlayers then
+			if not toggleStates.ServerHopIncludeFull and arg.Playing >= arg.MaxPlayers then
 				return false
 			end
 			return true
 		end
 
-		tbl12.LoadServerHopCache = function()
+		featureUtils.LoadServerHopCache = function()
 			if not readfile then
 				return {}, nil, false, {}
 			end
 
-			if isfile and not isfile(tbl7.ServerHop.CachePath) then
+			if isfile and not isfile(sharedState.ServerHop.CachePath) then
 				return {}, nil, false, {}
 			end
 
 			local ok, result = pcall(function()
-				return HttpService:JSONDecode(readfile(tbl7.ServerHop.CachePath))
+				return HttpService:JSONDecode(readfile(sharedState.ServerHop.CachePath))
 			end)
 
 			if not ok or typeof(result) ~= "table" or result.PlaceId ~= placeId or result.Schema ~= 4 then
@@ -30887,7 +30888,7 @@ end
 			local servers = result.Servers or {}
 
 			for _, server in v22(servers) do
-				local v23 = tbl12.NormalizeServerHopServer(server)
+				local v23 = featureUtils.NormalizeServerHopServer(server)
 
 				if v23 and v23.Id ~= jobId then
 					tbl16[#tbl16 + 1] = v23
@@ -30914,31 +30915,31 @@ end
 			return tbl16, n36, n37 >= 0 and n37 <= 120, tbl17
 		end
 
-		tbl12.SaveServerHopCache = function(arg, arg2)
-			tbl7.ServerHop.LastCacheError = nil
+		featureUtils.SaveServerHopCache = function(arg, arg2)
+			sharedState.ServerHop.LastCacheError = nil
 			if not writefile then
-				tbl7.ServerHop.LastCacheError = "writefile is unavailable"
+				sharedState.ServerHop.LastCacheError = "writefile is unavailable"
 				return false
 			end
 
 			local ok, result = pcall(function()
-				writefile(tbl7.ServerHop.CachePath, HttpService:JSONEncode({
+				writefile(sharedState.ServerHop.CachePath, HttpService:JSONEncode({
 					Schema = 4,
 					PlaceId = placeId,
 					CachedAt = arg2 or os.time(),
 					Servers = arg,
-					Regions = tbl7.ServerHop.CachedRegions,
+					Regions = sharedState.ServerHop.CachedRegions,
 				}))
 			end)
 
 			if not ok then
-				tbl7.ServerHop.LastCacheError = tostring(result)
+				sharedState.ServerHop.LastCacheError = tostring(result)
 			end
 
 			return ok
 		end
 
-		tbl12.FetchServerHopPage = function(arg, arg2, arg3)
+		featureUtils.FetchServerHopPage = function(arg, arg2, arg3)
 			local str5 = arg3 or "Roblox"
 			local ok, result = pcall(game.HttpGet, game, arg, true)
 			if not ok then
@@ -30969,27 +30970,27 @@ end
 			return result2
 		end
 
-		tbl12.GetServerHopContinent = function(arg)
+		featureUtils.GetServerHopContinent = function(arg)
 			if type(arg) ~= "string" then
 				return
 			end
 			local str5 = " " .. arg:upper() .. " "
 
-			for _, regionName in ipairs(tbl7.ServerHop.RegionNames) do
-				local v22 = tbl7.ServerHop.ContinentCountries[regionName]
+			for _, regionName in ipairs(sharedState.ServerHop.RegionNames) do
+				local v22 = sharedState.ServerHop.ContinentCountries[regionName]
 				if v22 and v22:find(str5, 1, true) then
 					return regionName
 				end
 			end
 		end
 
-		tbl12.RefreshServerHopRegions = function()
-			local list, v22 = tbl12.FetchServerHopPage("https://apis.rovalra.com/v1/datacenters/list", nil, "RoValra")
+		featureUtils.RefreshServerHopRegions = function()
+			local list, v22 = featureUtils.FetchServerHopPage("https://apis.rovalra.com/v1/datacenters/list", nil, "RoValra")
 			if not list then
 				return false, v22
 			end
-			local serverHop = tbl7.ServerHop
-			local regionNames = tbl7.ServerHop.RegionNames
+			local serverHop = sharedState.ServerHop
+			local regionNames = sharedState.ServerHop.RegionNames
 			local tbl16 = {}
 			local regions = {}
 
@@ -31010,7 +31011,7 @@ end
 				end
 
 				local str6 = str5 and city and str5 .. "\0" .. city
-				local v24 = tbl12.GetServerHopContinent(str5)
+				local v24 = featureUtils.GetServerHopContinent(str5)
 
 				if v23.inactive ~= true and str6 and v24 and not tbl16[str6] then
 					tbl16[str6] = true
@@ -31034,10 +31035,10 @@ end
 			return true
 		end
 
-		tbl12.GetServerHopPlayerCoordinates = function()
-			local serverHop = tbl7.ServerHop
+		featureUtils.GetServerHopPlayerCoordinates = function()
+			local serverHop = sharedState.ServerHop
 			local LocalizationService = game:GetService("LocalizationService")
-			local ok, result = pcall(LocalizationService.GetCountryRegionForPlayerAsync, LocalizationService, localPlayer)
+			local ok, result = pcall(LocalizationService.GetCountryRegionForPlayerAsync, LocalizationService, LocalPlayer)
 			if not ok or type(result) ~= "string" or result == "" then
 				return
 			end
@@ -31090,19 +31091,19 @@ end
 			return num, num2, automaticCountry
 		end
 
-		tbl12.GetServerHopRegions = function()
-			local serverHop = tbl7.ServerHop
-			local serverHopRegion = tbl9.ServerHopRegion
+		featureUtils.GetServerHopRegions = function()
+			local serverHop = sharedState.ServerHop
+			local serverHopRegion = settings.ServerHopRegion
 
 			if not next(serverHop.Regions) then
-				local v22, v23 = tbl12.RefreshServerHopRegions()
+				local v22, v23 = featureUtils.RefreshServerHopRegions()
 				if not v22 then
 					return nil, v23
 				end
 			end
 
 			if serverHopRegion ~= "Automatic" and not serverHop.Regions[serverHopRegion] then
-				tbl9.ServerHopRegion = "Automatic"
+				settings.ServerHopRegion = "Automatic"
 				serverHopRegion = "Automatic"
 
 				if options.ServerHopRegion then
@@ -31110,7 +31111,7 @@ end
 				end
 			end
 
-			local v22, v23, v24 = tbl12.GetServerHopPlayerCoordinates()
+			local v22, v23, v24 = featureUtils.GetServerHopPlayerCoordinates()
 			local str5 = v24 and v24 .. "\0" .. serverHopRegion
 			if str5 and serverHop.ResolvedRegions[str5] then
 				return serverHop.ResolvedRegions[str5]
@@ -31129,7 +31130,7 @@ end
 			end
 
 			if serverHopRegion == "Automatic" then
-				serverHopRegion = tbl12.GetServerHopContinent(v24)
+				serverHopRegion = featureUtils.GetServerHopContinent(v24)
 
 				if not serverHopRegion and v22 then
 					local huge = math.huge
@@ -31179,14 +31180,14 @@ end
 			return v27
 		end
 
-		tbl12.FetchServerHopRegionIds = function(arg)
+		featureUtils.FetchServerHopRegionIds = function(arg)
 			local str5 = "https://apis.rovalra.com/v1/servers/region?place_id=" .. placeId .. "&country=" .. HttpService:UrlEncode(arg.Country) .. "&cursor=0"
 
 			if arg.City then
 				str5 ..= "&city=" .. HttpService:UrlEncode(arg.City)
 			end
 
-			local v22, v23 = tbl12.FetchServerHopPage(str5, "servers", "RoValra")
+			local v22, v23 = featureUtils.FetchServerHopPage(str5, "servers", "RoValra")
 			if not v22 then
 				return nil, v23
 			end
@@ -31203,17 +31204,17 @@ end
 			return tbl16
 		end
 
-		tbl12.FetchServerHopServersPage = function(arg, arg2)
-			local n36 = math.min(tbl9.ServerHopMinPlayers, tbl9.ServerHopMaxPlayers)
+		featureUtils.FetchServerHopServersPage = function(arg, arg2)
+			local n36 = math.min(settings.ServerHopMinPlayers, settings.ServerHopMaxPlayers)
 			local str5
 
-			if tbl9.ServerHopSort == "Highest Players" or n36 >= Players.MaxPlayers / 2 then
+			if settings.ServerHopSort == "Highest Players" or n36 >= Players.MaxPlayers / 2 then
 				str5 = "Desc"
 			else
 				str5 = "Asc"
 			end
 
-			local str6 = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=" .. str5 .. "&limit=100&excludeFullGames=" .. tostring(not tbl8.ServerHopIncludeFull)
+			local str6 = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=" .. str5 .. "&limit=100&excludeFullGames=" .. tostring(not toggleStates.ServerHopIncludeFull)
 
 			if type(arg) == "string" and arg ~= "" then
 				str6 ..= "&cursor=" .. HttpService:UrlEncode(arg)
@@ -31222,40 +31223,40 @@ end
 			local v22, v23
 
 			repeat
-				if flag11 or arg2 ~= tbl7.ServerHop.Token then
+				if isUnloading or arg2 ~= sharedState.ServerHop.Token then
 					return
 				end
-				v22, v23 = tbl12.FetchServerHopPage(str6, "data", "Roblox")
-				local v24 = flag11
+				v22, v23 = featureUtils.FetchServerHopPage(str6, "data", "Roblox")
+				local v24 = isUnloading
 				local flag12
 
-				if flag11 then
+				if isUnloading then
 					flag12 = v24
 				else
-					flag12 = arg2 ~= tbl7.ServerHop.Token
+					flag12 = arg2 ~= sharedState.ServerHop.Token
 				end
 
 				if flag12 then
 					return
 				end
 
-				if not v22 and not flag11 then
+				if not v22 and not isUnloading then
 					task.wait(0.25)
 				end
-			until v22 or flag11 or arg2 ~= tbl7.ServerHop.Token
+			until v22 or isUnloading or arg2 ~= sharedState.ServerHop.Token
 
-			if flag11 or arg2 ~= tbl7.ServerHop.Token then
+			if isUnloading or arg2 ~= sharedState.ServerHop.Token then
 				return
 			end
 
 			if not v22 then
-				tbl7.ServerHop.LastFetchError = v23
+				sharedState.ServerHop.LastFetchError = v23
 				return
 			end
 			local tbl16 = {}
 
 			for _, v24 in ipairs(v22.data) do
-				local v25 = tbl12.NormalizeServerHopServer(v24)
+				local v25 = featureUtils.NormalizeServerHopServer(v24)
 
 				if v25 and v25.Id ~= jobId then
 					tbl16[#tbl16 + 1] = v25
@@ -31265,11 +31266,11 @@ end
 			return tbl16, v22.nextPageCursor
 		end
 
-		tbl12.FilterServerHopServers = function(arg, arg2)
+		featureUtils.FilterServerHopServers = function(arg, arg2)
 			local tbl16 = {}
 
 			for _, v22 in ipairs(arg) do
-				if tbl12.IsServerHopCandidate(v22, arg2) then
+				if featureUtils.IsServerHopCandidate(v22, arg2) then
 					tbl16[#tbl16 + 1] = v22
 				end
 			end
@@ -31277,25 +31278,25 @@ end
 			return tbl16
 		end
 
-		tbl12.SelectServerHopServer = function(arg)
+		featureUtils.SelectServerHopServer = function(arg)
 			if #arg == 0 then
 				return
 			end
 
-			if tbl9.ServerHopSort == "Closest Datacenter" or tbl9.ServerHopSort == "Lowest Ping" or tbl9.ServerHopSort == "Random" then
+			if settings.ServerHopSort == "Closest Datacenter" or settings.ServerHopSort == "Lowest Ping" or settings.ServerHopSort == "Random" then
 				return arg[math.random(1, #arg)]
 			end
 
 			table.sort(arg, function(arg2, arg3)
 				local playing, playing2
 
-				if tbl9.ServerHopSort == "Lowest Players" then
+				if settings.ServerHopSort == "Lowest Players" then
 					playing = arg2.Playing
 					playing2 = arg3.Playing
-				elseif tbl9.ServerHopSort == "Highest Players" then
+				elseif settings.ServerHopSort == "Highest Players" then
 					playing = -arg2.Playing
 					playing2 = -arg3.Playing
-				elseif tbl9.ServerHopSort == "Highest FPS" then
+				elseif settings.ServerHopSort == "Highest FPS" then
 					playing = -(arg2.FPS or 0)
 					playing2 = -(arg3.FPS or 0)
 				else
@@ -31312,9 +31313,9 @@ end
 			return arg[1]
 		end
 
-		tbl12.UpdateServerHopButton = function()
-			local serverHop = tbl7.ServerHop
-			if flag11 or not serverHop.Button then
+		featureUtils.UpdateServerHopButton = function()
+			local serverHop = sharedState.ServerHop
+			if isUnloading or not serverHop.Button then
 				return
 			end
 			local busy = serverHop.Busy or serverHop.Pending or serverHop.Retrying
@@ -31332,8 +31333,8 @@ end
 			setText(button, str5)
 		end
 
-		tbl12.CancelServerHop = function()
-			local serverHop = tbl7.ServerHop
+		featureUtils.CancelServerHop = function()
+			local serverHop = sharedState.ServerHop
 			local pending = serverHop.Pending
 			serverHop.Token = serverHop.Token + 1
 			serverHop.AutoToken = serverHop.AutoToken + 1
@@ -31347,47 +31348,47 @@ end
 				serverHop.Notification = nil
 			end
 
-			tbl12.UpdateServerHopButton()
+			featureUtils.UpdateServerHopButton()
 
-			if not flag11 then
+			if not isUnloading then
 				if pending then
-					fn18("Server-hop retries cancelled. Roblox may still complete the teleport already requested.")
+					notify("Server-hop retries cancelled. Roblox may still complete the teleport already requested.")
 				end
 
-				if tbl8.AutoServerHop then
-					tbl12.ScheduleAutoServerHop()
+				if toggleStates.AutoServerHop then
+					featureUtils.ScheduleAutoServerHop()
 				end
 			end
 		end
 
-		tbl12.ServerHop = function(arg, arg2)
-			if flag11 then
+		featureUtils.ServerHop = function(arg, arg2)
+			if isUnloading then
 				return false
 			end
 
-			if tbl7.ServerHop.Busy or tbl7.ServerHop.Pending or tbl7.ServerHop.Retrying then
-				fn18("A server-hop is already in progress.")
+			if sharedState.ServerHop.Busy or sharedState.ServerHop.Pending or sharedState.ServerHop.Retrying then
+				notify("A server-hop is already in progress.")
 				return false
 			end
-			local serverHop = tbl7.ServerHop
+			local serverHop = sharedState.ServerHop
 			serverHop.Token = serverHop.Token + 1
-			local token = tbl7.ServerHop.Token
+			local token = sharedState.ServerHop.Token
 
 			local function fn21()
-				return not flag11 and token == tbl7.ServerHop.Token
+				return not isUnloading and token == sharedState.ServerHop.Token
 			end
 
-			tbl7.ServerHop.Busy = true
-			tbl7.ServerHop.Cancelled = false
-			tbl12.UpdateServerHopButton()
+			sharedState.ServerHop.Busy = true
+			sharedState.ServerHop.Cancelled = false
+			featureUtils.UpdateServerHopButton()
 
-			local v22 = lib:Notify({
+			local v22 = uiLibrary:Notify({
 				Title = "Meowixa",
 				Description = "Attempting to serverhop..",
 				Persist = true,
-				SoundId = n34,
+				SoundId = defaultNotificationSound,
 				BigIcon = "rbxassetid://11382080197",
-				Volume = n35,
+				Volume = notificationVolume,
 				IconColor = Color3.new(1, 1, 1),
 			})
 
@@ -31395,16 +31396,16 @@ end
 				v22:Destroy()
 				return false
 			end
-			tbl7.ServerHop.Notification = v22
+			sharedState.ServerHop.Notification = v22
 
 			local ok, result = pcall(function()
-				local v23, v24 = tbl12.GetServerHopRegions()
+				local v23, v24 = featureUtils.GetServerHopRegions()
 				if not fn21() then
 					return false
 				end
 
 				if not v23 then
-					local v25 = fn18
+					local v25 = notify
 					local str5
 
 					if v24 then
@@ -31417,7 +31418,7 @@ end
 					return false
 				end
 
-				local tbl16, now3, v25, cachedRegions = tbl12.LoadServerHopCache()
+				local tbl16, now3, v25, cachedRegions = featureUtils.LoadServerHopCache()
 				if not fn21() then
 					return false
 				end
@@ -31432,14 +31433,14 @@ end
 				local n37 = 0
 				local tbl18 = {}
 				local tbl19 = {}
-				local serverHop2 = tbl7.ServerHop
+				local serverHop2 = sharedState.ServerHop
 
 				if not v25 then
 					cachedRegions = {}
 				end
 
 				serverHop2.CachedRegions = cachedRegions
-				tbl7.ServerHop.LastFetchError = nil
+				sharedState.ServerHop.LastFetchError = nil
 
 				for _, v27 in ipairs(tbl16) do
 					tbl19[v27.Id] = true
@@ -31451,7 +31452,7 @@ end
 							return {}
 						end
 						local str5 = v27.Country .. "\0" .. tostring(v27.City or "")
-						local v28 = tbl7.ServerHop.CachedRegions[str5]
+						local v28 = sharedState.ServerHop.CachedRegions[str5]
 
 						if not v28 then
 							if n37 > 0 then
@@ -31462,7 +31463,7 @@ end
 								return {}
 							end
 							local v29
-							v28, v29 = tbl12.FetchServerHopRegionIds(v27)
+							v28, v29 = featureUtils.FetchServerHopRegionIds(v27)
 							v26 = v29
 							if not fn21() then
 								return {}
@@ -31471,7 +31472,7 @@ end
 							if not v28 then
 								return {}
 							end
-							tbl7.ServerHop.CachedRegions[str5] = v28
+							sharedState.ServerHop.CachedRegions[str5] = v28
 						end
 
 						if not tbl18[str5] then
@@ -31479,7 +31480,7 @@ end
 							n36 += 1
 						end
 
-						local v29 = tbl12.FilterServerHopServers(arg3, v28)
+						local v29 = featureUtils.FilterServerHopServers(arg3, v28)
 						if #v29 > 0 then
 							return v29
 						end
@@ -31488,7 +31489,7 @@ end
 					return {}
 				end
 
-				if v25 and #tbl12.FilterServerHopServers(tbl16) > 0 then
+				if v25 and #featureUtils.FilterServerHopServers(tbl16) > 0 then
 					tbl17 = fn22(tbl16)
 				end
 
@@ -31505,7 +31506,7 @@ end
 						if not fn21() then
 							return false
 						end
-						local v27, v28 = tbl12.FetchServerHopServersPage(str5, token)
+						local v27, v28 = featureUtils.FetchServerHopServersPage(str5, token)
 						if not fn21() then
 							return false
 						end
@@ -31522,7 +31523,7 @@ end
 							end
 						end
 
-						if #tbl12.FilterServerHopServers(v27) > 0 then
+						if #featureUtils.FilterServerHopServers(v27) > 0 then
 							tbl17 = fn22(v27)
 							if #tbl17 > 0 or v26 then
 								break
@@ -31542,33 +31543,33 @@ end
 
 				if #tbl17 == 0 then
 					if v26 then
-						fn18("Region search failed. Error: " .. v26)
-					elseif tbl7.ServerHop.LastFetchError then
-						fn18("Roblox server search stopped. Error: " .. tbl7.ServerHop.LastFetchError)
+						notify("Region search failed. Error: " .. v26)
+					elseif sharedState.ServerHop.LastFetchError then
+						notify("Roblox server search stopped. Error: " .. sharedState.ServerHop.LastFetchError)
 					elseif #tbl16 == 0 then
-						local v27 = fn18
+						local v27 = notify
 						local str5
 
-						if tbl7.ServerHop.LastFetchError then
-							str5 = " Error: " .. tbl7.ServerHop.LastFetchError
+						if sharedState.ServerHop.LastFetchError then
+							str5 = " Error: " .. sharedState.ServerHop.LastFetchError
 						else
 							str5 = ""
 						end
 
 						v27("Roblox didn't return any public servers. Try again in a few seconds." .. str5)
 					else
-						local serverHopRegion = tbl9.ServerHopRegion
-						fn18(("Checked %d servers across %d datacenters, but none matched %d-%d players in %s."):format(#tbl16, n36, math.min(tbl9.ServerHopMinPlayers, tbl9.ServerHopMaxPlayers), math.max(tbl9.ServerHopMinPlayers, tbl9.ServerHopMaxPlayers), serverHopRegion))
+						local serverHopRegion = settings.ServerHopRegion
+						notify(("Checked %d servers across %d datacenters, but none matched %d-%d players in %s."):format(#tbl16, n36, math.min(settings.ServerHopMinPlayers, settings.ServerHopMaxPlayers), math.max(settings.ServerHopMinPlayers, settings.ServerHopMaxPlayers), serverHopRegion))
 					end
 
 					if now3 then
-						tbl12.SaveServerHopCache(tbl16, now3)
+						featureUtils.SaveServerHopCache(tbl16, now3)
 					end
 
 					return false
 				end
 
-				local v27 = tbl12.SelectServerHopServer(tbl17)
+				local v27 = featureUtils.SelectServerHopServer(tbl17)
 
 				for i = #tbl16, 1, -1 do
 					if tbl16[i].Id == v27.Id then
@@ -31577,21 +31578,21 @@ end
 					end
 				end
 
-				local v28 = tbl12.SaveServerHopCache(tbl16, now3)
+				local v28 = featureUtils.SaveServerHopCache(tbl16, now3)
 				if not fn21() then
 					return false
 				end
 
 				if not v28 then
-					fn18("Server cache couldn't be saved: " .. tostring(tbl7.ServerHop.LastCacheError))
+					notify("Server cache couldn't be saved: " .. tostring(sharedState.ServerHop.LastCacheError))
 				end
 
-				tbl12.QueueTeleport(arg, arg2)
+				featureUtils.QueueTeleport(arg, arg2)
 				if not fn21() then
 					return false
 				end
-				tbl7.ServerHop.Pending = { ServerId = v27.Id, AntiLag = arg, RestartScript = arg2 }
-				local ok, result = pcall(TeleportService.TeleportToPlaceInstance, TeleportService, placeId, v27.Id, localPlayer)
+				sharedState.ServerHop.Pending = { ServerId = v27.Id, AntiLag = arg, RestartScript = arg2 }
+				local ok, result = pcall(TeleportService.TeleportToPlaceInstance, TeleportService, placeId, v27.Id, LocalPlayer)
 				if not fn21() then
 					return false
 				end
@@ -31599,10 +31600,10 @@ end
 				if not ok then
 					local str5 = tostring(result)
 					if str5:lower():find("full", 1, true) then
-						return tbl12.RetryFullServerHop()
+						return featureUtils.RetryFullServerHop()
 					end
-					tbl7.ServerHop.Pending = nil
-					fn18("Server-hop failed: " .. str5)
+					sharedState.ServerHop.Pending = nil
+					notify("Server-hop failed: " .. str5)
 				end
 
 				return ok
@@ -31611,100 +31612,100 @@ end
 			if not fn21() then
 				return false
 			end
-			tbl7.ServerHop.Busy = false
+			sharedState.ServerHop.Busy = false
 			v22:Destroy()
-			tbl7.ServerHop.Notification = nil
+			sharedState.ServerHop.Notification = nil
 			local flag12 = not ok
 
 			if flag12 then
-				tbl7.ServerHop.Pending = nil
+				sharedState.ServerHop.Pending = nil
 			end
 
-			tbl12.UpdateServerHopButton()
+			featureUtils.UpdateServerHopButton()
 			if flag12 then
-				fn18("Server-hop failed: " .. tostring(result))
+				notify("Server-hop failed: " .. tostring(result))
 				return false
 			end
 			return result
 		end
 
-		tbl12.RetryFullServerHop = function()
-			local v22 = flag11
+		featureUtils.RetryFullServerHop = function()
+			local v22 = isUnloading
 			local cancelled
 
-			if flag11 then
+			if isUnloading then
 				cancelled = v22
 			else
-				cancelled = tbl7.ServerHop.Cancelled
+				cancelled = sharedState.ServerHop.Cancelled
 			end
 
 			if cancelled then
 				return false
 			end
-			local pending = tbl7.ServerHop.Pending
+			local pending = sharedState.ServerHop.Pending
 			if not pending then
-				return tbl7.ServerHop.Retrying == true
+				return sharedState.ServerHop.Retrying == true
 			end
-			tbl7.ServerHop.Pending = nil
-			tbl7.ServerHop.Rejected[pending.ServerId] = true
-			tbl7.ServerHop.Busy = false
-			tbl7.ServerHop.Retrying = true
-			local token = tbl7.ServerHop.Token
-			tbl12.UpdateServerHopButton()
-			fn18("Server is full; trying another server in the selected region.")
+			sharedState.ServerHop.Pending = nil
+			sharedState.ServerHop.Rejected[pending.ServerId] = true
+			sharedState.ServerHop.Busy = false
+			sharedState.ServerHop.Retrying = true
+			local token = sharedState.ServerHop.Token
+			featureUtils.UpdateServerHopButton()
+			notify("Server is full; trying another server in the selected region.")
 
 			task.delay(1, function()
-				if flag11 or token ~= tbl7.ServerHop.Token then
+				if isUnloading or token ~= sharedState.ServerHop.Token then
 					return
 				end
-				tbl7.ServerHop.Retrying = false
+				sharedState.ServerHop.Retrying = false
 
-				if not flag11 then
-					tbl12.ServerHop(pending.AntiLag, pending.RestartScript)
+				if not isUnloading then
+					featureUtils.ServerHop(pending.AntiLag, pending.RestartScript)
 				end
 			end)
 
 			return true
 		end
 
-		tbl12.ScheduleAutoServerHop = function(arg)
-			local serverHop = tbl7.ServerHop
+		featureUtils.ScheduleAutoServerHop = function(arg)
+			local serverHop = sharedState.ServerHop
 			serverHop.AutoToken = serverHop.AutoToken + 1
-			local autoToken = tbl7.ServerHop.AutoToken
-			local v22 = flag11
+			local autoToken = sharedState.ServerHop.AutoToken
+			local v22 = isUnloading
 			local flag12
 
-			if flag11 then
+			if isUnloading then
 				flag12 = v22
 			else
-				flag12 = not tbl8.AutoServerHop
+				flag12 = not toggleStates.AutoServerHop
 			end
 
 			if flag12 then
 				return
 			end
 
-			task.delay(arg or tbl9.AutoServerHopTime, function()
-				if flag11 or autoToken ~= tbl7.ServerHop.AutoToken or not tbl8.AutoServerHop then
+			task.delay(arg or settings.AutoServerHopTime, function()
+				if isUnloading or autoToken ~= sharedState.ServerHop.AutoToken or not toggleStates.AutoServerHop then
 					return
 				end
 
-				if not tbl12.ServerHop(tbl8.RejoinWithAntiLag ~= false, tbl8.RejoinWithScript) and autoToken == tbl7.ServerHop.AutoToken and tbl8.AutoServerHop then
-					tbl12.ScheduleAutoServerHop(math.min(15, tbl9.AutoServerHopTime))
+				if not featureUtils.ServerHop(toggleStates.RejoinWithAntiLag ~= false, toggleStates.RejoinWithScript) and autoToken == sharedState.ServerHop.AutoToken and toggleStates.AutoServerHop then
+					featureUtils.ScheduleAutoServerHop(math.min(15, settings.AutoServerHopTime))
 				end
 			end)
 		end
 
 		TeleportService.TeleportInitFailed:Connect(function(arg, arg2, arg3, arg4, arg5)
-			if arg ~= localPlayer or flag11 then
+			if arg ~= LocalPlayer or isUnloading then
 				return
 			end
 
-			if tbl7.ServerHop.Cancelled or tbl7.ServerHop.Busy and not tbl7.ServerHop.Pending then
+			if sharedState.ServerHop.Cancelled or sharedState.ServerHop.Busy and not sharedState.ServerHop.Pending then
 				return
 			end
 
-			if tbl7.ServerHop.Pending and arg5 and arg5.ServerInstanceId ~= "" and arg5.ServerInstanceId ~= tbl7.ServerHop.Pending.ServerId then
+			if sharedState.ServerHop.Pending and arg5 and arg5.ServerInstanceId ~= "" and arg5.ServerInstanceId ~= sharedState.ServerHop.Pending.ServerId then
 				return
 			end
 			local flag12 = arg2 == Enum.TeleportResult.GameFull
@@ -31714,23 +31715,23 @@ end
 			end
 
 			if flag12 then
-				if tbl12.RetryFullServerHop() then
+				if featureUtils.RetryFullServerHop() then
 					return
 				end
 			else
-				tbl7.ServerHop.Pending = nil
+				sharedState.ServerHop.Pending = nil
 			end
 
-			tbl12.UpdateServerHopButton()
+			featureUtils.UpdateServerHopButton()
 
-			if tbl8.AutoServerHop then
-				tbl12.ScheduleAutoServerHop(10)
+			if toggleStates.AutoServerHop then
+				featureUtils.ScheduleAutoServerHop(10)
 			end
 		end)
 
-		tbl12.CreatePlayerDropdown = function(arg, arg2, arg3, arg4, arg5, arg6, arg7)
+		featureUtils.CreatePlayerDropdown = function(arg, arg2, arg3, arg4, arg5, arg6, arg7)
 			if not arg or not arg3 then
-				fn18("Something went wrong, tell the owner about this notification.")
+				notify("Something went wrong, tell the owner about this notification.")
 				return
 			end
 			local flag12 = arg5 ~= false
@@ -31745,19 +31746,19 @@ end
 				AllowNull = true,
 				Searchable = true,
 				Text = arg7 or "Targets",
-				FormatListValue = tbl12.FormatPlayer,
-				FormatDisplayValue = tbl12.FormatPlayer,
+				FormatListValue = featureUtils.FormatPlayer,
+				FormatDisplayValue = featureUtils.FormatPlayer,
 				EnablePlayerImages = true,
 				Callback = function(arg8)
 					table.clear(arg3)
 
 					if flag13 then
 						for k, v22 in pairs(arg8) do
-							if not tbl12.IsProtectedPlayer(k) then
+							if not featureUtils.IsProtectedPlayer(k) then
 								arg3[k] = v22
 							end
 						end
-					elseif arg8 and not tbl12.IsProtectedPlayer(arg8) then
+					elseif arg8 and not featureUtils.IsProtectedPlayer(arg8) then
 						arg3[arg8] = true
 					end
 
@@ -31765,11 +31766,11 @@ end
 
 					if flag13 then
 						for k, v22 in pairs(arg8) do
-							if not tbl12.IsProtectedPlayer(k) then
+							if not featureUtils.IsProtectedPlayer(k) then
 								tbl16.Selected[k] = v22
 							end
 						end
-					elseif arg8 and not tbl12.IsProtectedPlayer(arg8) then
+					elseif arg8 and not featureUtils.IsProtectedPlayer(arg8) then
 						tbl16.Selected[arg8] = true
 					end
 
@@ -31780,16 +31781,16 @@ end
 			})
 
 			tbl16.Dropdown = v22
-			table.insert(tbl7.PlayerDropdowns, tbl16)
+			table.insert(sharedState.PlayerDropdowns, tbl16)
 
 			local function fn21(arg8)
-				if tbl12.IsProtectedPlayer(arg8) then
-					return fn18("This player has Meowixa immunity.")
+				if featureUtils.IsProtectedPlayer(arg8) then
+					return notify("This player has Meowixa immunity.")
 				end
 
 				if not flag13 then
 					v22:SetValue(arg8)
-					local v23 = fn18
+					local v23 = notify
 					local str5 = ("Selected %* in %*!"):format(arg8.Name, arg2)
 					v23(str5)
 					return
@@ -31805,11 +31806,11 @@ end
 
 				if not v22.Value[arg8] then
 					tbl17[arg8] = true
-					local v23 = fn18
+					local v23 = notify
 					local str5 = ("Selected %* in %*!"):format(arg8.Name, arg2)
 					v23(str5)
 				else
-					local v23 = fn18
+					local v23 = notify
 					local str5 = ("Deselected %* in %*!"):format(arg8.Name, arg2)
 					v23(str5)
 				end
@@ -31839,18 +31840,18 @@ end
 			return v22
 		end
 
-		tbl12.GetTargets = function(arg, arg2)
+		featureUtils.GetTargets = function(arg, arg2)
 			local tbl16 = {}
 
 			if arg then
-				for _, v22 in ipairs(tbl7.PlayerList) do
-					if v22 ~= localPlayer and not tbl12.IsProtectedPlayer(v22, true) then
+				for _, v22 in ipairs(sharedState.PlayerList) do
+					if v22 ~= LocalPlayer and not featureUtils.IsProtectedPlayer(v22, true) then
 						table.insert(tbl16, v22)
 					end
 				end
 			else
 				for k in pairs(arg2) do
-					if k and k.Parent and not tbl12.IsProtectedPlayer(k) then
+					if k and k.Parent and not featureUtils.IsProtectedPlayer(k) then
 						table.insert(tbl16, k)
 					else
 						arg2[k] = nil
@@ -31861,13 +31862,13 @@ end
 			return tbl16
 		end
 
-		tbl12.RunPlayerMethod = function(arg, arg2, arg3, arg4, arg5)
+		featureUtils.RunPlayerMethod = function(arg, arg2, arg3, arg4, arg5)
 			if not arg2 then
 				return
 			end
 
 			if arg4 then
-				tbl10.Enqueue(arg, arg2, arg3, arg5)
+				runtimeWorkers.Enqueue(arg, arg2, arg3, arg5)
 				return
 			end
 			local ok, result = pcall(arg2, arg3)
@@ -31877,31 +31878,31 @@ end
 			end
 		end
 
-		tbl12.ProcessPlayer = function(arg, arg2, arg3, arg4, arg5)
+		featureUtils.ProcessPlayer = function(arg, arg2, arg3, arg4, arg5)
 			local function fn21(arg6, arg7)
-				tbl12.RunPlayerMethod(arg6, arg7, arg, arg2, arg5)
+				featureUtils.RunPlayerMethod(arg6, arg7, arg, arg2, arg5)
 			end
 
 			if arg4 then
-				local blobMethod = tbl9.BlobMethod
+				local blobMethod = settings.BlobMethod
 
 				if blobMethod == "Bring" then
-					fn21("Blob_Bring", tbl14.Bring)
+					fn21("Blob_Bring", gameHelpers.Bring)
 				elseif blobMethod == "Kill" then
-					fn21("Blob_Kill", tbl14.Kill)
+					fn21("Blob_Kill", gameHelpers.Kill)
 				elseif blobMethod == "Follow" then
-					fn21("Blob_Follow", tbl14.Follow)
+					fn21("Blob_Follow", gameHelpers.Follow)
 				elseif blobMethod == "Remove Gucci" then
-					fn21("Blob_RemoveGucci", tbl14.RemoveGucci)
+					fn21("Blob_RemoveGucci", gameHelpers.RemoveGucci)
 				elseif blobMethod == "Lock" then
 					local fn22
 
 					if arg2 then
 						fn22 = function(arg6)
-							tbl14.LoopLock(arg6, arg5)
+							gameHelpers.LoopLock(arg6, arg5)
 						end
 					else
-						fn22 = tbl14.Lock
+						fn22 = gameHelpers.Lock
 					end
 
 					fn21("Blob_Lock", fn22)
@@ -31909,9 +31910,9 @@ end
 					local loopKick
 
 					if arg2 then
-						loopKick = tbl14.LoopKick
+						loopKick = gameHelpers.LoopKick
 					else
-						loopKick = tbl14.Kick
+						loopKick = gameHelpers.Kick
 					end
 
 					fn21("Blob_Kick", loopKick)
@@ -31920,22 +31921,22 @@ end
 				return
 			end
 
-			local targetMethods = tbl7.TargetMethods
-			local v22, v23 = tbl12.Char(arg)
+			local targetMethods = sharedState.TargetMethods
+			local v22, v23 = featureUtils.Char(arg)
 
 			if targetMethods["Remove Invisibility"] and v23 then
 				v23.Massless = false
 			end
 
 			if targetMethods.Bring then
-				fn21("Bring", tbl12.BringPlayer)
+				fn21("Bring", featureUtils.BringPlayer)
 			end
 
 			local kick = targetMethods.Kick
 			local flag12
 
 			if kick then
-				local flag13 = arg3 and tbl9.KickServerMethod == "Void"
+				local flag13 = arg3 and settings.KickServerMethod == "Void"
 
 				if flag13 then
 					flag12 = flag13
@@ -31947,61 +31948,61 @@ end
 			end
 
 			if flag12 then
-				fn21("Kick", tbl12.Void)
+				fn21("Kick", featureUtils.Void)
 			end
 
 			if targetMethods.Kill then
-				fn21("Kill", tbl12.Kill)
+				fn21("Kill", featureUtils.Kill)
 			end
 
 			if targetMethods.Void then
-				fn21("Void", tbl12.Void)
+				fn21("Void", featureUtils.Void)
 			end
 
 			if targetMethods["Remove Gucci"] then
-				fn21("Remove Gucci", tbl12.RemoveGucci)
+				fn21("Remove Gucci", featureUtils.RemoveGucci)
 			end
 
 			if targetMethods["Destroy Food"] then
-				fn21("Destroy Food", tbl12.EatAntiInput)
+				fn21("Destroy Food", featureUtils.EatAntiInput)
 			end
 
 			if targetMethods["Delete Seatables"] then
-				fn21("Delete Seatables", tbl12.DeleteSeatables)
+				fn21("Delete Seatables", featureUtils.DeleteSeatables)
 			end
 		end
 
-		tbl12.ProcessToyEffects = function(arg, arg2, arg3, arg4, arg5)
-			local toyEffects = tbl7.ToyEffects
+		featureUtils.ProcessToyEffects = function(arg, arg2, arg3, arg4, arg5)
+			local toyEffects = sharedState.ToyEffects
 
 			if toyEffects.Oven then
-				tbl12.RunPlayerMethod("ToyEffect_Oven", tbl12.MakeBlack, arg, arg2, arg5)
+				featureUtils.RunPlayerMethod("ToyEffect_Oven", featureUtils.MakeBlack, arg, arg2, arg5)
 			end
 
 			if toyEffects.Microwave then
-				tbl12.RunPlayerMethod("ToyEffect_Microwave", tbl12.Microwave, arg, arg2, arg5)
+				featureUtils.RunPlayerMethod("ToyEffect_Microwave", featureUtils.Microwave, arg, arg2, arg5)
 			end
 
 			if toyEffects.Banana then
-				tbl12.RunPlayerMethod("ToyEffect_Banana", tbl12.BananaRagdoll, arg, arg2, arg5)
+				featureUtils.RunPlayerMethod("ToyEffect_Banana", featureUtils.BananaRagdoll, arg, arg2, arg5)
 			end
 
 			if toyEffects["Delete Limbs"] then
-				tbl12.RunPlayerMethod("ToyEffect_DeleteLimbs", function(arg6)
-					tbl12.BreakLimb(arg6, tbl9.TargetedLimbTE)
+				featureUtils.RunPlayerMethod("ToyEffect_DeleteLimbs", function(arg6)
+					featureUtils.BreakLimb(arg6, settings.TargetedLimbTE)
 				end, arg, arg2, arg5)
 			end
 
 			if toyEffects.Campfire then
-				tbl12.RunPlayerMethod("ToyEffect_Campfire", tbl12.Campfire, arg, arg2, arg5)
+				featureUtils.RunPlayerMethod("ToyEffect_Campfire", featureUtils.Campfire, arg, arg2, arg5)
 			end
 
 			if toyEffects.Fling then
-				tbl12.RunPlayerMethod("ToyEffect_Fling", tbl12.Fling, arg, arg2, arg5)
+				featureUtils.RunPlayerMethod("ToyEffect_Fling", featureUtils.Fling, arg, arg2, arg5)
 			end
 		end
 
-		tbl12.CreateLoopToggle = function(arg, arg2, arg3, arg4, arg5, arg6, arg7)
+		featureUtils.CreateLoopToggle = function(arg, arg2, arg3, arg4, arg5, arg6, arg7)
 			local str5
 
 			if arg4 then
@@ -32018,35 +32019,35 @@ end
 				str6 = "selected"
 			end
 
-			local processPlayer = arg7 or tbl12.ProcessPlayer
-			local flag12 = processPlayer == tbl12.ProcessPlayer
+			local processPlayer = arg7 or featureUtils.ProcessPlayer
+			local flag12 = processPlayer == featureUtils.ProcessPlayer
 
 			arg:AddToggle(arg2, {
 				Text = "Loop Apply Method " .. str5,
 				Default = false,
 				Tooltip = "Keeps applying selected methods to " .. str6 .. " players",
 				Callback = function(arg8)
-					tbl12.SetRuntimeToggle(arg3, arg8)
-					tbl10.LoopTokens[arg3] = (tbl10.LoopTokens[arg3] or 0) + 1
-					tbl10.Cancel(arg3)
+					featureUtils.SetRuntimeToggle(arg3, arg8)
+					runtimeWorkers.LoopTokens[arg3] = (runtimeWorkers.LoopTokens[arg3] or 0) + 1
+					runtimeWorkers.Cancel(arg3)
 					if not arg8 then
 						return
 					end
-					local v22 = tbl10.LoopTokens[arg3]
+					local v22 = runtimeWorkers.LoopTokens[arg3]
 
 					task.spawn(function()
-						while not flag11 and tbl8[arg3] and tbl10.LoopTokens[arg3] == v22 do
-							if arg5 and arg4 and tbl9.BlobMethod == "Kick" then
-								tbl14.KickServer()
+						while not isUnloading and toggleStates[arg3] and runtimeWorkers.LoopTokens[arg3] == v22 do
+							if arg5 and arg4 and settings.BlobMethod == "Kick" then
+								gameHelpers.KickServer()
 								task.wait(1)
 							else
 
-								if flag12 and not arg5 and arg4 and tbl7.TargetMethods.Kick and tbl9.KickServerMethod == "Circle + Lag" then
-									tbl12.KickServer(true)
+								if flag12 and not arg5 and arg4 and sharedState.TargetMethods.Kick and settings.KickServerMethod == "Circle + Lag" then
+									featureUtils.KickServer(true)
 								end
 
-								for _, v23 in ipairs(tbl12.GetTargets(arg4, arg6)) do
-									if not (not tbl8[arg3] or tbl10.LoopTokens[arg3] ~= v22) then
+								for _, v23 in ipairs(featureUtils.GetTargets(arg4, arg6)) do
+									if not (not toggleStates[arg3] or runtimeWorkers.LoopTokens[arg3] ~= v22) then
 										processPlayer(v23, true, arg4, arg5, arg3)
 										continue
 									end
@@ -32054,7 +32055,7 @@ end
 								end
 							end
 
-							if flag12 and not arg5 and arg4 and tbl7.TargetMethods.Kick and tbl9.KickServerMethod == "Circle + Lag" then
+							if flag12 and not arg5 and arg4 and sharedState.TargetMethods.Kick and settings.KickServerMethod == "Circle + Lag" then
 								task.wait(10)
 							else
 								task.wait()
@@ -32065,7 +32066,7 @@ end
 			})
 		end
 
-		tbl12.CreateApplyButton = function(arg, arg2, arg3, arg4, arg5)
+		featureUtils.CreateApplyButton = function(arg, arg2, arg3, arg4, arg5)
 			local str5
 
 			if arg2 then
@@ -32074,23 +32075,23 @@ end
 				str5 = "Selected"
 			end
 
-			local processPlayer = arg5 or tbl12.ProcessPlayer
-			local flag12 = processPlayer == tbl12.ProcessPlayer
+			local processPlayer = arg5 or featureUtils.ProcessPlayer
+			local flag12 = processPlayer == featureUtils.ProcessPlayer
 
 			arg:AddButton({
 				Text = "Apply Method " .. str5,
 				Func = function()
 					task.spawn(function()
-						if arg3 and tbl9.BlobMethod == "Kick" then
-							tbl14.KickTargets(tbl12.GetTargets(arg2, arg4), arg2)
+						if arg3 and settings.BlobMethod == "Kick" then
+							gameHelpers.KickTargets(featureUtils.GetTargets(arg2, arg4), arg2)
 							return
 						end
 
-						if flag12 and not arg3 and arg2 and tbl7.TargetMethods.Kick and tbl9.KickServerMethod == "Circle + Lag" then
-							tbl12.KickServer(false)
+						if flag12 and not arg3 and arg2 and sharedState.TargetMethods.Kick and settings.KickServerMethod == "Circle + Lag" then
+							featureUtils.KickServer(false)
 						end
 
-						for _, v22 in ipairs(tbl12.GetTargets(arg2, arg4)) do
+						for _, v22 in ipairs(featureUtils.GetTargets(arg2, arg4)) do
 							processPlayer(v22, false, arg2, arg3)
 						end
 					end)
@@ -32098,7 +32099,7 @@ end
 			})
 		end
 
-		tbl12.AddRainbowToggle = function(arg, arg2, arg3, arg4)
+		featureUtils.AddRainbowToggle = function(arg, arg2, arg3, arg4)
 			local value = nil
 			local n36 = 0
 			local flag12 = false
@@ -32143,22 +32144,22 @@ end
 
 			for _, child in pairs(workspace.Plots:GetChildren()) do
 				for _, child2 in pairs(child.PlotSign.ThisPlotsOwners:GetChildren()) do
-					if child2:IsA("StringValue") and child2.Value == localPlayer.Name then
+					if child2:IsA("StringValue") and child2.Value == LocalPlayer.Name then
 						task.spawn(function()
 							local v22 = plotItems:FindFirstChild(child.Name)
-							v17 = v22
+							spawnedToysFolder = v22
 							v20 = child2
-							table.insert(tbl7.Inventories, v22)
+							table.insert(sharedState.Inventories, v22)
 
 							repeat
 								task.wait()
 							until not child2.Parent
 
 							v20 = nil
-							local v23 = table.find(tbl7.Inventories, v22)
+							local v23 = table.find(sharedState.Inventories, v22)
 
 							if v23 then
-								table.remove(tbl7.Inventories, v23)
+								table.remove(sharedState.Inventories, v23)
 							end
 						end)
 					end
@@ -32172,27 +32173,27 @@ end
 
 				for _, child in pairs(workspace.Plots:GetChildren()) do
 					for _, child2 in pairs(child.PlotSign.ThisPlotsOwners:GetChildren()) do
-						if child2:IsA("StringValue") and child2.Value == localPlayer.Name then
+						if child2:IsA("StringValue") and child2.Value == LocalPlayer.Name then
 							local v22 = plotItems:FindFirstChild(child.Name)
-							v17 = v22
+							spawnedToysFolder = v22
 							v20 = child2
-							table.insert(tbl7.Inventories, v22)
+							table.insert(sharedState.Inventories, v22)
 
 							repeat
 								task.wait()
 							until not child2.Parent
 
 							v20 = nil
-							local v23 = table.find(tbl7.Inventories, v22)
+							local v23 = table.find(sharedState.Inventories, v22)
 
 							if v23 then
-								table.remove(tbl7.Inventories, v23)
+								table.remove(sharedState.Inventories, v23)
 							end
 						end
 					end
 				end
 			else
-				v17 = workspace:FindFirstChild(localPlayer.Name .. "SpawnedInToys")
+				spawnedToysFolder = workspace:FindFirstChild(LocalPlayer.Name .. "SpawnedInToys")
 			end
 		end)
 
@@ -32200,7 +32201,7 @@ end
 			local connection = nil
 
 			local function fn21()
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 
 				if connection then
 					connection:Disconnect()
@@ -32218,12 +32219,12 @@ end
 
 			fn21()
 
-			localPlayer.CharacterAdded:Connect(function(character)
+			LocalPlayer.CharacterAdded:Connect(function(character)
 				while true do
 					task.wait()
-					local humanoid = flag11
+					local humanoid = isUnloading
 
-					if not flag11 then
+					if not isUnloading then
 						humanoid = character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Humanoid")
 					end
 
@@ -32233,7 +32234,7 @@ end
 					break
 				end
 
-				if flag11 then
+				if isUnloading then
 					return
 				end
 				fn21()
@@ -32242,10 +32243,10 @@ end
 
 		task.spawn(function()
 			while task.wait(0.2) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
-				local v22 = tbl12.Char()
+				local v22 = featureUtils.Char()
 
 				if v22 then
 					for _, child in pairs(v22:GetChildren()) do
@@ -32269,40 +32270,40 @@ end
 
 		task.spawn(function()
 			while task.wait(0.1) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.AutoHouse and not tbl12.WaitForRuntimeToggle("AutoHouse") then
+				if not toggleStates.AutoHouse and not featureUtils.WaitForRuntimeToggle("AutoHouse") then
 					return
 				end
 
-				if v20 and tbl8.AutoHouse then
+				if v20 and toggleStates.AutoHouse then
 					local timeRemainingNum = v20 and v20:WaitForChild("TimeRemainingNum", 2.5)
 
 					if timeRemainingNum then
 						while true do
 							task.wait(0.1)
-							if not (not timeRemainingNum.Parent or timeRemainingNum.Value < 15 or not tbl8.AutoHouse) then
+							if not (not timeRemainingNum.Parent or timeRemainingNum.Value < 15 or not toggleStates.AutoHouse) then
 								continue
 							end
 							break
 						end
 
-						if not (not tbl8.AutoHouse or not timeRemainingNum.Parent) then
-							local v22, v23 = tbl12.Char()
+						if not (not toggleStates.AutoHouse or not timeRemainingNum.Parent) then
+							local v22, v23 = featureUtils.Char()
 							local cFrame2 = v23.CFrame
 
 							while true do
 								task.wait()
-								tbl12.Teleport(v23, v20.Parent.Parent.Parent.House:FindFirstChildWhichIsA("BasePart"))
+								featureUtils.Teleport(v23, v20.Parent.Parent.Parent.House:FindFirstChildWhichIsA("BasePart"))
 								if not (not timeRemainingNum.Parent or timeRemainingNum.Value == 90 or timeRemainingNum.Value == 91 or not v23.Parent) then
 									continue
 								end
 								break
 							end
 
-							tbl12.Teleport(v23, cFrame2)
+							featureUtils.Teleport(v23, cFrame2)
 						end
 					end
 				end
@@ -32313,16 +32314,16 @@ end
 			local function fn21(arg)
 				local v22 = workspace:FindFirstChild(arg)
 
-				if v22 and not v22.Name:find(localPlayer.Name) then
-					table.insert(tbl7.Inventories, v22)
+				if v22 and not v22.Name:find(LocalPlayer.Name) then
+					table.insert(sharedState.Inventories, v22)
 					local connection = nil
 
 					connection = v22:GetPropertyChangedSignal("Parent"):Connect(function()
 						if not v22.Parent then
-							local v23 = table.find(tbl7.Inventories, v22)
+							local v23 = table.find(sharedState.Inventories, v22)
 
 							if v23 then
-								table.remove(tbl7.Inventories, v23)
+								table.remove(sharedState.Inventories, v23)
 							end
 
 							connection:Disconnect()
@@ -32331,7 +32332,7 @@ end
 				end
 			end
 
-			for _, v22 in pairs(tbl7.PlayerList) do
+			for _, v22 in pairs(sharedState.PlayerList) do
 				fn21(v22.Name .. "SpawnedInToys")
 			end
 
@@ -32366,46 +32367,46 @@ end
 
 		do
 			local function fn21()
-				return tbl8.PCLDESP or tbl8.AntiKick
+				return toggleStates.PCLDESP or toggleStates.AntiKick
 			end
 
 			task.spawn(function()
 				while task.wait(0.1) do
-					if flag11 then
+					if isUnloading then
 						return
 					end
 
-					if not fn21() and not tbl12.WaitForRuntimeCondition("PCLDTracking", fn21) then
+					if not fn21() and not featureUtils.WaitForRuntimeCondition("PCLDTracking", fn21) then
 						return
 					end
-					tbl12.UpdatePCLDAssignments()
+					featureUtils.UpdatePCLDAssignments()
 				end
 			end)
 		end
 
 		task.spawn(function()
 			while task.wait(0.03) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.Aura and not tbl12.WaitForRuntimeToggle("Aura") then
+				if not toggleStates.Aura and not featureUtils.WaitForRuntimeToggle("Aura") then
 					return
 				end
-				local v22, v23 = tbl12.Char()
+				local v22, v23 = featureUtils.Char()
 				local position = v23 and v23.Position
-				local n36 = tbl9.AuraDistance * tbl9.AuraDistance
+				local n36 = settings.AuraDistance * settings.AuraDistance
 
-				for _, v24 in pairs(tbl7.PlayerList) do
-					if not (tbl8.ExcludeTarget and (tbl7.SelectedPlayers[v24] or tbl7.SelectedPlayersAC[v24] or tbl7.SelectedPlayersBlob[v24])) then
-						if v24 ~= localPlayer and not tbl12.IsProtectedPlayer(v24, true) and v24.Character then
-							local v25, v26, v27 = tbl12.Char(v24)
+				for _, v24 in pairs(sharedState.PlayerList) do
+					if not (toggleStates.ExcludeTarget and (sharedState.SelectedPlayers[v24] or sharedState.SelectedPlayersAC[v24] or sharedState.SelectedPlayersBlob[v24])) then
+						if v24 ~= LocalPlayer and not featureUtils.IsProtectedPlayer(v24, true) and v24.Character then
+							local v25, v26, v27 = featureUtils.Char(v24)
 
 							if position and v26 and v27 and v27.Health ~= 0 then
 								local n37 = position - v26.Position
 
 								if n37:Dot(n37) <= n36 then
-									if tbl7.Auras["Kick [Slow]"] then
+									if sharedState.Auras["Kick [Slow]"] then
 										if not v26:FindFirstChild("KickBP") then
 											local bodyPosition = Instance.new("BodyPosition")
 											bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
@@ -32414,11 +32415,11 @@ end
 											bodyPosition.Parent = v26
 
 											task.spawn(function()
-												while fn20() and not flag11 and v26.Parent and v24.Parent and tbl12.GetMagnitude(v23, v26) <= 33 and tbl7.Auras["Kick [Slow]"] do
-													tbl12.Grab(v26)
-													task.spawn(tbl12.Ragdoll, v25)
-													fn20()
-													tbl12.RNO(v26)
+												while waitForHeartbeatElapsed() and not isUnloading and v26.Parent and v24.Parent and featureUtils.GetMagnitude(v23, v26) <= 33 and sharedState.Auras["Kick [Slow]"] do
+													featureUtils.Grab(v26)
+													task.spawn(featureUtils.Ragdoll, v25)
+													waitForHeartbeatElapsed()
+													featureUtils.RNO(v26)
 													task.wait()
 												end
 
@@ -32427,33 +32428,33 @@ end
 										end
 									end
 
-									if tbl7.Auras.Grab then
-										tbl12.Grab(v26)
+									if sharedState.Auras.Grab then
+										featureUtils.Grab(v26)
 									end
 
-									if tbl7.Auras.Anchor and not tbl7.Anchored[v24] then
-										task.spawn(tbl12.SetAnchored, v24, true)
+									if sharedState.Auras.Anchor and not sharedState.Anchored[v24] then
+										task.spawn(featureUtils.SetAnchored, v24, true)
 									end
 
-									if tbl7.Auras.Kill then
-										tbl12.Kill(v24)
+									if sharedState.Auras.Kill then
+										featureUtils.Kill(v24)
 									end
 
-									if tbl7.Auras.Void then
-										tbl12.Void(v24)
+									if sharedState.Auras.Void then
+										featureUtils.Void(v24)
 									end
 
-									if tbl7.Auras["Blob-Kick"] and parent then
+									if sharedState.Auras["Blob-Kick"] and parent then
 										local creatureGrab = parent and parent:FindFirstChild("BlobmanSeatAndOwnerScript") and parent.BlobmanSeatAndOwnerScript:FindFirstChild("CreatureGrab")
 										local rightWeld = parent and parent:FindFirstChild("RightDetector") and parent.RightDetector:FindFirstChild("RightWeld")
 
 										if creatureGrab and rightWeld then
-											tbl12.Grab(v26)
+											featureUtils.Grab(v26)
 											task.wait()
 
-											if tbl12.IsPartOwner(v26) then
+											if featureUtils.IsPartOwner(v26) then
 												v26.CFrame = v26.CFrame + Vector3.new(0, 15, 0)
-												tbl12.RNO(v26)
+												featureUtils.RNO(v26)
 												task.wait()
 												creatureGrab:FireServer(nil, v26, rightWeld)
 												task.wait()
@@ -32462,7 +32463,7 @@ end
 										end
 									end
 
-									if tbl7.Auras["Blob-Kill"] and parent then
+									if sharedState.Auras["Blob-Kill"] and parent then
 										local creatureGrab = parent and parent:FindFirstChild("BlobmanSeatAndOwnerScript") and parent.BlobmanSeatAndOwnerScript:FindFirstChild("CreatureGrab")
 										local creatureRelease = creatureGrab and creatureGrab.Parent:FindFirstChild("CreatureRelease")
 										local rightWeld = parent and parent:FindFirstChild("RightDetector") and parent.RightDetector:FindFirstChild("RightWeld")
@@ -32473,13 +32474,13 @@ end
 											creatureRelease:FireServer(rightWeld)
 											task.wait()
 
-											if tbl12.IsNetworkOwner(v26) then
+											if featureUtils.IsNetworkOwner(v26) then
 												v27:ChangeState(Enum.HumanoidStateType.Dead)
 											end
 										end
 									end
 
-									if tbl7.Auras["Blob-Grab"] and parent then
+									if sharedState.Auras["Blob-Grab"] and parent then
 										local creatureGrab = parent and parent:FindFirstChild("BlobmanSeatAndOwnerScript") and parent.BlobmanSeatAndOwnerScript:FindFirstChild("CreatureGrab")
 										local creatureDrop = creatureGrab and creatureGrab.Parent:FindFirstChild("CreatureDrop")
 										local rightWeld = parent and parent:FindFirstChild("RightDetector") and parent.RightDetector:FindFirstChild("RightWeld")
@@ -32491,19 +32492,19 @@ end
 										end
 									end
 
-									if tbl7.Auras.Unstick then
-										tbl12.RemoveSticky(v25)
+									if sharedState.Auras.Unstick then
+										featureUtils.RemoveSticky(v25)
 									end
 
-									if tbl7.Auras.Fling and tbl12.SNO(v26) then
+									if sharedState.Auras.Fling and featureUtils.SNO(v26) then
 										v26.Velocity = v23.CFrame.LookVector * 100 + Vector3.new(0, 25, 0)
 									end
 
-									if tbl7.Auras.Ragdoll and tbl12.SNO(v26) then
-										tbl12.Ragdoll(v25)
+									if sharedState.Auras.Ragdoll and featureUtils.SNO(v26) then
+										featureUtils.Ragdoll(v25)
 									end
 
-									if tbl7.Auras.Sky and not v26:FindFirstChild("SkyBV") and tbl12.SNO(v26) then
+									if sharedState.Auras.Sky and not v26:FindFirstChild("SkyBV") and featureUtils.SNO(v26) then
 										local bodyVelocity = Instance.new("BodyVelocity")
 										bodyVelocity.Velocity = Vector3.new(0, 50, 0)
 										bodyVelocity.Name = "SkyBV"
@@ -32514,27 +32515,27 @@ end
 
 											while true do
 												task.wait()
-												if not (not tbl12.IsPartOwner(v26) or tick() - now3 > 2.5) then
+												if not (not featureUtils.IsPartOwner(v26) or tick() - now3 > 2.5) then
 													continue
 												end
 												break
 											end
 
 											bodyVelocity:Destroy()
-											tbl12.RNO(v26)
+											featureUtils.RNO(v26)
 										end)
 									end
 
-									if tbl7.Auras["Teleport to Spawn"] and tbl12.SNO(v26) then
-										tbl12.Teleport(v26, CFrame.new(0, 100, 0))
+									if sharedState.Auras["Teleport to Spawn"] and featureUtils.SNO(v26) then
+										featureUtils.Teleport(v26, CFrame.new(0, 100, 0))
 									end
 
-									if tbl7.Auras["Banana Ragdoll"] then
-										tbl12.BananaRagdoll(v24)
+									if sharedState.Auras["Banana Ragdoll"] then
+										featureUtils.BananaRagdoll(v24)
 									end
 
-									if tbl7.Auras["Delete Limbs"] then
-										tbl12.BreakLimb(v24, tbl9.TargetedLimbAura)
+									if sharedState.Auras["Delete Limbs"] then
+										featureUtils.BreakLimb(v24, settings.TargetedLimbAura)
 									end
 								end
 							end
@@ -32545,73 +32546,73 @@ end
 		end)
 
 		task.spawn(function()
-			local toysAuraSettings = tbl7.ToysAuraSettings
+			local toysAuraSettings = sharedState.ToysAuraSettings
 
 			while task.wait(0.03) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 				local flag12 = toysAuraSettings.Enabled and toysAuraSettings.OwnType == "Aura"
-				local flag13 = tbl8.ToyAuras and next(tbl7.ToyAuras) ~= nil
+				local flag13 = toggleStates.ToyAuras and next(sharedState.ToyAuras) ~= nil
 
 				if not flag12 and not flag13 then
-					tbl13.CleanupCandidates()
-					if not tbl12.WaitForRuntimeCondition("ToyAuraEffects", tbl12.IsToyAuraEffectsEnabled) then
+					modelState.CleanupCandidates()
+					if not featureUtils.WaitForRuntimeCondition("ToyAuraEffects", featureUtils.IsToyAuraEffectsEnabled) then
 						return
 					end
 					continue
 				end
 
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 
 				if not (not v23 or not v24 or v24.Health == 0) then
 					local ownInventoryOnly = flag12 and toysAuraSettings.OwnInventoryOnly
-					local refreshInventories = tbl13.RefreshInventories
+					local refreshInventories = modelState.RefreshInventories
 					local v25
 
 					if flag12 then
-						v25 = v17
+						v25 = spawnedToysFolder
 					else
 						v25 = nil
 					end
 
 					refreshInventories(v25)
-					tbl13.UpdateCharacterRoots()
-					local toyAuraDistance = tbl9.ToyAuraDistance
+					modelState.UpdateCharacterRoots()
+					local toyAuraDistance = settings.ToyAuraDistance
 					local n36 = toyAuraDistance * toyAuraDistance
 
-					for k, candidate in pairs(tbl13.Candidates) do
+					for k, candidate in pairs(modelState.Candidates) do
 						if not (k.Parent and candidate.Parent) then
-							tbl13.Candidates[k] = nil
-							tbl7.ToyAuraRoots[k] = nil
+							modelState.Candidates[k] = nil
+							sharedState.ToyAuraRoots[k] = nil
 						else
-							local v26 = tbl13.GetRoot(k)
+							local v26 = modelState.GetRoot(k)
 							local n37 = v26 and v26.Position - v23.Position
 
 							if not (not n37 or n37:Dot(n37) > n36) then
-								if flag12 and (not ownInventoryOnly or candidate == v17) then
-									tbl13.AddModel(k, true, 0.25, v26)
+								if flag12 and (not ownInventoryOnly or candidate == spawnedToysFolder) then
+									modelState.AddModel(k, true, 0.25, v26)
 								end
 
-								if flag13 and candidate ~= v17 then
-									local v27 = tbl7.Anchored[k] or tbl12.SNO(v26)
+								if flag13 and candidate ~= spawnedToysFolder then
+									local v27 = sharedState.Anchored[k] or featureUtils.SNO(v26)
 
-									if tbl7.ToyAuras.Destroy and v27 then
-										tbl12.DestroyObject(k)
+									if sharedState.ToyAuras.Destroy and v27 then
+										featureUtils.DestroyObject(k)
 									else
-										if tbl7.ToyAuras.Anchor and v27 and not tbl7.Anchored[k] then
-											task.spawn(tbl12.SetAnchored, k, true)
+										if sharedState.ToyAuras.Anchor and v27 and not sharedState.Anchored[k] then
+											task.spawn(featureUtils.SetAnchored, k, true)
 										end
 
-										if tbl7.ToyAuras.Fling and v27 then
+										if sharedState.ToyAuras.Fling and v27 then
 											v26.Velocity = v23.CFrame.LookVector * 50 + Vector3.new(0, 25, 0)
 										end
 
-										if tbl7.ToyAuras["Teleport to Spawn"] and v27 then
-											tbl12.Teleport(v26, workspace.SpawnLocation.Position + Vector3.new(0, 25, 0))
+										if sharedState.ToyAuras["Teleport to Spawn"] and v27 then
+											featureUtils.Teleport(v26, workspace.SpawnLocation.Position + Vector3.new(0, 25, 0))
 										end
 
-										if tbl7.ToyAuras.Bounce and not v26:FindFirstChild("SmashBV") then
+										if sharedState.ToyAuras.Bounce and not v26:FindFirstChild("SmashBV") then
 											local bodyVelocity = Instance.new("BodyVelocity")
 											bodyVelocity.Name = "SmashBV"
 											bodyVelocity.Velocity = Vector3.new(0, 100, 0)
@@ -32642,35 +32643,35 @@ end
 		end)
 
 		UserInputService.InputChanged:Connect(function(input)
-			if flag11 then
+			if isUnloading then
 				return
 			end
 
 			if input.UserInputType == Enum.UserInputType.MouseWheel then
-				if tbl8.Zoom then
+				if toggleStates.Zoom then
 					if input.Position.Z > 0 then
-						tbl12.SetFOV(tbl9.ZoomFOV - tbl9.ZoomStep, true)
+						featureUtils.SetFOV(settings.ZoomFOV - settings.ZoomStep, true)
 					elseif input.Position.Z < 0 then
-						tbl12.SetFOV(tbl9.ZoomFOV + tbl9.ZoomStep, true)
+						featureUtils.SetFOV(settings.ZoomFOV + settings.ZoomStep, true)
 					end
 
 					return
 				end
 
-				if tbl9.LineDistance < 11 then
-					tbl9.LineDistance = 11
+				if settings.LineDistance < 11 then
+					settings.LineDistance = 11
 				end
 
 				if input.Position.Z > 0 then
-					tbl9.LineDistance = tbl9.LineDistance + tbl9.IncreaseLineDistance
+					settings.LineDistance = settings.LineDistance + settings.IncreaseLineDistance
 				elseif input.Position.Z < 0 then
-					tbl9.LineDistance = tbl9.LineDistance - tbl9.IncreaseLineDistance
+					settings.LineDistance = settings.LineDistance - settings.IncreaseLineDistance
 				end
 			end
 		end)
 
 		workspace.ChildAdded:Connect(function(child)
-			if flag11 then
+			if isUnloading then
 				return
 			end
 
@@ -32678,8 +32679,8 @@ end
 				local beamPart = child:WaitForChild("BeamPart", 0.1)
 				beamPart = beamPart and beamPart:WaitForChild("GrabBeam", 0.1)
 
-				if tbl8.CustomLine and beamPart then
-					beamPart.Texture = tbl7.LineTypes[tbl9.CustomLine]
+				if toggleStates.CustomLine and beamPart then
+					beamPart.Texture = sharedState.LineTypes[settings.CustomLine]
 				end
 
 				local dragPart = child:WaitForChild("DragPart", 0.1)
@@ -32688,71 +32689,71 @@ end
 				local part1 = weldConstraint and weldConstraint.Part1
 
 				if toggles.RealisticFirstPersonT.Value then
-					local v22 = tbl12.Char()
+					local v22 = featureUtils.Char()
 
 					if v22 and v22:FindFirstChild("Right Arm") and v22["Right Arm"]:FindFirstChild("RightGripAttachment") and beamPart then
 						beamPart.Attachment0 = v22["Right Arm"].RightGripAttachment
 					end
 				end
 
-				if tbl8.MoreLineExtend then
+				if toggleStates.MoreLineExtend then
 					local clone = dragPart:Clone()
 					clone.Name = "DragPart1"
 					clone.AlignPosition.Attachment1 = clone.DragAttach
 					clone.Parent = child
-					tbl9.LineDistance = (clone.Position - currentCamera.CFrame.Position).Magnitude
-					local button = lib.IsMobile and ContextActionService:GetButton("ZoomIn")
-					local button2 = lib.IsMobile and ContextActionService:GetButton("ZoomOut")
+					settings.LineDistance = (clone.Position - currentCamera.CFrame.Position).Magnitude
+					local button = uiLibrary.IsMobile and ContextActionService:GetButton("ZoomIn")
+					local button2 = uiLibrary.IsMobile and ContextActionService:GetButton("ZoomOut")
 					clone.AlignOrientation.Enabled = false
 					dragPart.AlignPosition.Enabled = false
 
 					task.spawn(function()
-						while child.Parent and not flag11 do
+						while child.Parent and not isUnloading do
 							if button2 and button2.GuiState == Enum.GuiState.Press then
-								tbl9.LineDistance = tbl9.LineDistance + tbl9.IncreaseLineDistance
+								settings.LineDistance = settings.LineDistance + settings.IncreaseLineDistance
 							elseif button and button.GuiState == Enum.GuiState.Press then
-								tbl9.LineDistance = math.max(3, tbl9.LineDistance - tbl9.IncreaseLineDistance)
+								settings.LineDistance = math.max(3, settings.LineDistance - settings.IncreaseLineDistance)
 							end
 
-							clone.Position = currentCamera.CFrame.Position + currentCamera.CFrame.LookVector * tbl9.LineDistance
+							clone.Position = currentCamera.CFrame.Position + currentCamera.CFrame.LookVector * settings.LineDistance
 							task.wait()
 						end
 
-						tbl9.LineDistance = 0
+						settings.LineDistance = 0
 					end)
 				end
 
 				if part1 and part1:IsA("BasePart") then
-					tbl12.HandleAnchorGrab(part1, child)
+					featureUtils.HandleAnchorGrab(part1, child)
 
 					local function fn21()
 						local bodyVelocity = Instance.new("BodyVelocity", part1)
 						bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-						bodyVelocity.Velocity = currentCamera.CFrame.lookVector * tbl9.SuperStrength
+						bodyVelocity.Velocity = currentCamera.CFrame.lookVector * settings.SuperStrength
 						Debris:AddItem(bodyVelocity, 1)
 					end
 
-					local button = lib.IsMobile and ContextActionService:GetButton("Throw")
+					local button = uiLibrary.IsMobile and ContextActionService:GetButton("Throw")
 
-					tbl12.SetRuntimeConnection("MobileSuperStrength", button and button.InputBegan, not not button, function(arg)
-						if arg.UserInputType == Enum.UserInputType.Touch and tbl8.SuperStrength then
+					featureUtils.SetRuntimeConnection("MobileSuperStrength", button and button.InputBegan, not not button, function(arg)
+						if arg.UserInputType == Enum.UserInputType.Touch and toggleStates.SuperStrength then
 							fn21()
 						end
 					end)
 
 					child:GetPropertyChangedSignal("Parent"):Connect(function()
-						if flag11 then
+						if isUnloading then
 							return
 						end
 
 						if not child.Parent then
-							tbl12.SetRuntimeConnection("MobileSuperStrength", nil, false)
-							if not tbl8.SuperStrength or lib.IsMobile then
+							featureUtils.SetRuntimeConnection("MobileSuperStrength", nil, false)
+							if not toggleStates.SuperStrength or uiLibrary.IsMobile then
 								return
 							end
 
 							local connection = UserInputService.InputBegan:Connect(function(input)
-								if flag11 then
+								if isUnloading then
 									return
 								end
 
@@ -32767,7 +32768,7 @@ end
 						end
 					end)
 
-					if tbl8.GOI then
+					if toggleStates.GOI then
 						local parent2 = part1.Parent
 						if not parent2 or not parent2:IsA("Model") then
 							return
@@ -32786,14 +32787,14 @@ end
 						if playerFromCharacter then
 							local str7
 
-							if playerFromCharacter == localPlayer then
+							if playerFromCharacter == LocalPlayer then
 								str7 = "You (wtf, how?)"
 							else
-								str7 = tbl12.FormatPlayer(playerFromCharacter)
+								str7 = featureUtils.FormatPlayer(playerFromCharacter)
 							end
 
 							name = str7
-							local v22 = tbl12.GetInventory(playerFromCharacter)
+							local v22 = featureUtils.GetInventory(playerFromCharacter)
 							local n36
 
 							if v22 then
@@ -32844,10 +32845,10 @@ Escape Timer: %*]]
 							local str7 = Players:FindFirstChild(string.sub(parent3.Name, 1, -14)) or "World"
 
 							if str7 ~= "World" then
-								if str7 == localPlayer then
+								if str7 == LocalPlayer then
 									str7 = "You"
 								else
-									str7 = tbl12.FormatPlayer(str7)
+									str7 = featureUtils.FormatPlayer(str7)
 								end
 							end
 
@@ -32864,7 +32865,7 @@ Part you are touching: %*]]):format(parent2.Name, str7, part1.Name)
 							task.spawn(function()
 								while true do
 									if playerFromCharacter then
-										local v22 = tbl12.GetInventory(playerFromCharacter)
+										local v22 = featureUtils.GetInventory(playerFromCharacter)
 										local n36
 
 										if v22 then
@@ -32898,7 +32899,7 @@ Escape Timer: %*]]
 									end
 
 									task.wait()
-									if not (not child.Parent or not tbl8.GOI) then
+									if not (not child.Parent or not toggleStates.GOI) then
 										continue
 									end
 									break
@@ -32914,61 +32915,61 @@ Escape Timer: %*]]
 					if part1.Anchored then
 						return
 					end
-					local toysAuraSettings = tbl7.ToysAuraSettings
+					local toysAuraSettings = sharedState.ToysAuraSettings
 
-					if toysAuraSettings.Enabled and toysAuraSettings.OwnType == "Grab" and part1.Parent and part1.Parent:IsA("Model") and not part1:IsDescendantOf(map) and not tbl13.Models[part1.Parent] then
-						if tbl13.AddModel(part1.Parent, false) then
-							tbl12.RNO(part1)
+					if toysAuraSettings.Enabled and toysAuraSettings.OwnType == "Grab" and part1.Parent and part1.Parent:IsA("Model") and not part1:IsDescendantOf(map) and not modelState.Models[part1.Parent] then
+						if modelState.AddModel(part1.Parent, false) then
+							featureUtils.RNO(part1)
 						end
-					elseif tbl13.Models[part1.Parent] then
-						tbl13.RemoveModel(part1.Parent, false)
+					elseif modelState.Models[part1.Parent] then
+						modelState.RemoveModel(part1.Parent, false)
 					end
 
 					local playerFromCharacter = part1.Name == "HumanoidRootPart" and Players:GetPlayerFromCharacter(part1.Parent)
 
-					if tbl8.SilentAim and not tbl7.SilentAimState.RaycastActive and tbl12.IsSilentAimTarget(playerFromCharacter) and weldConstraint then
-						tbl11.CreateGrabLine:FireServer()
-						tbl11.CreateGrabLine:FireServer(part1, CFrame.new())
+					if toggleStates.SilentAim and not sharedState.SilentAimState.RaycastActive and featureUtils.IsSilentAimTarget(playerFromCharacter) and weldConstraint then
+						remotes.CreateGrabLine:FireServer()
+						remotes.CreateGrabLine:FireServer(part1, CFrame.new())
 						weldConstraint.Enabled = false
 						part1.CFrame = dragPart.CFrame
 						weldConstraint.Enabled = true
 					end
 
-					if tbl8.Grab then
+					if toggleStates.Grab then
 						local parent2 = part1.Parent and Players:FindFirstChild(part1.Parent.Name)
 
 						task.spawn(function()
-							if tbl7.Grabs.Kill and parent2 then
+							if sharedState.Grabs.Kill and parent2 then
 								task.wait()
 								child:Destroy()
-								tbl12.Kill(parent2)
+								featureUtils.Kill(parent2)
 							end
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs.Void and parent2 then
+							if sharedState.Grabs.Void and parent2 then
 								task.wait()
 								child:Destroy()
-								tbl12.Void(parent2)
+								featureUtils.Void(parent2)
 							end
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs.Invisible then
-								tbl11.CreateGrabLine:FireServer()
+							if sharedState.Grabs.Invisible then
+								remotes.CreateGrabLine:FireServer()
 							end
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs["Teleport to Spawn"] then
+							if sharedState.Grabs["Teleport to Spawn"] then
 								task.wait()
 								child:Destroy()
-								tbl12.Teleport(part1, CFrame.new(0, 100, 0))
+								featureUtils.Teleport(part1, CFrame.new(0, 100, 0))
 							end
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs.Noclip then
+							if sharedState.Grabs.Noclip then
 								if part1:IsDescendantOf(map) or part1.Parent == workspace then
 									return
 								end
@@ -32981,7 +32982,7 @@ Escape Timer: %*]]
 									end
 								end
 
-								while task.wait(0.25) and child and child.Parent and not flag11 do
+								while task.wait(0.25) and child and child.Parent and not isUnloading do
 									local v22 = pairs
 									local v23 = table.pack(parent3:QueryDescendants("BasePart"))
 									v23.n = 1 + v23.n - 1
@@ -33001,41 +33002,41 @@ Escape Timer: %*]]
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs.Infinite then
+							if sharedState.Grabs.Infinite then
 								if part1:IsDescendantOf(map) then
 									return
 								end
-								tbl12.DisableEndGrabEarly()
+								featureUtils.DisableEndGrabEarly()
 
-								while part1 and child and child.Parent and not flag11 do
-									tbl12.Grab(part1)
+								while part1 and child and child.Parent and not isUnloading do
+									featureUtils.Grab(part1)
 									RunService.Heartbeat:Wait()
 								end
 
-								tbl12.RNO(part1)
+								featureUtils.RNO(part1)
 							end
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs.Kick and parent2 then
-								tbl12.DisableEndGrabEarly()
+							if sharedState.Grabs.Kick and parent2 then
+								featureUtils.DisableEndGrabEarly()
 
-								while part1 and part1.Parent and child and child.Parent and not flag11 do
-									tbl12.Grab(part1)
+								while part1 and part1.Parent and child and child.Parent and not isUnloading do
+									featureUtils.Grab(part1)
 									task.wait()
-									tbl12.RNO(part1)
+									featureUtils.RNO(part1)
 
 									for i = 1, 2 do
 										task.wait()
 									end
 								end
 
-								tbl12.RNO(part1)
+								featureUtils.RNO(part1)
 							end
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs.Massless then
+							if sharedState.Grabs.Massless then
 								local dragPart2 = child:FindFirstChild("DragPart")
 								local dragPart1 = child:FindFirstChild("DragPart1")
 
@@ -33056,32 +33057,32 @@ Escape Timer: %*]]
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs.Ragdoll and part1.Parent:FindFirstChild("Humanoid") and part1.Parent.Humanoid:FindFirstChild("Ragdolled") then
-								while part1 and part1.Parent and child.Parent and not flag11 and task.wait() do
-									tbl12.Ragdoll(part1.Parent)
+							if sharedState.Grabs.Ragdoll and part1.Parent:FindFirstChild("Humanoid") and part1.Parent.Humanoid:FindFirstChild("Ragdolled") then
+								while part1 and part1.Parent and child.Parent and not isUnloading and task.wait() do
+									featureUtils.Ragdoll(part1.Parent)
 								end
 							end
 						end)
 
 						task.spawn(function()
-							if tbl7.Grabs.Unstick and part1.Parent:FindFirstChild("Humanoid") then
-								while part1 and part1.Parent and child.Parent and not flag11 and task.wait() do
-									tbl12.RemoveSticky(part1.Parent, tbl9.UnstickGrab == "Only Sticked")
+							if sharedState.Grabs.Unstick and part1.Parent:FindFirstChild("Humanoid") then
+								while part1 and part1.Parent and child.Parent and not isUnloading and task.wait() do
+									featureUtils.RemoveSticky(part1.Parent, settings.UnstickGrab == "Only Sticked")
 								end
 							end
 						end)
 
 						task.spawn(function()
-							if grabPart and grabPart:FindFirstChild("GrabAttach") and tbl7.Grabs.Spin and part1.Parent ~= workspace and part1:IsDescendantOf(map) ~= true then
-								while part1 and part1.Parent and child.Parent and not flag11 and task.wait() do
+							if grabPart and grabPart:FindFirstChild("GrabAttach") and sharedState.Grabs.Spin and part1.Parent ~= workspace and part1:IsDescendantOf(map) ~= true then
+								while part1 and part1.Parent and child.Parent and not isUnloading and task.wait() do
 									grabPart.RotVelocity = Vector3.new(50, 50, 50)
 								end
 							end
 						end)
 
 						task.spawn(function()
-							if grabPart and grabPart:FindFirstChild("GrabAttach") and tbl7.Grabs.Fling and part1.Parent ~= workspace and part1:IsDescendantOf(map) ~= true then
-								while part1 and part1.Parent and child.Parent and not flag11 and task.wait() do
+							if grabPart and grabPart:FindFirstChild("GrabAttach") and sharedState.Grabs.Fling and part1.Parent ~= workspace and part1:IsDescendantOf(map) ~= true then
+								while part1 and part1.Parent and child.Parent and not isUnloading and task.wait() do
 									grabPart.RotVelocity = Vector3.new(1500, 1500, 1500)
 								end
 							end
@@ -33095,7 +33096,7 @@ Escape Timer: %*]]
 			end
 
 			if child:FindFirstChild("HoldPart") and toggles.RealisticFirstPersonT.Value then
-				local leftArm = tbl12.Char()
+				local leftArm = featureUtils.Char()
 				leftArm = leftArm and leftArm:FindFirstChild("Left Arm")
 
 				if leftArm then
@@ -33134,51 +33135,51 @@ Escape Timer: %*]]
 			local spawnLocation = workspace.SpawnLocation
 
 			while task.wait() do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.LagServer and not tbl12.WaitForRuntimeToggle("LagServer") then
+				if not toggleStates.LagServer and not featureUtils.WaitForRuntimeToggle("LagServer") then
 					return
 				end
-				local n36 = -2 ^ (20 + tbl9.LagLines)
+				local n36 = -2 ^ (20 + settings.LagLines)
 				local cframe = CFrame.new(n36, 0, n36)
-				tbl11.CreateGrabLine:FireServer(spawnLocation, cframe)
+				remotes.CreateGrabLine:FireServer(spawnLocation, cframe)
 			end
 		end)
 
 		task.spawn(function()
 			while task.wait(0.03) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.JumpPower and not tbl8.Noclip then
-					if not tbl12.WaitForRuntimeCondition("MovementPhysics", tbl12.IsMovementPhysicsEnabled) then
+				if not toggleStates.JumpPower and not toggleStates.Noclip then
+					if not featureUtils.WaitForRuntimeCondition("MovementPhysics", featureUtils.IsMovementPhysicsEnabled) then
 						return
 					end
 					continue
 				end
 
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 
-				if tbl8.JumpPower and v24 and v24.JumpPower ~= tbl9.JumpPower then
-					v24.JumpPower = tbl9.JumpPower
+				if toggleStates.JumpPower and v24 and v24.JumpPower ~= settings.JumpPower then
+					v24.JumpPower = settings.JumpPower
 				end
 
-				if tbl8.Noclip and v22 then
-					tbl12.ToggleCollisions(v22, false, true)
+				if toggleStates.Noclip and v22 then
+					featureUtils.ToggleCollisions(v22, false, true)
 				end
 			end
 		end)
 
 		UserInputService.JumpRequest:Connect(function()
-			if flag11 then
+			if isUnloading then
 				return
 			end
 
-			if tbl8.InfJump then
-				local v22, v23, v24 = tbl12.Char()
+			if toggleStates.InfJump then
+				local v22, v23, v24 = featureUtils.Char()
 
 				if v24 then
 					v24:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -33187,22 +33188,22 @@ Escape Timer: %*]]
 		end)
 
 		GuiService.ErrorMessageChanged:Connect(function(arg)
-			if flag11 then
+			if isUnloading then
 				return
 			end
 			local str5 = tostring(arg):lower()
-			if (str5:find("server is full", 1, true) or str5:find("game is full", 1, true)) and tbl12.RetryFullServerHop() then
+			if (str5:find("server is full", 1, true) or str5:find("game is full", 1, true)) and featureUtils.RetryFullServerHop() then
 				return
 			end
 
-			if not tbl8.AutoRejoin or tbl7.AutoRejoinBusy or not tbl12.IsTerminalDisconnect() then
+			if not toggleStates.AutoRejoin or sharedState.AutoRejoinBusy or not featureUtils.IsTerminalDisconnect() then
 				return
 			end
-			tbl7.AutoRejoinBusy = true
-			tbl12.Rejoin(tbl8.RejoinWithAntiLag ~= false, tbl8.RejoinWithScript)
+			sharedState.AutoRejoinBusy = true
+			featureUtils.Rejoin(toggleStates.RejoinWithAntiLag ~= false, toggleStates.RejoinWithScript)
 		end)
 
-		isHeld:GetPropertyChangedSignal("Value"):Connect(tbl12.AntiGrab)
+		isHeld:GetPropertyChangedSignal("Value"):Connect(featureUtils.AntiGrab)
 
 		task.spawn(function()
 			local v22 = nil
@@ -33210,7 +33211,7 @@ Escape Timer: %*]]
 
 			local function fn21()
 				local v23
-				v23, v23 = tbl12.Char()
+				v23, v23 = featureUtils.Char()
 
 				if v22 then
 					if v22.Parent and v23 then
@@ -33229,22 +33230,22 @@ Escape Timer: %*]]
 			end
 
 			while task.wait() do
-				if flag11 then
+				if isUnloading then
 					fn21()
 					return
 				end
 
-				if not tbl8.AntiBlobman then
+				if not toggleStates.AntiBlobman then
 					if v22 or boolValue then
 						fn21()
 					end
 
-					if not tbl12.WaitForRuntimeToggle("AntiBlobman") then
+					if not featureUtils.WaitForRuntimeToggle("AntiBlobman") then
 						return
 					end
 				end
 
-				local v23, v24, v25 = tbl12.Char()
+				local v23, v24, v25 = featureUtils.Char()
 
 				if not v24 or not v25 then
 					if v22 then
@@ -33282,34 +33283,34 @@ Escape Timer: %*]]
 			local v23 = nil
 
 			while true do
-				task.wait(tbl9.InputLgDelay)
+				task.wait(settings.InputLgDelay)
 
-				if flag11 then
+				if isUnloading then
 					if v22 then
-						tbl12.DestroyToy(v22)
+						featureUtils.DestroyToy(v22)
 					end
 
 					return
 				else
-					if not tbl8.AntiInputLag then
+					if not toggleStates.AntiInputLag then
 						if v22 then
-							tbl12.DestroyToy(v22)
+							featureUtils.DestroyToy(v22)
 							v22 = nil
 						end
 
-						if not tbl12.WaitForRuntimeToggle("AntiInputLag") then
+						if not featureUtils.WaitForRuntimeToggle("AntiInputLag") then
 							break
 						end
 					end
 
 					if not v23 or not v23.Parent then
-						v23 = tbl12.DisableEndGrabEarly()
+						v23 = featureUtils.DisableEndGrabEarly()
 					end
 
-					local v24, v25, v26 = tbl12.Char()
+					local v24, v25, v26 = featureUtils.Char()
 
 					if not v22 or not v22.Parent then
-						v22 = tbl12.SpawnToy(tbl9.AntiInputType, CFrame.new(0, 1e20, 0), nil, true)
+						v22 = featureUtils.SpawnToy(settings.AntiInputType, CFrame.new(0, 1e20, 0), nil, true)
 						if not v22 then
 							continue
 						end
@@ -33319,13 +33320,13 @@ Escape Timer: %*]]
 					local holdItemRemoteFunction = holdPart and holdPart:WaitForChild("HoldItemRemoteFunction", 2)
 					local dropItemRemoteFunction = holdItemRemoteFunction and holdPart:WaitForChild("DropItemRemoteFunction", 2)
 
-					if v22.Name ~= tbl9.AntiInputType then
-						tbl12.DestroyToy(v22)
+					if v22.Name ~= settings.AntiInputType then
+						featureUtils.DestroyToy(v22)
 					end
 
 					pcall(function()
 						if holdPart.RigidConstraint.Attachment1 ~= v24["Left Arm"].LeftGripAttachment and holdPart.RigidConstraint.Attachment1 ~= nil and holdPart.RigidConstraint.Attachment1 ~= v24["Right Arm"].RightGripAttachment then
-							tbl12.DestroyToy(v22)
+							featureUtils.DestroyToy(v22)
 						end
 					end)
 
@@ -33334,7 +33335,7 @@ Escape Timer: %*]]
 							v27.CanCollide = false
 
 							if v27:IsA("MeshPart") or v27.Name == "Part" then
-								v27.Transparency = tbl9.AILTransparency
+								v27.Transparency = settings.AILTransparency
 							end
 						end
 					end)
@@ -33349,21 +33350,21 @@ Escape Timer: %*]]
 							holdItemRemoteFunction:InvokeServer(v22, v24)
 						end)
 					elseif not holdItemRemoteFunction or not dropItemRemoteFunction then
-						tbl12.DestroyToy(v22)
+						featureUtils.DestroyToy(v22)
 						v22 = nil
 					end
 				end
 			end
 		end)
 
-		if not tbl11.Explode then
+		if not remotes.Explode then
 			return
 		end
 
 		workspace.ChildAdded:Connect(function(child)
-			local v22, v23, v24 = tbl12.Char()
+			local v22, v23, v24 = featureUtils.Char()
 
-			if child.Name == "Part" and tbl8.AntiExplosion and v23 and v24 then
+			if child.Name == "Part" and toggleStates.AntiExplosion and v23 and v24 then
 				if (child.Position - v23.Position).Magnitude <= 20 then
 					v23.Anchored = true
 					task.wait(0.02)
@@ -33376,7 +33377,7 @@ Escape Timer: %*]]
 						v25.CanCollide = false
 					end
 
-					tbl12.ResetVelocity(v23)
+					featureUtils.ResetVelocity(v23)
 					v23.Anchored = false
 				end
 			end
@@ -33395,7 +33396,7 @@ Escape Timer: %*]]
 			extinguishPart.Transparency = 1
 
 			local function fn21(character)
-				if flag11 then
+				if isUnloading then
 					return
 				end
 				local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 2)
@@ -33404,11 +33405,11 @@ Escape Timer: %*]]
 				end
 
 				humanoidRootPart.ChildAdded:Connect(function(child)
-					if flag11 then
+					if isUnloading then
 						return
 					end
 
-					if child.Name == "FireParticleEmitter" and tbl8.AntiBurn then
+					if child.Name == "FireParticleEmitter" and toggleStates.AntiBurn then
 						local cFrame2 = extinguishPart.CFrame
 						local fireLight = humanoidRootPart:FindFirstChild("FireLight")
 
@@ -33438,8 +33439,8 @@ Escape Timer: %*]]
 				end)
 			end
 
-			localPlayer.CharacterAdded:Connect(fn21)
-			local v22 = tbl12.Char()
+			LocalPlayer.CharacterAdded:Connect(fn21)
+			local v22 = featureUtils.Char()
 
 			if v22 then
 				fn21(v22)
@@ -33448,14 +33449,14 @@ Escape Timer: %*]]
 
 		task.spawn(function()
 			while task.wait(0.03) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.AntiVoid and not tbl12.WaitForRuntimeToggle("AntiVoid") then
+				if not toggleStates.AntiVoid and not featureUtils.WaitForRuntimeToggle("AntiVoid") then
 					return
 				end
-				local v22, v23 = tbl12.Char()
+				local v22, v23 = featureUtils.Char()
 				local flag12
 
 				if v23 then
@@ -33467,7 +33468,7 @@ Escape Timer: %*]]
 				flag12 = flag12 and not ((v23.Position - part3.Position).Magnitude < 150)
 
 				if flag12 then
-					tbl12.Teleport(v23, CFrame.new(0, 15, 0))
+					featureUtils.Teleport(v23, CFrame.new(0, 15, 0))
 				end
 			end
 		end)
@@ -33477,57 +33478,57 @@ Escape Timer: %*]]
 				local n36 = os.clock() + 0.35
 
 				repeat
-					local v22 = tbl12.DetectPCLD(localPlayer)
-					if v22 and v22.Parent and not tbl12.IsWaitingPCLD(v22) then
+					local v22 = featureUtils.DetectPCLD(LocalPlayer)
+					if v22 and v22.Parent and not featureUtils.IsWaitingPCLD(v22) then
 						return v22
 					end
 					task.wait(0.05)
-				until flag11 or not tbl8.AntiKick or os.clock() >= n36
+				until isUnloading or not toggleStates.AntiKick or os.clock() >= n36
 			end
 
 			local function fn22(arg)
-				local NinjaShuriken = tbl12.SpawnToy("NinjaShuriken", arg.CFrame + Vector3.new(0, 15, 0), 3, true)
+				local NinjaShuriken = featureUtils.SpawnToy("NinjaShuriken", arg.CFrame + Vector3.new(0, 15, 0), 3, true)
 				local stickyPart = NinjaShuriken and NinjaShuriken:WaitForChild("StickyPart", 1.5)
 				local stickyWeld = stickyPart and stickyPart:WaitForChild("StickyWeld", 1.5)
-				if stickyPart and stickyWeld and tbl12.SNO(stickyPart) then
+				if stickyPart and stickyWeld and featureUtils.SNO(stickyPart) then
 					return NinjaShuriken, stickyPart, stickyWeld
 				end
-				tbl12.DestroyToy(NinjaShuriken)
+				featureUtils.DestroyToy(NinjaShuriken)
 			end
 
 			task.spawn(function()
 				while task.wait(0.03) do
-					if flag11 then
+					if isUnloading then
 						return
 					end
 
-					if not tbl8.AntiKick then
+					if not toggleStates.AntiKick then
 						if v18 then
-							tbl12.DestroyToy(v18)
+							featureUtils.DestroyToy(v18)
 							v18 = nil
 						end
 
-						if not tbl12.WaitForRuntimeToggle("AntiKick") then
+						if not featureUtils.WaitForRuntimeToggle("AntiKick") then
 							return
 						end
 					end
 
-					local antiKickSettings = tbl7.AntiKickSettings
-					local v22, v23, v24 = tbl12.Char()
+					local antiKickSettings = sharedState.AntiKickSettings
+					local v22, v23, v24 = featureUtils.Char()
 					local ragdollTouchedHitbox = v23 and v23:FindFirstChild("RagdollTouchedHitbox")
 
 					if v23 and v24 and ragdollTouchedHitbox and v24.Health > 0 then
-						if localPlayer.InPlot.Value then
+						if LocalPlayer.InPlot.Value then
 							while true do
 								task.wait()
-								if not (not localPlayer.InPlot.Value or localPlayer.InOwnedPlot.Value) then
+								if not (not LocalPlayer.InPlot.Value or LocalPlayer.InOwnedPlot.Value) then
 									continue
 								end
 								break
 							end
 						end
 
-						if tbl9.AKType == "Shuriken" then
+						if settings.AKType == "Shuriken" then
 							local parent2, shurHighlight, highlight2, antiKick, forcefieldChar, transparency, isMeshPart
 
 							if not (v18 and v18.Name == "ShurikenRSC" and v18:FindFirstChild("StickyPart") and v18.StickyPart:FindFirstChild("StickyWeld") and v18.StickyPart.StickyWeld.Part1 == ragdollTouchedHitbox) then
@@ -33535,7 +33536,7 @@ Escape Timer: %*]]
 								local stickyWeld, now3, flag12, flag13
 
 								if not v18 or not v18.Parent then
-									tbl12.DestroyToy(v18)
+									featureUtils.DestroyToy(v18)
 									v18 = nil
 									local v25 = fn21()
 									stickyWeld = nil
@@ -33562,11 +33563,11 @@ Escape Timer: %*]]
 												end
 											end)
 
-											tbl11.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
+											remotes.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
 											now3 = tick()
 
 											while true do
-												fn20()
+												waitForHeartbeatElapsed()
 												flag12 = stickyWeld.Part1 == ragdollTouchedHitbox or not stickyWeld.Parent or not ragdollTouchedHitbox.Parent or not v24.Parent
 												flag13 = flag12 or v24.Health == 0 or tick() - now3 > 0.5
 												if not flag13 then
@@ -33578,8 +33579,8 @@ Escape Timer: %*]]
 											parent2 = v18 and v18.Parent
 
 											if parent2 then
-												if not tbl8.AntiKick then
-													tbl12.DestroyToy(v18)
+												if not toggleStates.AntiKick then
+													featureUtils.DestroyToy(v18)
 													v18 = nil
 												else
 													shurHighlight = v18:FindFirstChild("ShurHighlight")
@@ -33616,8 +33617,8 @@ Escape Timer: %*]]
 													if highlight2 then
 														antiKick = highlight2
 													else
-														forcefieldChar = tbl8.ForcefieldChar
-														antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
+														forcefieldChar = toggleStates.ForcefieldChar
+														antiKick = forcefieldChar and sharedState.CharacterHighlightAffects["Anti Kick"]
 													end
 
 													if antiKick then
@@ -33628,8 +33629,8 @@ Escape Timer: %*]]
 
 													for _, child in ipairs(v18:GetChildren()) do
 														if child:IsA("BasePart") then
-															if tbl12.ApplyCharacterHighlightPart then
-																tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
+															if featureUtils.ApplyCharacterHighlightPart then
+																featureUtils.ApplyCharacterHighlightPart(child, "Anti Kick")
 															end
 
 															isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
@@ -33661,11 +33662,11 @@ Escape Timer: %*]]
 											end
 										end)
 
-										tbl11.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
+										remotes.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
 										now3 = tick()
 
 										while true do
-											fn20()
+											waitForHeartbeatElapsed()
 											flag12 = stickyWeld.Part1 == ragdollTouchedHitbox or not stickyWeld.Parent or not ragdollTouchedHitbox.Parent or not v24.Parent
 											flag13 = flag12 or v24.Health == 0 or tick() - now3 > 0.5
 											if not flag13 then
@@ -33677,8 +33678,8 @@ Escape Timer: %*]]
 										parent2 = v18 and v18.Parent
 
 										if parent2 then
-											if not tbl8.AntiKick then
-												tbl12.DestroyToy(v18)
+											if not toggleStates.AntiKick then
+												featureUtils.DestroyToy(v18)
 												v18 = nil
 											else
 												shurHighlight = v18:FindFirstChild("ShurHighlight")
@@ -33715,8 +33716,8 @@ Escape Timer: %*]]
 												if highlight2 then
 													antiKick = highlight2
 												else
-													forcefieldChar = tbl8.ForcefieldChar
-													antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
+													forcefieldChar = toggleStates.ForcefieldChar
+													antiKick = forcefieldChar and sharedState.CharacterHighlightAffects["Anti Kick"]
 												end
 
 												if antiKick then
@@ -33727,8 +33728,8 @@ Escape Timer: %*]]
 
 												for _, child in ipairs(v18:GetChildren()) do
 													if child:IsA("BasePart") then
-														if tbl12.ApplyCharacterHighlightPart then
-															tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
+														if featureUtils.ApplyCharacterHighlightPart then
+															featureUtils.ApplyCharacterHighlightPart(child, "Anti Kick")
 														end
 
 														isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
@@ -33753,8 +33754,8 @@ Escape Timer: %*]]
 									stickyPart = v18:WaitForChild("StickyPart", 1.5)
 									stickyWeld = stickyPart and stickyPart:WaitForChild("StickyWeld", 1.5)
 
-									if not (stickyPart and stickyWeld) or not tbl12.SNO(stickyPart) then
-										tbl12.DestroyToy(v18)
+									if not (stickyPart and stickyWeld) or not featureUtils.SNO(stickyPart) then
+										featureUtils.DestroyToy(v18)
 										v18 = nil
 									elseif v18 then
 										v18.Name = "ShurikenRSC"
@@ -33767,11 +33768,11 @@ Escape Timer: %*]]
 											end
 										end)
 
-										tbl11.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
+										remotes.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
 										now3 = tick()
 
 										while true do
-											fn20()
+											waitForHeartbeatElapsed()
 											flag12 = stickyWeld.Part1 == ragdollTouchedHitbox or not stickyWeld.Parent or not ragdollTouchedHitbox.Parent or not v24.Parent
 											flag13 = flag12 or v24.Health == 0 or tick() - now3 > 0.5
 											if not flag13 then
@@ -33783,8 +33784,8 @@ Escape Timer: %*]]
 										parent2 = v18 and v18.Parent
 
 										if parent2 then
-											if not tbl8.AntiKick then
-												tbl12.DestroyToy(v18)
+											if not toggleStates.AntiKick then
+												featureUtils.DestroyToy(v18)
 												v18 = nil
 											else
 												shurHighlight = v18:FindFirstChild("ShurHighlight")
@@ -33821,8 +33822,8 @@ Escape Timer: %*]]
 												if highlight2 then
 													antiKick = highlight2
 												else
-													forcefieldChar = tbl8.ForcefieldChar
-													antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
+													forcefieldChar = toggleStates.ForcefieldChar
+													antiKick = forcefieldChar and sharedState.CharacterHighlightAffects["Anti Kick"]
 												end
 
 												if antiKick then
@@ -33833,8 +33834,8 @@ Escape Timer: %*]]
 
 												for _, child in ipairs(v18:GetChildren()) do
 													if child:IsA("BasePart") then
-														if tbl12.ApplyCharacterHighlightPart then
-															tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
+														if featureUtils.ApplyCharacterHighlightPart then
+															featureUtils.ApplyCharacterHighlightPart(child, "Anti Kick")
 														end
 
 														isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
@@ -33860,8 +33861,8 @@ Escape Timer: %*]]
 								parent2 = v18 and v18.Parent
 
 								if parent2 then
-									if not tbl8.AntiKick then
-										tbl12.DestroyToy(v18)
+									if not toggleStates.AntiKick then
+										featureUtils.DestroyToy(v18)
 										v18 = nil
 									else
 										shurHighlight = v18:FindFirstChild("ShurHighlight")
@@ -33898,8 +33899,8 @@ Escape Timer: %*]]
 										if highlight2 then
 											antiKick = highlight2
 										else
-											forcefieldChar = tbl8.ForcefieldChar
-											antiKick = forcefieldChar and tbl7.CharacterHighlightAffects["Anti Kick"]
+											forcefieldChar = toggleStates.ForcefieldChar
+											antiKick = forcefieldChar and sharedState.CharacterHighlightAffects["Anti Kick"]
 										end
 
 										if antiKick then
@@ -33910,8 +33911,8 @@ Escape Timer: %*]]
 
 										for _, child in ipairs(v18:GetChildren()) do
 											if child:IsA("BasePart") then
-												if tbl12.ApplyCharacterHighlightPart then
-													tbl12.ApplyCharacterHighlightPart(child, "Anti Kick")
+												if featureUtils.ApplyCharacterHighlightPart then
+													featureUtils.ApplyCharacterHighlightPart(child, "Anti Kick")
 												end
 
 												isMeshPart = child.Transparency ~= transparency and (child:IsA("MeshPart") or child.Name == "Part")
@@ -33940,34 +33941,34 @@ Escape Timer: %*]]
 
 		task.spawn(function()
 			while task.wait(0.2) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.AntiKick2 and not tbl12.WaitForRuntimeToggle("AntiKick2") then
+				if not toggleStates.AntiKick2 and not featureUtils.WaitForRuntimeToggle("AntiKick2") then
 					return
 				end
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 
 				if v24 then
 					if not v24:GetAttribute("BrokenPCLD") or v24.Health <= 0 then
 						local result = nil
 
 						if v24.Health > 0 then
-							fn18("Starting PCLD Break...", "PCLD Breaker")
+							notify("Starting PCLD Break...", "PCLD Breaker")
 
 							task.spawn(function()
 								repeat
 									v24.Health = 0
 									v24:ChangeState(Enum.HumanoidStateType.Dead)
-									fn20()
+									waitForHeartbeatElapsed()
 								until result
 							end)
 						else
-							fn18("Detected death, breaking PCLD again...", "PCLD Breaker")
+							notify("Detected death, breaking PCLD again...", "PCLD Breaker")
 						end
 
-						result = localPlayer.CharacterAdded:Wait()
+						result = LocalPlayer.CharacterAdded:Wait()
 						local humanoid = result:WaitForChild("Humanoid", 5)
 
 						if humanoid then
@@ -33977,16 +33978,16 @@ Escape Timer: %*]]
 								repeat
 									humanoid.Health = 0
 									humanoid:ChangeState(Enum.HumanoidStateType.Dead)
-									fn20()
+									waitForHeartbeatElapsed()
 								until result2
 							end)
 
-							result2 = localPlayer.CharacterAdded:Wait()
+							result2 = LocalPlayer.CharacterAdded:Wait()
 							local humanoid2 = result2:WaitForChild("Humanoid", 5)
 
 							if humanoid2 then
 								humanoid2:SetAttribute("BrokenPCLD", true)
-								fn18("Done!", "PCLD Breaker")
+								notify("Done!", "PCLD Breaker")
 							end
 						end
 					end
@@ -34002,13 +34003,13 @@ Escape Timer: %*]]
 			end)
 
 			RunService.Heartbeat:Connect(function(deltaTime)
-				if flag11 or not flag12 or not tbl8.AutoAntiLag then
+				if isUnloading or not flag12 or not toggleStates.AutoAntiLag then
 					return
 				end
-				local antiLagSens = tbl9.AntiLagSens
+				local antiLagSens = settings.AntiLagSens
 
 				if math.floor(1 / deltaTime) < antiLagSens and toggles.AntiLag and not toggles.AntiLag.Value then
-					fn18("Anti Lag Enabled || Too low fps", "Auto Anti Lag")
+					notify("Anti Lag Enabled || Too low fps", "Auto Anti Lag")
 					toggles.AntiLag:SetValue(true)
 				end
 			end)
@@ -34018,29 +34019,29 @@ Escape Timer: %*]]
 			task.wait(0.5)
 
 			while task.wait(0.03) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.AntiSnowball and not tbl12.WaitForRuntimeToggle("AntiSnowball") then
+				if not toggleStates.AntiSnowball and not featureUtils.WaitForRuntimeToggle("AntiSnowball") then
 					return
 				end
 
-				if tbl8.GucciAntiGrab then
+				if toggleStates.GucciAntiGrab then
 					repeat
 						task.wait()
-					until not tbl8.GucciAntiGrab
+					until not toggleStates.GucciAntiGrab
 
 					task.wait(1)
 				end
 
-				if tbl8.AntiBanana then
-					local v22 = tbl12.Char()
+				if toggleStates.AntiBanana then
+					local v22 = featureUtils.Char()
 
 					if v22 and v22:FindFirstChild("Right Leg") then
 						while true do
 							task.wait()
-							local v23 = tbl12.Char()
+							local v23 = featureUtils.Char()
 							if v23 and v23:FindFirstChild("Right Leg") then
 								continue
 							end
@@ -34049,11 +34050,11 @@ Escape Timer: %*]]
 					end
 				end
 
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 				local weldHRP = v23 and v23:FindFirstChild("WeldHRP")
 
 				if not (not weldHRP or not v24 or v24.Health == 0 or not v23) then
-					tbl11.RagdollRemote:FireServer(v23, 0.5)
+					remotes.RagdollRemote:FireServer(v23, 0.5)
 
 					if not v24.SeatPart then
 						v24.Sit = false
@@ -34064,8 +34065,8 @@ Escape Timer: %*]]
 					if weldHRP.Enabled then
 						ContextActionService:UnbindAction("JumpRemover")
 						v24:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
-						tbl12.RepositionLimbs(v22)
-						tbl12.ToggleCollisions(v22, false, false, true)
+						featureUtils.RepositionLimbs(v22)
+						featureUtils.ToggleCollisions(v22, false, false, true)
 					end
 				end
 			end
@@ -34075,18 +34076,18 @@ Escape Timer: %*]]
 			task.wait(2)
 
 			while task.wait(0.03) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.AntiBanana and not tbl12.WaitForRuntimeToggle("AntiBanana") then
+				if not toggleStates.AntiBanana and not featureUtils.WaitForRuntimeToggle("AntiBanana") then
 					return
 				end
-				local rightLeg, v22, v23 = tbl12.Char()
+				local rightLeg, v22, v23 = featureUtils.Char()
 				rightLeg = rightLeg and rightLeg:FindFirstChild("Right Leg")
-				local gucciAntiGrab = tbl8.GucciAntiGrab
+				local gucciAntiGrab = toggleStates.GucciAntiGrab
 
-				if rightLeg and v22 and v23 and v23.Health ~= 0 and tbl12.IsNetworkOwner(v22) then
+				if rightLeg and v22 and v23 and v23.Health ~= 0 and featureUtils.IsNetworkOwner(v22) then
 					if gucciAntiGrab then
 						toggles.GucciAntiGrab:SetValue(false)
 						task.wait(0.25)
@@ -34094,11 +34095,11 @@ Escape Timer: %*]]
 
 					v23.Sit = false
 					v23.HipHeight = 2
-					tbl12.BreakLimb(localPlayer, "Legs")
+					featureUtils.BreakLimb(LocalPlayer, "Legs")
 					local connection = nil
 
 					connection = v23:GetPropertyChangedSignal("HipHeight"):Connect(function()
-						if not tbl8.AntiBanana then
+						if not toggleStates.AntiBanana then
 							return connection:Disconnect()
 						end
 						v23.HipHeight = 2
@@ -34118,7 +34119,7 @@ Escape Timer: %*]]
 						toggles.GucciAntiGrab:SetValue(true)
 					end
 				elseif v23 and v23.Health == 0 then
-					localPlayer.CharacterAdded:Wait()
+					LocalPlayer.CharacterAdded:Wait()
 					task.wait(0.5)
 				end
 			end
@@ -34131,7 +34132,7 @@ Escape Timer: %*]]
 				local n36 = 0
 
 				gameCorrectionsNotify.OnClientEvent:Connect(function(arg)
-					if flag11 then
+					if isUnloading then
 						return
 					end
 
@@ -34140,23 +34141,23 @@ Escape Timer: %*]]
 
 						if now3 - n36 > 1 then
 							n36 = now3
-							tbl9.KickFlags = 1
+							settings.KickFlags = 1
 						else
-							tbl9.KickFlags = tbl9.KickFlags + 1
+							settings.KickFlags = settings.KickFlags + 1
 						end
 
-						if tbl8.AutoReset then
-							if tbl9.KickFlags >= 4 and tbl8.AutoLeave then
-								return localPlayer:Kick("Meowixa (Auto Reset)\nAvoided Kick")
+						if toggleStates.AutoReset then
+							if settings.KickFlags >= 4 and toggleStates.AutoLeave then
+								return LocalPlayer:Kick("Meowixa (Auto Reset)\nAvoided Kick")
 							end
-							local v22, v23, v24 = tbl12.Char()
+							local v22, v23, v24 = featureUtils.Char()
 
 							if v24 then
 								v24:ChangeState(Enum.HumanoidStateType.Running)
 								v24:ChangeState(Enum.HumanoidStateType.Dead)
 
-								if tbl9.KickFlags == 1 then
-									fn18("Reset due to kick flag", "Auto Reset")
+								if settings.KickFlags == 1 then
+									notify("Reset due to kick flag", "Auto Reset")
 								end
 							end
 						end
@@ -34169,14 +34170,14 @@ Escape Timer: %*]]
 			local connection = nil
 
 			local function fn21()
-				local v22, head = tbl12.Char()
+				local v22, head = featureUtils.Char()
 				head = head and v22:FindFirstChild("Head")
 				if not head then
 					return
 				end
 
 				connection = head.ChildAdded:Connect(function(child)
-					if flag11 then
+					if isUnloading then
 						return
 					end
 
@@ -34186,46 +34187,46 @@ Escape Timer: %*]]
 					local v23 = Players:FindFirstChild(child.Value)
 
 					if child.Name == "PartOwner" and v23 then
-						tbl9.WhoGrabbed = tbl12.FormatPlayer(v23)
+						settings.WhoGrabbed = featureUtils.FormatPlayer(v23)
 
-						if tbl12.UpdateLastGrabbedLabel then
-							tbl12.UpdateLastGrabbedLabel()
+						if featureUtils.UpdateLastGrabbedLabel then
+							featureUtils.UpdateLastGrabbedLabel()
 						end
 
-						if tbl8.CounterAttack and not tbl12.IsProtectedPlayer(v23, true) then
-							local v24, v25 = tbl12.Char(v23)
+						if toggleStates.CounterAttack and not featureUtils.IsProtectedPlayer(v23, true) then
+							local v24, v25 = featureUtils.Char(v23)
 
-							if tbl9.CounterMethod == "Kill" then
-								tbl12.Kill(v23)
-							elseif tbl9.CounterMethod == "Void" then
-								tbl12.Void(v23)
-							elseif tbl9.CounterMethod == "Grab" and v25 then
-								tbl12.Grab(v25)
-							elseif tbl9.CounterMethod == "Delete Limbs" then
-								tbl12.BreakLimb(v23, tbl9.TargetedLimbCA)
-							elseif tbl9.CounterMethod == "Fling" and v25 and tbl12.SNO(v25) then
-								local _, ownRoot = tbl12.Char()
+							if settings.CounterMethod == "Kill" then
+								featureUtils.Kill(v23)
+							elseif settings.CounterMethod == "Void" then
+								featureUtils.Void(v23)
+							elseif settings.CounterMethod == "Grab" and v25 then
+								featureUtils.Grab(v25)
+							elseif settings.CounterMethod == "Delete Limbs" then
+								featureUtils.BreakLimb(v23, settings.TargetedLimbCA)
+							elseif settings.CounterMethod == "Fling" and v25 and featureUtils.SNO(v25) then
+								local _, ownRoot = featureUtils.Char()
                                 if ownRoot then v25.AssemblyLinearVelocity = ownRoot.CFrame.LookVector * 100 + Vector3.new(0, 25, 0) end
-							elseif tbl9.CounterMethod == "Teleport to Spawn" and tbl12.SNO(v25) then
-								tbl12.Teleport(v25, CFrame.new(0, 10, 0))
-							elseif tbl9.CounterMethod == "Anchor" then
-								task.spawn(tbl12.SetAnchored, v23, true)
+							elseif settings.CounterMethod == "Teleport to Spawn" and featureUtils.SNO(v25) then
+								featureUtils.Teleport(v25, CFrame.new(0, 10, 0))
+							elseif settings.CounterMethod == "Anchor" then
+								task.spawn(featureUtils.SetAnchored, v23, true)
 							end
 						end
 					end
 				end)
 			end
 
-			localPlayer.CharacterAdded:Connect(function(character)
+			LocalPlayer.CharacterAdded:Connect(function(character)
 				if connection then
 					connection:Disconnect()
 				end
 
 				while true do
 					task.wait()
-					local head = flag11
+					local head = isUnloading
 
-					if not flag11 then
+					if not isUnloading then
 						head = character:FindFirstChild("Humanoid") and character:FindFirstChild("HumanoidRootPart") and character:FindFirstChild("Head")
 					end
 
@@ -34235,7 +34236,7 @@ Escape Timer: %*]]
 					break
 				end
 
-				if flag11 then
+				if isUnloading then
 					return
 				end
 				fn21()
@@ -34244,67 +34245,67 @@ Escape Timer: %*]]
 			fn21()
 		end
 
-		tbl12.SetRuntimeConnection("ESPPlayerAdded", Players.PlayerAdded, true, function(arg)
-			if not flag11 and tbl8.PlayerESP and arg ~= localPlayer then
-				tbl12.CreatePlayerESP(arg)
+		featureUtils.SetRuntimeConnection("ESPPlayerAdded", Players.PlayerAdded, true, function(arg)
+			if not isUnloading and toggleStates.PlayerESP and arg ~= LocalPlayer then
+				featureUtils.CreatePlayerESP(arg)
 			end
 		end)
 
-		tbl12.SetRuntimeConnection("ESPPlayerRemoving", Players.PlayerRemoving, true, function(arg)
-			if tbl12.RemovePlayerESP then
-				tbl12.RemovePlayerESP(arg)
+		featureUtils.SetRuntimeConnection("ESPPlayerRemoving", Players.PlayerRemoving, true, function(arg)
+			if featureUtils.RemovePlayerESP then
+				featureUtils.RemovePlayerESP(arg)
 			end
 		end)
 
-		tbl12.SetRuntimeConnection("ESPDescendantAdded", workspace.DescendantAdded, true, function(arg)
-			if flag11 then
+		featureUtils.SetRuntimeConnection("ESPDescendantAdded", workspace.DescendantAdded, true, function(arg)
+			if isUnloading then
 				return
 			end
 
 			if arg:IsA("BasePart") and arg.Name == "StickyPart" then
-				if tbl8.StickyESP then
-					tbl12.CreateStickyESP(arg.Parent)
+				if toggleStates.StickyESP then
+					featureUtils.CreateStickyESP(arg.Parent)
 				end
 			end
 
 			if arg:IsA("BasePart") and arg.Name == "PlayerCharacterLocationDetector" and arg.Parent == workspace then
-				tbl7.PCLDParts[arg] = true
+				sharedState.PCLDParts[arg] = true
 
-				if tbl8.PCLDESP and not tbl12.IsWaitingPCLD(arg) then
-					tbl12.CreatePCLDESP(arg)
+				if toggleStates.PCLDESP and not featureUtils.IsWaitingPCLD(arg) then
+					featureUtils.CreatePCLDESP(arg)
 				end
 			end
 		end)
 
 		for _, child in pairs(workspace:GetChildren()) do
 			if child:IsA("BasePart") and child.Name == "PlayerCharacterLocationDetector" then
-				tbl7.PCLDParts[child] = true
+				sharedState.PCLDParts[child] = true
 
-				if tbl8.PCLDESP and not tbl12.IsWaitingPCLD(child) then
-					tbl12.CreatePCLDESP(child)
+				if toggleStates.PCLDESP and not featureUtils.IsWaitingPCLD(child) then
+					featureUtils.CreatePCLDESP(child)
 				end
 			end
 		end
 
 		workspace.ChildAdded:Connect(function(child)
-			if flag11 then
+			if isUnloading then
 				return
 			end
 
 			if child.Name == "BlackHoleKick" then
-				tbl9.BlackHoles = tbl9.BlackHoles + 1
+				settings.BlackHoles = settings.BlackHoles + 1
 				local v22 = nil
 
-				for _, v23 in pairs(tbl7.PlayerList) do
-					if v23 == localPlayer or tbl7.KickLogs[localPlayer] then
+				for _, v23 in pairs(sharedState.PlayerList) do
+					if v23 == LocalPlayer or sharedState.KickLogs[LocalPlayer] then
 						v22 = nil
 					else
 						local character = v23.Character
 						character = character and character:FindFirstChild("HumanoidRootPart")
 
-						if character and character.Anchored and not tbl7.KickLogs[v23] then
-							tbl12.NotifyEvent("Kicked Player", { kickedPlayer = tbl12.FormatPlayer(v23) }, "Player Kicked")
-							tbl7.KickLogs[v23] = true
+						if character and character.Anchored and not sharedState.KickLogs[v23] then
+							featureUtils.NotifyEvent("Kicked Player", { kickedPlayer = featureUtils.FormatPlayer(v23) }, "Player Kicked")
+							sharedState.KickLogs[v23] = true
 							v22 = v23
 							break
 						else
@@ -34327,30 +34328,30 @@ Escape Timer: %*]]
 					return
 				end
 
-				if tbl8.CustomBlackholeSound and tbl9.CustomBlackholeSound then
+				if toggleStates.CustomBlackholeSound and settings.CustomBlackholeSound then
 					local drone = hole:WaitForChild("Drone", 1.5)
 					if not drone then
 						return
 					end
-					drone.SoundId = tbl9.CustomBlackholeSound
+					drone.SoundId = settings.CustomBlackholeSound
 				end
 
-				if tbl8.CustomBlackHole and tbl9.CustomBlackhole then
-					large.Image = tbl9.CustomBlackhole
+				if toggleStates.CustomBlackHole and settings.CustomBlackhole then
+					large.Image = settings.CustomBlackhole
 					hole.Transparency = 1
 					small.Visible = false
 				end
 
-				if tbl9.CustomBHColor then
-					large.ImageColor3 = tbl9.CustomBHColor
-					small.ImageColor3 = tbl9.CustomBHColor
+				if settings.CustomBHColor then
+					large.ImageColor3 = settings.CustomBHColor
+					small.ImageColor3 = settings.CustomBHColor
 				end
 
-				tbl12.CreateBlackHoleESP(child, v22)
+				featureUtils.CreateBlackHoleESP(child, v22)
 
-				if tbl8.BlackholeStaying then
+				if toggleStates.BlackholeStaying then
 					task.wait(4.75)
-					if not tbl8.BlackholeStaying then
+					if not toggleStates.BlackholeStaying then
 						return
 					end
 					child.Archivable = true
@@ -34367,12 +34368,12 @@ Escape Timer: %*]]
 							hole2:Destroy()
 						end
 
-						tbl12.CreateBlackHoleESP(clone, v22)
+						featureUtils.CreateBlackHoleESP(clone, v22)
 					end
 
 					repeat
 						task.wait(0.1)
-					until not tbl8.BlackholeStaying
+					until not toggleStates.BlackholeStaying
 
 					if clone.Parent then
 						clone:Destroy()
@@ -34397,23 +34398,23 @@ Escape Timer: %*]]
 			local coinAmount = workspace.Slots:GetChildren()[5].Screen.SlotGui.CoinsFrame.CoinAmount
 
 			while task.wait(0.5) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.AutoSlot and not tbl12.WaitForRuntimeToggle("AutoSlot") then
+				if not toggleStates.AutoSlot and not featureUtils.WaitForRuntimeToggle("AutoSlot") then
 					return
 				end
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 
 				if timeText.Text == "0:00" and v23 and v24 and v24.Health > 0 then
 					for i = 1, #tbl16 do
-						if tbl8.AutoSlot then
-							if tbl12.SNO(tbl16[i]) then
+						if toggleStates.AutoSlot then
+							if featureUtils.SNO(tbl16[i]) then
 								task.wait(1)
 
 								if timeText.Text ~= "0:00" then
-									fn18("Rolled the casino and got: " .. string.sub(tbl16[i].Parent.Parent.Screen.SlotGui.CoinsFrame.CoinAmount.Text, -3) .. " Coins", "Auto Slots")
+									notify("Rolled the casino and got: " .. string.sub(tbl16[i].Parent.Parent.Screen.SlotGui.CoinsFrame.CoinAmount.Text, -3) .. " Coins", "Auto Slots")
 									break
 								else
 									continue
@@ -34429,11 +34430,11 @@ Escape Timer: %*]]
 					task.wait(1)
 
 					if timeText.Text == "0:00" then
-						fn18("No available lottery found, to farm coins switch server or retoggle", "Auto Slots")
+						notify("No available lottery found, to farm coins switch server or retoggle", "Auto Slots")
 
 						repeat
 							task.wait()
-						until not tbl8.AutoSlot
+						until not toggleStates.AutoSlot
 					end
 				end
 			end
@@ -34441,30 +34442,30 @@ Escape Timer: %*]]
 
 		task.spawn(function()
 			while task.wait() do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.AutoExplodeTarget and not tbl12.WaitForRuntimeToggle("AutoExplodeTarget") then
+				if not toggleStates.AutoExplodeTarget and not featureUtils.WaitForRuntimeToggle("AutoExplodeTarget") then
 					return
 				end
 
-				if tbl9.ExplosionMethod then
+				if settings.ExplosionMethod then
 					if not (inPlot.Value and not inOwnedPlot.Value) then
-						for _, v22 in ipairs(tbl12.GetTargets(false, tbl7.SelectedPlayersExp)) do
-							if not (flag11 or not tbl8.AutoExplodeTarget or not tbl9.ExplosionMethod) then
-								if not (not tbl7.SelectedPlayersExp[v22] or v22.Parent ~= Players) then
+						for _, v22 in ipairs(featureUtils.GetTargets(false, sharedState.SelectedPlayersExp)) do
+							if not (isUnloading or not toggleStates.AutoExplodeTarget or not settings.ExplosionMethod) then
+								if not (not sharedState.SelectedPlayersExp[v22] or v22.Parent ~= Players) then
 									local value = v22.InPlot.Value
 
 									if value then
-										value = not (localPlayer.InOwnedPlot.Value or tbl9.ExplosionMethod == "BallSnowball")
+										value = not (LocalPlayer.InOwnedPlot.Value or settings.ExplosionMethod == "BallSnowball")
 									end
 
 									if not value then
-										local v23, v24, v25 = tbl12.Char(v22)
+										local v23, v24, v25 = featureUtils.Char(v22)
 
-										if v24 and v25 and v25.Health ~= 0 and not tbl7.States.Owning then
-											tbl12.ExplodeMissile(v24, tbl9.ExplosionMethod, tbl9.MissilesToFire)
+										if v24 and v25 and v25.Health ~= 0 and not sharedState.States.Owning then
+											featureUtils.ExplodeMissile(v24, settings.ExplosionMethod, settings.MissilesToFire)
 										end
 									end
 								end
@@ -34479,24 +34480,24 @@ Escape Timer: %*]]
 			end
 		end)
 
-		tbl7.SilentAimState = { Players = setmetatable({}, { __mode = "k" }) }
-		tbl7.SilentAimState.Circle = tbl6.Frame:Clone()
-		tbl7.SilentAimState.Circle.Name = "SilentAimFOV"
-		tbl7.SilentAimState.Circle.Position = UDim2.fromScale(0.5, 0.5)
-		tbl7.SilentAimState.Circle.Parent = tbl6.Gui
+		sharedState.SilentAimState = { Players = setmetatable({}, { __mode = "k" }) }
+		sharedState.SilentAimState.Circle = fieldOfViewDisplay.Frame:Clone()
+		sharedState.SilentAimState.Circle.Name = "SilentAimFOV"
+		sharedState.SilentAimState.Circle.Position = UDim2.fromScale(0.5, 0.5)
+		sharedState.SilentAimState.Circle.Parent = fieldOfViewDisplay.Gui
 
-		for _, v22 in ipairs(tbl7.PlayerList) do
-			tbl12.TrackSilentAimPlayer(v22)
+		for _, v22 in ipairs(sharedState.PlayerList) do
+			featureUtils.TrackSilentAimPlayer(v22)
 		end
 
-		lib:GiveSignal(Players.PlayerAdded:Connect(tbl12.TrackSilentAimPlayer))
+		uiLibrary:GiveSignal(Players.PlayerAdded:Connect(featureUtils.TrackSilentAimPlayer))
 
-		lib:GiveSignal(Players.PlayerRemoving:Connect(function(player)
-			tbl7.SilentAimState.Players[player] = nil
+		uiLibrary:GiveSignal(Players.PlayerRemoving:Connect(function(player)
+			sharedState.SilentAimState.Players[player] = nil
 		end))
 
 		TextChatService.OnIncomingMessage = function(arg)
-			if flag11 then
+			if isUnloading then
 				return
 			end
 
@@ -34507,15 +34508,15 @@ Escape Timer: %*]]
 
 		task.spawn(function()
 			while true do
-				if flag11 then
+				if isUnloading then
 					return
 				else
-					if not tbl8.SoundSpam and not tbl12.WaitForRuntimeToggle("SoundSpam") then
+					if not toggleStates.SoundSpam and not featureUtils.WaitForRuntimeToggle("SoundSpam") then
 						break
 					end
 
-					for k in pairs(tbl7.Sounds) do
-						if tbl8.SoundSpam then
+					for k in pairs(sharedState.Sounds) do
+						if toggleStates.SoundSpam then
 							task.spawn(function()
 								if rbxGeneral then pcall(function() rbxGeneral:SendAsync("/w . " .. tostring(k)) end) end
 							end)
@@ -34526,41 +34527,41 @@ Escape Timer: %*]]
 						break
 					end
 
-					task.wait(tbl9.SoundsExternalDelay)
+					task.wait(settings.SoundsExternalDelay)
 				end
 			end
 		end)
 
-		if tbl11.Packet then
-			tbl11.Packet.OnClientEvent:Connect(function(arg, arg2)
-				tbl12.PacketHandler(arg, arg2, "EGL")
+		if remotes.Packet then
+			remotes.Packet.OnClientEvent:Connect(function(arg, arg2)
+				featureUtils.PacketHandler(arg, arg2, "EGL")
 			end)
 		end
 
-		if tbl11.CreateGrabLine then
-			tbl11.CreateGrabLine.OnClientEvent:Connect(function(arg, arg2, arg3)
-				tbl12.PacketHandler(arg, arg2, "CGL")
-				tbl12.PacketHandler(arg, arg3, "CGL")
-				tbl12.LineLagHandler(arg, arg2, arg3)
+		if remotes.CreateGrabLine then
+			remotes.CreateGrabLine.OnClientEvent:Connect(function(arg, arg2, arg3)
+				featureUtils.PacketHandler(arg, arg2, "CGL")
+				featureUtils.PacketHandler(arg, arg3, "CGL")
+				featureUtils.LineLagHandler(arg, arg2, arg3)
 			end)
 		end
 
 		isHeld:GetPropertyChangedSignal("Value"):Connect(function()
-			if flag11 then
+			if isUnloading then
 				return
 			end
 
-			if isHeld.Value and tbl8.FasterEscape then
-				tbl12.Char()
-				local heldTimer = localPlayer:FindFirstChild("HeldTimer")
-				local struggle = tbl11.Struggle
-				local playerGui2 = localPlayer:FindFirstChild("PlayerGui")
+			if isHeld.Value and toggleStates.FasterEscape then
+				featureUtils.Char()
+				local heldTimer = LocalPlayer:FindFirstChild("HeldTimer")
+				local struggle = remotes.Struggle
+				local playerGui2 = LocalPlayer:FindFirstChild("PlayerGui")
 				playerGui2 = playerGui2 and playerGui2:FindFirstChild("ControlsGui")
 				local escape = playerGui2 and playerGui2:FindFirstChild("PCFrame") and playerGui2.PCFrame:FindFirstChild("Escape")
-				local fasterEscape = tbl9.FasterEscape
+				local fasterEscape = settings.FasterEscape
 				local n36 = tick() + fasterEscape + 1
 
-				while isHeld.Value and not flag11 and task.wait() do
+				while isHeld.Value and not isUnloading and task.wait() do
 					local value = math.floor(n36 - tick())
 
 					if value <= 0 then
@@ -34571,7 +34572,7 @@ Escape Timer: %*]]
 					end
 
 					if value <= 0 and UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-						struggle:FireServer(localPlayer)
+						struggle:FireServer(LocalPlayer)
 						ContextActionService:UnbindAction("Escape")
 						ContextActionService:UnbindAction("JumpRemover")
 					end
@@ -34595,7 +34596,7 @@ Escape Timer: %*]]
 			}
 
 			local function fn21(arg)
-				local autoClickerTransparency = tbl9.AutoClickerTransparency
+				local autoClickerTransparency = settings.AutoClickerTransparency
 
 				for _, v22 in ipairs(arg.Character:QueryDescendants("BasePart")) do
 					if arg.Transparency[v22] == nil then
@@ -34624,7 +34625,7 @@ Escape Timer: %*]]
 					end
 				end
 
-				local character = v22 and v22.Character or tbl12.Char(arg)
+				local character = v22 and v22.Character or featureUtils.Char(arg)
 				local torso = character and character:FindFirstChild("Torso")
 				local autoClickerBP = torso and torso:FindFirstChild("AutoClickerBP")
 				torso = torso and torso:FindFirstChild("AutoClickerBG")
@@ -34668,16 +34669,16 @@ Escape Timer: %*]]
 				end
 			end
 
-			tbl12.CleanupAutoClicker = function()
+			featureUtils.CleanupAutoClicker = function()
 				for k in obj, nil, nil do
 					fn22(k)
 				end
 			end
 
 			while task.wait() do
-				local selectedPlayersAC = tbl7.SelectedPlayersAC
+				local selectedPlayersAC = sharedState.SelectedPlayersAC
 
-				if flag11 then
+				if isUnloading then
 					for k in selectedPlayersAC, nil, nil do
 						fn22(k)
 					end
@@ -34692,39 +34693,39 @@ Escape Timer: %*]]
 					end
 				end
 
-				if not tbl8.AutoClicker then
+				if not toggleStates.AutoClicker then
 					for k in selectedPlayersAC, nil, nil do
 						fn22(k)
 					end
 
-					if not tbl12.WaitForRuntimeToggle("AutoClicker") then
+					if not featureUtils.WaitForRuntimeToggle("AutoClicker") then
 						return
 					end
 				end
 
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 				local torso = v22 and v22:FindFirstChild("Torso")
 				local selectedACPoseCenter
 
-				if tbl8.CustomACPoseCenter then
-					selectedACPoseCenter = tbl9.SelectedACPoseCenter
+				if toggleStates.CustomACPoseCenter then
+					selectedACPoseCenter = settings.SelectedACPoseCenter
 				else
-					selectedACPoseCenter = localPlayer
+					selectedACPoseCenter = LocalPlayer
 				end
 
 				local torso2, v25, v26
 
-				if selectedACPoseCenter == localPlayer then
+				if selectedACPoseCenter == LocalPlayer then
 					torso2 = v22
 					v25 = v23
 					v26 = v24
 				else
-					torso2, v25, v26 = tbl12.Char(selectedACPoseCenter)
+					torso2, v25, v26 = featureUtils.Char(selectedACPoseCenter)
 				end
 
 				torso2 = torso2 and torso2:FindFirstChild("Torso")
 
-				if tbl8.AutoClicker then
+				if toggleStates.AutoClicker then
 					local head = v22 and v22:FindFirstChild("Head")
 
 					if head and head.CanCollide then
@@ -34746,7 +34747,7 @@ Escape Timer: %*]]
 								end
 							else
 								tbl16[k] = true
-								local v27, v28, v29 = tbl12.Char(k)
+								local v27, v28, v29 = featureUtils.Char(k)
 								local tbl19 = obj[k]
 
 								if tbl19 and tbl19.Character ~= v27 then
@@ -34757,7 +34758,7 @@ Escape Timer: %*]]
 								local torso3 = tbl19 and tbl19.Character == v27 and tbl19.Parts.Torso or v27 and v27:FindFirstChild("Torso")
 
 								if v29 and torso3 then
-									local v30, v31, v32 = tbl12.GetACPose(k)
+									local v30, v31, v32 = featureUtils.GetACPose(k)
 
 									if not tbl19 or tbl19.Character ~= v27 then
 										tbl19 = {
@@ -34783,7 +34784,7 @@ Escape Timer: %*]]
 												return
 											end
 											v33.Transparency[descendant] = descendant.LocalTransparencyModifier
-											descendant.LocalTransparencyModifier = tbl9.AutoClickerTransparency
+											descendant.LocalTransparencyModifier = settings.AutoClickerTransparency
 										end)
 
 										local head = v22:FindFirstChild("Head")
@@ -34823,7 +34824,7 @@ Escape Timer: %*]]
 										end
 									end
 
-									if tbl19.TransparencyValue ~= tbl9.AutoClickerTransparency then
+									if tbl19.TransparencyValue ~= settings.AutoClickerTransparency then
 										fn21(tbl19)
 									end
 
@@ -34943,12 +34944,12 @@ Escape Timer: %*]]
 
 									local n36 = v23.Position - torso3.Position
 
-									if n36:Dot(n36) < 900 or tbl12.SNO(torso3) then
-										tbl12.Grab(torso3)
+									if n36:Dot(n36) < 900 or featureUtils.SNO(torso3) then
+										featureUtils.Grab(torso3)
 										local ragdolled = v29:FindFirstChild("Ragdolled")
 
-										if tbl8.RagdollInAC and ragdolled and not ragdolled.Value then
-											task.spawn(tbl12.Ragdoll, v27)
+										if toggleStates.RagdollInAC and ragdolled and not ragdolled.Value then
+											task.spawn(featureUtils.Ragdoll, v27)
 										end
 									end
 								end
@@ -34963,7 +34964,7 @@ Escape Timer: %*]]
 			local obj = setmetatable({}, { __mode = "k" })
 
 			local function fn21()
-				return tbl8.ImmunityAntiGrab or tbl8.ImmunityAntiExplosion
+				return toggleStates.ImmunityAntiGrab or toggleStates.ImmunityAntiExplosion
 			end
 
 			local function fn22(arg, arg2)
@@ -34994,11 +34995,11 @@ Escape Timer: %*]]
 
 				task.spawn(function()
 					pcall(function()
-						if tbl12.SNO(root, 0.4) then
+						if featureUtils.SNO(root, 0.4) then
 							for i = 1, 3 do
 								if root.Parent then
 									root.CFrame = cFrame2
-									tbl12.ResetVelocity(root)
+									featureUtils.ResetVelocity(root)
 									RunService.Heartbeat:Wait()
 									continue
 								end
@@ -35006,7 +35007,7 @@ Escape Timer: %*]]
 								break
 							end
 
-							tbl12.RNO(root)
+							featureUtils.RNO(root)
 						end
 					end)
 
@@ -35016,19 +35017,19 @@ Escape Timer: %*]]
 
 			task.spawn(function()
 				while task.wait() do
-					if flag11 then
+					if isUnloading then
 						return
 					end
 
 					if not fn21() then
 						table.clear(obj)
-						if not tbl12.WaitForRuntimeCondition("ImmunityPosition", fn21) then
+						if not featureUtils.WaitForRuntimeCondition("ImmunityPosition", fn21) then
 							return
 						end
 					end
 
-					for k in tbl7.ImmunePlayers, nil, nil do
-						local head, v22, v23 = tbl12.Char(k)
+					for k in sharedState.ImmunePlayers, nil, nil do
+						local head, v22, v23 = featureUtils.Char(k)
 						head = head and head:FindFirstChild("Head")
 						head = head and head:FindFirstChild("PartOwner")
 						local value = head and head:IsA("StringValue") and head.Value
@@ -35038,7 +35039,7 @@ Escape Timer: %*]]
 							local v24 = fn22(k, v22)
 
 							if value and value ~= "" then
-								if value ~= localPlayer.Name and not v24.OwnGrab and not v24.Held and tbl8.ImmunityAntiGrab then
+								if value ~= LocalPlayer.Name and not v24.OwnGrab and not v24.Held and toggleStates.ImmunityAntiGrab then
 									v24.Held = true
 									fn23(v24)
 								end
@@ -35058,20 +35059,20 @@ Escape Timer: %*]]
 					end
 
 					for k in obj, nil, nil do
-						if not (k.Parent and tbl7.ImmunePlayers[k]) then
+						if not (k.Parent and sharedState.ImmunePlayers[k]) then
 							obj[k] = nil
 						end
 					end
 				end
 			end)
 
-			lib:GiveSignal(workspace.ChildAdded:Connect(function(child)
-				if flag11 or not tbl8.ImmunityAntiExplosion or not child:IsA("BasePart") or child.Name ~= "Part" then
+			uiLibrary:GiveSignal(workspace.ChildAdded:Connect(function(child)
+				if isUnloading or not toggleStates.ImmunityAntiExplosion or not child:IsA("BasePart") or child.Name ~= "Part" then
 					return
 				end
 
-				for k in tbl7.ImmunePlayers, nil, nil do
-					local v22, v23, v24 = tbl12.Char(k)
+				for k in sharedState.ImmunePlayers, nil, nil do
+					local v22, v23, v24 = featureUtils.Char(k)
 					local inPlot2 = k:FindFirstChild("InPlot")
 
 					if v23 and v24 and v24.Health > 0 and inPlot2 and not inPlot2.Value and (child.Position - v23.Position).Magnitude <= 20 then
@@ -35085,39 +35086,39 @@ Escape Timer: %*]]
 
 		task.spawn(function()
 			while task.wait(0.03) do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 
-				if not tbl8.ImmunityAntiKick then
-					for k, v22 in tbl7.ImmuneShurikens, nil, nil do
-						tbl12.DestroyToy(v22)
-						tbl7.ImmuneShurikens[k] = nil
+				if not toggleStates.ImmunityAntiKick then
+					for k, v22 in sharedState.ImmuneShurikens, nil, nil do
+						featureUtils.DestroyToy(v22)
+						sharedState.ImmuneShurikens[k] = nil
 					end
 
-					if not tbl12.WaitForRuntimeToggle("ImmunityAntiKick") then
+					if not featureUtils.WaitForRuntimeToggle("ImmunityAntiKick") then
 						return
 					end
 				end
 
-				for k in tbl7.ImmunePlayers, nil, nil do
-					local v22, v23, v24 = tbl12.Char()
-					local v25, ragdollTouchedHitbox, v26 = tbl12.Char(k)
+				for k in sharedState.ImmunePlayers, nil, nil do
+					local v22, v23, v24 = featureUtils.Char()
+					local v25, ragdollTouchedHitbox, v26 = featureUtils.Char(k)
 					ragdollTouchedHitbox = ragdollTouchedHitbox and ragdollTouchedHitbox:FindFirstChild("RagdollTouchedHitbox")
 					local inPlot2 = k:FindFirstChild("InPlot")
 
 					if not (not v25 or not v23 or not v24 or v24.Health == 0 or not ragdollTouchedHitbox or inPlot2 and inPlot2.Value) then
-						local v27 = tbl7.ImmuneShurikens[k]
+						local v27 = sharedState.ImmuneShurikens[k]
 						local stickyWeld = v27 and v27:FindFirstChild("StickyPart") and v27.StickyPart:FindFirstChild("StickyWeld")
 
 						if not (stickyWeld and stickyWeld.Part1 == ragdollTouchedHitbox) then
-							tbl12.DestroyToy(tbl7.ImmuneShurikens[k])
-							local NinjaShuriken = tbl12.SpawnToy("NinjaShuriken")
+							featureUtils.DestroyToy(sharedState.ImmuneShurikens[k])
+							local NinjaShuriken = featureUtils.SpawnToy("NinjaShuriken")
 							local stickyPart = NinjaShuriken and NinjaShuriken:WaitForChild("StickyPart", 1.5)
 							local stickyWeld2 = stickyPart and stickyPart:WaitForChild("StickyWeld", 1.5)
 
-							if not (stickyPart and stickyWeld2) or not tbl12.SNO(stickyPart) then
-								tbl12.DestroyToy(NinjaShuriken)
+							if not (stickyPart and stickyWeld2) or not featureUtils.SNO(stickyPart) then
+								featureUtils.DestroyToy(NinjaShuriken)
 							else
 								task.spawn(function()
 									local touchInterest = stickyPart:WaitForChild("TouchInterest", 2.5)
@@ -35127,18 +35128,18 @@ Escape Timer: %*]]
 									end
 								end)
 
-								tbl11.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
+								remotes.StickyPartEvent:FireServer(stickyPart, ragdollTouchedHitbox, CFrame.new(0, -0.3, 0) * CFrame.Angles(1.5707963267948966, 0, 0))
 								local now3 = tick()
 
 								while true do
-									fn20()
+									waitForHeartbeatElapsed()
 									if not (stickyWeld2.Part1 == ragdollTouchedHitbox or not stickyWeld2.Parent or not ragdollTouchedHitbox.Parent or not v26.Parent or v26.Health == 0 or tick() - now3 > 0.5) then
 										continue
 									end
 									break
 								end
 
-								tbl7.ImmuneShurikens[k] = NinjaShuriken
+								sharedState.ImmuneShurikens[k] = NinjaShuriken
 							end
 						end
 					end
@@ -35150,7 +35151,7 @@ Escape Timer: %*]]
 			local tbl16 = {}
 
 			local function fn21(arg, arg2)
-				if not arg or not tbl8.EKI then
+				if not arg or not toggleStates.EKI then
 					return
 				end
 
@@ -35163,7 +35164,7 @@ Escape Timer: %*]]
 				if not arg then
 					return
 				end
-				local v22, v23, v24 = tbl12.Char(arg)
+				local v22, v23, v24 = featureUtils.Char(arg)
 
 				if v23 then
 					local kickAP = v23:FindFirstChild("KickAP")
@@ -35182,25 +35183,25 @@ Escape Timer: %*]]
 						weldHRP.Enabled = true
 					end
 
-					if tbl12.IsNetworkOwner(v23) then
+					if featureUtils.IsNetworkOwner(v23) then
 						fn21(v23, nil)
 					end
 				end
 
 				if v22 then
-					task.spawn(tbl12.ToggleMotor6D, v22, true, true)
-					task.spawn(tbl12.ToggleCollisions, v22, true)
+					task.spawn(featureUtils.ToggleMotor6D, v22, true, true)
+					task.spawn(featureUtils.ToggleCollisions, v22, true)
 				end
 			end
 
 			local function fn23(arg, arg2, arg3)
 				local n36 = 6.2831853071795862 / arg3 * (arg2 - 1)
-				local nkOffset = tbl9.NKOffset
+				local nkOffset = settings.NKOffset
 				return arg.Position + Vector3.new(math.cos(n36) * 10, nkOffset, math.sin(n36) * 10)
 			end
 
 			while task.wait() do
-				if flag11 then
+				if isUnloading then
 					for k in tbl16, nil, nil do
 						fn22(k)
 					end
@@ -35208,20 +35209,20 @@ Escape Timer: %*]]
 					return
 				end
 
-				if not tbl8.LoopApplyMethodT then
+				if not toggleStates.LoopApplyMethodT then
 					for k in tbl16, nil, nil do
 						fn22(k)
 						tbl16[k] = nil
 					end
 
-					if not tbl12.WaitForRuntimeToggle("LoopApplyMethodT") then
+					if not featureUtils.WaitForRuntimeToggle("LoopApplyMethodT") then
 						return
 					end
 				end
 
-				local loopApplyMethodT = tbl8.LoopApplyMethodT
-				local selectedPlayers = tbl7.SelectedPlayers
-				local targetMethods = tbl7.TargetMethods
+				local loopApplyMethodT = toggleStates.LoopApplyMethodT
+				local selectedPlayers = sharedState.SelectedPlayers
+				local targetMethods = sharedState.TargetMethods
 
 				for k in tbl16, nil, nil do
 					if k and (not k.Parent or not targetMethods.Kick or inPlot.Value or not loopApplyMethodT or not selectedPlayers[k]) then
@@ -35231,7 +35232,7 @@ Escape Timer: %*]]
 				end
 
 				if not (not loopApplyMethodT or not targetMethods.Kick or inPlot.Value) then
-					local v22, v23, v24 = tbl12.Char()
+					local v22, v23, v24 = featureUtils.Char()
 
 					if v23 and v24 and v24.Health > 0 then
 						local tbl17 = {}
@@ -35246,7 +35247,7 @@ Escape Timer: %*]]
 						if #tbl17 ~= 0 then
 							for i, v25 in ipairs(tbl17) do
 								if v23 and v24 and v24.Health > 0 and not inPlot.Value then
-									local v26, v27, v28 = tbl12.Char(v25)
+									local v26, v27, v28 = featureUtils.Char(v25)
 									local torso = v26 and v26:FindFirstChild("Torso")
 
 									if not (v27 and v28 and torso and v28.Health > 0) then
@@ -35287,62 +35288,62 @@ Escape Timer: %*]]
 										kickAP.Position = v29
 										local flag12
 
-										if not (tbl12.GetMagnitude(v23, v27) > 33) then
-											tbl12.Grab(v27)
-											flag12 = tbl9.NKDelayMode == "Faster but worse" or not tbl9.NKDelayMode
+										if not (featureUtils.GetMagnitude(v23, v27) > 33) then
+											featureUtils.Grab(v27)
+											flag12 = settings.NKDelayMode == "Faster but worse" or not settings.NKDelayMode
 
 											if flag12 then
-												task.delay(0.2, tbl12.RNO, v27)
-											elseif tbl9.NKDelayMode == "Normal" then
+												task.delay(0.2, featureUtils.RNO, v27)
+											elseif settings.NKDelayMode == "Normal" then
 												task.spawn(function()
 													task.wait()
-													tbl12.RNO(v27)
+													featureUtils.RNO(v27)
 												end)
 											end
 
-											if tbl8.RagdollInNK then
-												task.spawn(tbl12.Ragdoll, v26)
+											if toggleStates.RagdollInNK then
+												task.spawn(featureUtils.Ragdoll, v26)
 											end
 
-											if tbl8.DeleteShurInNK then
-												task.spawn(tbl12.RemoveSticky, v26)
+											if toggleStates.DeleteShurInNK then
+												task.spawn(featureUtils.RemoveSticky, v26)
 											end
 
-											tbl12.ToggleCollisions(v26, false)
-											tbl12.RepositionLimbs(v26, true)
+											featureUtils.ToggleCollisions(v26, false)
+											featureUtils.RepositionLimbs(v26, true)
 
 											task.delay(0.6, function()
-												if tbl8.LoopApplyMethodT and tbl7.TargetMethods.Kick and tbl7.SelectedPlayers[v25] and tbl12.IsNetworkOwner(v27) then
+												if toggleStates.LoopApplyMethodT and sharedState.TargetMethods.Kick and sharedState.SelectedPlayers[v25] and featureUtils.IsNetworkOwner(v27) then
 													fn21(v27, v27)
 												end
 											end)
-										elseif tbl12.SNO(v27) then
-											tbl12.Teleport(v27, v29)
-											tbl12.Grab(v27)
-											flag12 = tbl9.NKDelayMode == "Faster but worse" or not tbl9.NKDelayMode
+										elseif featureUtils.SNO(v27) then
+											featureUtils.Teleport(v27, v29)
+											featureUtils.Grab(v27)
+											flag12 = settings.NKDelayMode == "Faster but worse" or not settings.NKDelayMode
 
 											if flag12 then
-												task.delay(0.2, tbl12.RNO, v27)
-											elseif tbl9.NKDelayMode == "Normal" then
+												task.delay(0.2, featureUtils.RNO, v27)
+											elseif settings.NKDelayMode == "Normal" then
 												task.spawn(function()
 													task.wait()
-													tbl12.RNO(v27)
+													featureUtils.RNO(v27)
 												end)
 											end
 
-											if tbl8.RagdollInNK then
-												task.spawn(tbl12.Ragdoll, v26)
+											if toggleStates.RagdollInNK then
+												task.spawn(featureUtils.Ragdoll, v26)
 											end
 
-											if tbl8.DeleteShurInNK then
-												task.spawn(tbl12.RemoveSticky, v26)
+											if toggleStates.DeleteShurInNK then
+												task.spawn(featureUtils.RemoveSticky, v26)
 											end
 
-											tbl12.ToggleCollisions(v26, false)
-											tbl12.RepositionLimbs(v26, true)
+											featureUtils.ToggleCollisions(v26, false)
+											featureUtils.RepositionLimbs(v26, true)
 
 											task.delay(0.6, function()
-												if tbl8.LoopApplyMethodT and tbl7.TargetMethods.Kick and tbl7.SelectedPlayers[v25] and tbl12.IsNetworkOwner(v27) then
+												if toggleStates.LoopApplyMethodT and sharedState.TargetMethods.Kick and sharedState.SelectedPlayers[v25] and featureUtils.IsNetworkOwner(v27) then
 													fn21(v27, v27)
 												end
 											end)
@@ -35353,7 +35354,7 @@ Escape Timer: %*]]
 								end
 							end
 
-							if tbl9.NKDelayMode == "Normal" then
+							if settings.NKDelayMode == "Normal" then
 								task.wait()
 							end
 						end
@@ -35362,9 +35363,9 @@ Escape Timer: %*]]
 			end
 		end)
 
-		lib.ForceCheckbox = true
+		uiLibrary.ForceCheckbox = true
 
-		v19 = lib:CreateWindow({
+		window = uiLibrary:CreateWindow({
 			Title = "<b>Meowixa</b>",
 			Footer = ("<b>Project Meowixa %* | FTAP</b>"):format("v3.0"),
 			ToggleKeybind = Enum.KeyCode.RightShift,
@@ -35397,7 +35398,7 @@ Escape Timer: %*]]
 			local v22 = nil
 			local v23 = nil
 
-			for _, v24 in v19.MainFrame:GetChildren() do
+			for _, v24 in window.MainFrame:GetChildren() do
 				if v24:IsA("Frame") and v24.AnchorPoint == Vector2.new(0, 1) and v24.Position == UDim2.fromScale(0, 1) then
 					if v24:FindFirstChildOfClass("UICorner") then
 						v22 = v24
@@ -35418,7 +35419,7 @@ Escape Timer: %*]]
 				frame2.Size = v23.Size
 				frame2.ZIndex = v22.ZIndex
 				frame2.ClipsDescendants = true
-				frame2.Parent = v19.MainFrame
+				frame2.Parent = window.MainFrame
 				v22.Parent = frame2
 
 				local function fn21()
@@ -35431,14 +35432,14 @@ Escape Timer: %*]]
 					end
 				end
 
-				lib:GiveSignal(v22:GetPropertyChangedSignal("Size"):Connect(fn21))
-				lib:GiveSignal(v23:GetPropertyChangedSignal("Size"):Connect(fn21))
-				lib:GiveSignal(uiCorner:GetPropertyChangedSignal("CornerRadius"):Connect(fn21))
+				uiLibrary:GiveSignal(v22:GetPropertyChangedSignal("Size"):Connect(fn21))
+				uiLibrary:GiveSignal(v23:GetPropertyChangedSignal("Size"):Connect(fn21))
+				uiLibrary:GiveSignal(uiCorner:GetPropertyChangedSignal("CornerRadius"):Connect(fn21))
 				fn21()
 			end
 		end
 
-		v21 = lib:AddDraggableLabel("Object Info")
+		v21 = uiLibrary:AddDraggableLabel("Object Info")
 		v21:SetVisible(false)
 
 		do
@@ -35448,12 +35449,12 @@ Escape Timer: %*]]
 			label.Position = UDim2.fromOffset(viewportSize.X * 0.5, viewportSize.Y * 0.8)
 		end
 
-		Watermark = lib:AddDraggableLabel("Meowixa", 11382080197)
+		Watermark = uiLibrary:AddDraggableLabel("Meowixa", 11382080197)
 		Watermark:SetVisible(true)
 
 		task.spawn(function()
 			while Watermark and Watermark.Label and Watermark.Label.Parent do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 				local v22 = Watermark
@@ -35467,25 +35468,25 @@ Escape Timer: %*]]
 			end
 		end)
 
-		tbl15 = {
-			Home = v19:AddTab("<b>Home</b>", "house", "Profile, statistics."),
-			Player = v19:AddTab("<b>Player</b>", "user", "Things you can apply to yourself."),
-			Combat = v19:AddTab("<b>Combat</b>", "hand", "Grab/Line/Auras stuff."),
-			Invincibility = v19:AddTab("<b>Invincibility</b>", "shield", "Defense."),
-			Target = v19:AddTab("<b>Target</b>", "crosshair", "Single/multiple target actions."),
-			Blobman = v19:AddTab("<b>Blobman</b>", "target", "Single/multiple Blobman target actions."),
-			Toys = v19:AddTab("<b>Toys</b>", "shapes", "Actions you can do with Toys."),
-			Visual = v19:AddTab("<b>Visual</b>", "eye", "Local visiual settings."),
-			AutoClicker = v19:AddTab("<b>Auto-Clicker</b>", "mouse-pointer-click", "Make figures out of players."),
-			Keybinds = v19:AddTab("<b>Keybinds</b>", "keyboard", "Keybinds you can press for specific action."),
-			Misc = v19:AddTab("<b>Misc</b>", "list", "Other stuff &  things."),
-			Lists = v19:AddTab("<b>Whitelist</b>", "list-todo", "Friend & Strangers Whitelist."),
-			Settings = v19:AddTab("<b>Settings</b>", "settings", "GUI Settings."),
+		tabs = {
+			Home = window:AddTab("<b>Home</b>", "house", "Profile, statistics."),
+			Player = window:AddTab("<b>Player</b>", "user", "Things you can apply to yourself."),
+			Combat = window:AddTab("<b>Combat</b>", "hand", "Grab/Line/Auras stuff."),
+			Invincibility = window:AddTab("<b>Invincibility</b>", "shield", "Defense."),
+			Target = window:AddTab("<b>Target</b>", "crosshair", "Single/multiple target actions."),
+			Blobman = window:AddTab("<b>Blobman</b>", "target", "Single/multiple Blobman target actions."),
+			Toys = window:AddTab("<b>Toys</b>", "shapes", "Actions you can do with Toys."),
+			Visual = window:AddTab("<b>Visual</b>", "eye", "Local visiual settings."),
+			AutoClicker = window:AddTab("<b>Auto-Clicker</b>", "mouse-pointer-click", "Make figures out of players."),
+			Keybinds = window:AddTab("<b>Keybinds</b>", "keyboard", "Keybinds you can press for specific action."),
+			Misc = window:AddTab("<b>Misc</b>", "list", "Other stuff &  things."),
+			Lists = window:AddTab("<b>Whitelist</b>", "list-todo", "Friend & Strangers Whitelist."),
+			Settings = window:AddTab("<b>Settings</b>", "settings", "GUI Settings."),
 		}
 
 	do
-		local Greetings = tbl15.Home:AddLeftGroupbox("Greetings", "chess-queen")
-		local thumbnail = string.format("rbxthumb://type=AvatarBust&id=%d&w=180&h=180", localPlayer.UserId)
+		local Greetings = tabs.Home:AddLeftGroupbox("Greetings", "chess-queen")
+		local thumbnail = string.format("rbxthumb://type=AvatarBust&id=%d&w=180&h=180", LocalPlayer.UserId)
 		local avatar = Greetings:AddImage("MyIcon", {
 			Image = thumbnail,
 			Height = 180,
@@ -35501,11 +35502,11 @@ Escape Timer: %*]]
 			local image = holder and holder:FindFirstChildWhichIsA("ImageLabel", true)
 			if not image then return end
 			for attempt = 1, 6 do
-				if flag11 or avatar.Destroyed or not image.Parent then return end
+				if isUnloading or avatar.Destroyed or not image.Parent then return end
 				local ok, content, ready = pcall(function()
-					return Players:GetUserThumbnailAsync(localPlayer.UserId, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size180x180)
+					return Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.AvatarBust, Enum.ThumbnailSize.Size180x180)
 				end)
-				if flag11 or avatar.Destroyed or not image.Parent then return end
+				if isUnloading or avatar.Destroyed or not image.Parent then return end
 				if ok and ready and type(content) == "string" and content ~= "" then
 					image.Image = content
 					image.ImageColor3 = Color3.new(1, 1, 1)
@@ -35515,10 +35516,10 @@ Escape Timer: %*]]
 					avatar.Image = content
 				end
 				task.wait(math.min(attempt * 0.5, 2))
-				if flag11 or avatar.Destroyed or not image.Parent then return end
+				if isUnloading or avatar.Destroyed or not image.Parent then return end
 				if image.IsLoaded then return end
 			end
-			if not flag11 and image.Parent then
+			if not isUnloading and image.Parent then
 				image.Image = thumbnail
 				avatar.Image = thumbnail
 			end
@@ -35533,34 +35534,15 @@ Escape Timer: %*]]
 		elseif hour >= 17 and hour < 21 then
 			greeting = "Evening"
 		end
-		Greetings:AddLabel({ Text = ("%s, <b>%s</b> "):format(greeting, localPlayer.DisplayName), DoesWrap = true })
+		Greetings:AddLabel({ Text = ("%s, <b>%s</b> "):format(greeting, LocalPlayer.DisplayName), DoesWrap = true })
 		Greetings:AddDivider()
 		Greetings:AddLabel({ Text = "Welcome to <b><font color=\"#ffaaff\">Meowixa 3.0!</font></b>", DoesWrap = true })
 		Greetings:AddLabel({ Text = "Created by <b><font color=\"#00bfff\">arrivabus415!</font></b>", DoesWrap = true })
-        Greetings:AddButton({
-			Text = "<b><font color=\"#ff0000\">! Shutdown Server !</font></b>",
-			Tooltip = "Shuts down the current server you are in.",
-			Func = function()
-				local ReplicatedStorage = game:GetService("ReplicatedStorage")
-	local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
-	Event1:FireServer(("ARCO"):rep(1e6))
-
-	task.wait()
-
-	local Event = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("DataRemoteEvent")
-	Event:FireServer(("a"):rep(1))
-
-	for i = 1, 1e6 do
-		Event:FireServer()
+        
 	end
-
-
-			end,
-		})
-	end
-
+        local Statistics = tabs.Home:AddRightGroupbox("Statistics", "chart-no-axes-combined")
 		do
-			local Statistics = tbl15.Home:AddRightGroupbox("Statistics", "chart-no-axes-combined")
+			
 			Statistics:AddLabel("CurrentTime", { Text = "Current time: 00:00", DoesWrap = true })
 			Statistics:AddLabel("VerLabel", { Text = ("Current script version: <b>%*</b>"):format("v3.0"), DoesWrap = true })
 			Statistics:AddLabel("TogglesCurrentlyOn", { Text = "Toggles currently enabled: 0", DoesWrap = true })
@@ -35569,8 +35551,43 @@ Escape Timer: %*]]
 			Statistics:AddLabel("SpentTime", { Text = "Elapsed time: 0 seconds", DoesWrap = true })
 			Statistics:AddLabel("LabelHi", { Text = "Kicked players: 0", DoesWrap = true })
 		end
+        Statistics:AddDivider("Other Options")
+         Statistics:AddToggle("PlayerList", {
+			Text = "Show Playerlist",
+			Default = true,
+			Tooltip = "Enables the default roblox playerlist",
+			DisabledTooltip = "This function is currently being managed by another function.",
+			Callback = function(Value)
+				toggleStates.DestroyVoid = destrValueoyVoid
 
-		tbl12.UpdateEnabledToggleCount = function()
+				if Value then
+			       StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,true)
+		        else
+			        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList,false)
+		        end
+			end,
+		})
+        Statistics:AddButton({
+	Text = "<b><font color=\"#ff0000\">! Shutdown Server !</font></b>",
+	Tooltip = "Shuts down the current server you are in.",
+	Func = function()
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+		local Event1 = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("UpdateTexturesChoice")
+		Event1:FireServer(("ARCO"):rep(1e6))
+
+		task.wait()
+
+		local Event = ReplicatedStorage:WaitForChild("DataEvents"):WaitForChild("DataRemoteEvent")
+		Event:FireServer(("a"):rep(1))
+
+		for i = 1, 1e6 do
+			Event:FireServer()
+		end
+
+
+	end,})
+    
+		featureUtils.UpdateEnabledToggleCount = function()
 			local n36 = 0
 
 			for _, v22 in toggles, nil, nil do
@@ -35579,8 +35596,8 @@ Escape Timer: %*]]
 				end
 			end
 
-			if lib.Labels.TogglesCurrentlyOn then
-				local togglesCurrentlyOn = lib.Labels.TogglesCurrentlyOn
+			if uiLibrary.Labels.TogglesCurrentlyOn then
+				local togglesCurrentlyOn = uiLibrary.Labels.TogglesCurrentlyOn
 				local setText = togglesCurrentlyOn.SetText
 				local str5 = ("Toggles currently on: <b>%*</b>"):format(n36)
 				setText(togglesCurrentlyOn, str5)
@@ -35593,15 +35610,15 @@ Escape Timer: %*]]
 			local v24 = nil
 
 			while task.wait(0.1) and Watermark and Watermark.Label and Watermark.Label.Parent do
-				if flag11 then
+				if isUnloading then
 					return
 				end
 				local v25 = os.date("%H:%M")
-				local blackHoles = tbl9.BlackHoles
+				local blackHoles = settings.BlackHoles
 				local n36 = math.floor(tick() - now2)
 
 				if v25 ~= v22 then
-					local currentTime = lib.Labels.CurrentTime
+					local currentTime = uiLibrary.Labels.CurrentTime
 					local setText = currentTime.SetText
 					local str5 = ("Current time: <b>%*</b>"):format(v25)
 					setText(currentTime, str5)
@@ -35609,7 +35626,7 @@ Escape Timer: %*]]
 				end
 
 				if blackHoles ~= v23 then
-					local labelHi = lib.Labels.LabelHi
+					local labelHi = uiLibrary.Labels.LabelHi
 					local setText = labelHi.SetText
 					local str5 = ("Kicked players: <b>%*</b>"):format(blackHoles)
 					setText(labelHi, str5)
@@ -35617,7 +35634,7 @@ Escape Timer: %*]]
 				end
 
 				if n36 ~= v24 then
-					local spentTime = lib.Labels.SpentTime
+					local spentTime = uiLibrary.Labels.SpentTime
 					local setText = spentTime.SetText
 					local str5 = ("Elapsed time: <b>%* seconds</b>"):format(n36)
 					setText(spentTime, str5)
@@ -35627,12 +35644,12 @@ Escape Timer: %*]]
 		end)
 
 		do
-			local Script = tbl15.Home:AddRightGroupbox("Script", "scroll")
+			local Script = tabs.Home:AddRightGroupbox("Script", "scroll")
 
 			Script:AddButton({
 				Text = "Unload Script",
 				Func = function()
-					lib:Unload()
+					uiLibrary:Unload()
 				end,
 				DoubleClick = true,
 			})
@@ -35640,18 +35657,18 @@ Escape Timer: %*]]
 			Script:AddButton({
 				Text = "Rejoin",
 				Func = function()
-					tbl12.Rejoin(tbl8.RejoinWithAntiLag ~= false, tbl8.RejoinWithScript)
+					featureUtils.Rejoin(toggleStates.RejoinWithAntiLag ~= false, toggleStates.RejoinWithScript)
 				end,
 				DoubleClick = true,
 			})
 
-			tbl7.ServerHop.Button = Script:AddButton({
+			sharedState.ServerHop.Button = Script:AddButton({
 				Text = "Server-hop",
 				Func = function()
-					if tbl7.ServerHop.Busy or tbl7.ServerHop.Pending or tbl7.ServerHop.Retrying then
-						tbl12.CancelServerHop()
+					if sharedState.ServerHop.Busy or sharedState.ServerHop.Pending or sharedState.ServerHop.Retrying then
+						featureUtils.CancelServerHop()
 					else
-						task.defer(tbl12.ServerHop, tbl8.RejoinWithAntiLag ~= false, tbl8.RejoinWithScript)
+						task.defer(featureUtils.ServerHop, toggleStates.RejoinWithAntiLag ~= false, toggleStates.RejoinWithScript)
 					end
 				end,
 				DoubleClick = true,
@@ -35663,7 +35680,7 @@ Escape Timer: %*]]
 				Text = "Auto Rejoin",
 				Tooltip = "Rejoins immediately as soon as you get kicked",
 				Callback = function(autoRejoin)
-					tbl8.AutoRejoin = autoRejoin
+					toggleStates.AutoRejoin = autoRejoin
 				end,
 			})
 
@@ -35672,7 +35689,7 @@ Escape Timer: %*]]
 				Tooltip = "Queues anti-lag on next teleport (server-hop or rejoin)",
 				Default = true,
 				Callback = function(rejoinWithAntiLag)
-					tbl8.RejoinWithAntiLag = rejoinWithAntiLag
+					toggleStates.RejoinWithAntiLag = rejoinWithAntiLag
 				end,
 			})
 
@@ -35681,31 +35698,31 @@ Escape Timer: %*]]
 				Tooltip = "Executes the script for you after teleporting (server-hop or rejoin)",
 				Callback = function(rejoinWithScript)
 					if not reloadPath and rejoinWithScript then
-						tbl8.RejoinWithScript = false
+						toggleStates.RejoinWithScript = false
 
 						task.defer(function()
 							toggles.RejoinWithScript:SetValue(false)
 						end)
 
-						fn18("Local reload is unavailable: this executor must support readfile and writefile")
+						notify("Local reload is unavailable: this executor must support readfile and writefile")
 						return
 					end
 
-					tbl8.RejoinWithScript = rejoinWithScript
+					toggleStates.RejoinWithScript = rejoinWithScript
 				end,
 			})
 
 			Script:AddDivider("Server-Hop Settings")
 
 			Script:AddDropdown("ServerHopRegion", {
-				Values = tbl7.ServerHop.RegionNames,
+				Values = sharedState.ServerHop.RegionNames,
 				Default = 1,
 				Multi = false,
 				Searchable = true,
 				Text = "Preferred Region",
 				Tooltip = "Chooses the closest datacenter inside the selected continent; Automatic chooses the closest continent first",
 				Callback = function(serverHopRegion)
-					tbl9.ServerHopRegion = serverHopRegion
+					settings.ServerHopRegion = serverHopRegion
 				end,
 			})
 
@@ -35721,7 +35738,7 @@ Escape Timer: %*]]
 				Multi = false,
 				Text = "Selection",
 				Callback = function(serverHopSort)
-					tbl9.ServerHopSort = serverHopSort
+					settings.ServerHopSort = serverHopSort
 				end,
 			})
 
@@ -35733,7 +35750,7 @@ Escape Timer: %*]]
 				Rounding = 0,
 				Compact = true,
 				Callback = function(serverHopMinPlayers)
-					tbl9.ServerHopMinPlayers = serverHopMinPlayers
+					settings.ServerHopMinPlayers = serverHopMinPlayers
 				end,
 			})
 
@@ -35745,7 +35762,7 @@ Escape Timer: %*]]
 				Rounding = 0,
 				Compact = true,
 				Callback = function(serverHopMaxPlayers)
-					tbl9.ServerHopMaxPlayers = serverHopMaxPlayers
+					settings.ServerHopMaxPlayers = serverHopMaxPlayers
 				end,
 			})
 
@@ -35760,10 +35777,10 @@ Escape Timer: %*]]
 				Suffix = " seconds",
 				Compact = true,
 				Callback = function(autoServerHopTime)
-					tbl9.AutoServerHopTime = autoServerHopTime
+					settings.AutoServerHopTime = autoServerHopTime
 
-					if tbl8.AutoServerHop then
-						tbl12.ScheduleAutoServerHop()
+					if toggleStates.AutoServerHop then
+						featureUtils.ScheduleAutoServerHop()
 					end
 				end,
 			})
@@ -35772,14 +35789,14 @@ Escape Timer: %*]]
 				Text = "Auto Server-Hop",
 				Tooltip = "Automatically server-hops after the selected time",
 				Callback = function(autoServerHop)
-					tbl8.AutoServerHop = autoServerHop
-					tbl12.ScheduleAutoServerHop()
+					toggleStates.AutoServerHop = autoServerHop
+					featureUtils.ScheduleAutoServerHop()
 				end,
 			})
 		end
 
 		do
-			local Values = tbl15.Player:AddLeftGroupbox("Values", "user")
+			local Values = tabs.Player:AddLeftGroupbox("Values", "user")
 
 			Values:AddSlider("WalkspeedS", {
 				Text = "Walk Speed",
@@ -35787,7 +35804,7 @@ Escape Timer: %*]]
 				Min = 5,
 				Max = 1000,
 				Callback = function(walkSpeed)
-					tbl9.WalkSpeed = walkSpeed
+					settings.WalkSpeed = walkSpeed
 				end,
 			})
 
@@ -35797,7 +35814,7 @@ Escape Timer: %*]]
 				Min = 24,
 				Max = 1000,
 				Callback = function(jumpPower)
-					tbl9.JumpPower = jumpPower
+					settings.JumpPower = jumpPower
 				end,
 			})
 
@@ -35807,7 +35824,7 @@ Escape Timer: %*]]
 				Min = 1,
 				Max = 20,
 				Callback = function(flightSpeed)
-					tbl9.FlightSpeed = flightSpeed
+					settings.FlightSpeed = flightSpeed
 				end,
 			})
 
@@ -35817,23 +35834,23 @@ Escape Timer: %*]]
 				Min = 5,
 				Max = 1000,
 				Callback = function(spinSpeed)
-					tbl9.SpinSpeed = spinSpeed
+					settings.SpinSpeed = spinSpeed
 				end,
 			})
 		end
 
 		do
-			local Character = tbl15.Player:AddLeftGroupbox("Character", "badge")
+			local Character = tabs.Player:AddLeftGroupbox("Character", "badge")
 
 			Character:AddToggle("FlyT", {
 				Text = "Flight",
 				Default = false,
 				Callback = function(flight)
-					tbl8.Flight = flight
-					tbl12.SetRuntimeConnection("Flight", RunService.RenderStepped, flight, tbl12.UpdateFlight)
+					toggleStates.Flight = flight
+					featureUtils.SetRuntimeConnection("Flight", RunService.RenderStepped, flight, featureUtils.UpdateFlight)
 
 					if not flight then
-						tbl12.StopFly()
+						featureUtils.StopFly()
 					end
 				end,
 			}):AddKeyPicker("FlightKey", { Text = "Flight", Mode = "Toggle", NoUI = false, SyncToggleState = true })
@@ -35842,8 +35859,8 @@ Escape Timer: %*]]
 				Text = "Walkspeed",
 				Default = false,
 				Callback = function(walkSpeed)
-					tbl8.WalkSpeed = walkSpeed
-					tbl12.SetRuntimeConnection("WalkSpeed", RunService.Heartbeat, walkSpeed, tbl12.UpdateWalkSpeed)
+					toggleStates.WalkSpeed = walkSpeed
+					featureUtils.SetRuntimeConnection("WalkSpeed", RunService.Heartbeat, walkSpeed, featureUtils.UpdateWalkSpeed)
 
 					if not walkSpeed and parent then
 						local humanoidCreature = parent and parent:FindFirstChild("HumanoidCreature")
@@ -35859,8 +35876,8 @@ Escape Timer: %*]]
 				Text = "Jump Power",
 				Default = false,
 				Callback = function(jumpPower)
-					tbl8.JumpPower = jumpPower
-					tbl12.WakeRuntimeGate("MovementPhysics")
+					toggleStates.JumpPower = jumpPower
+					featureUtils.WakeRuntimeGate("MovementPhysics")
 				end,
 			}):AddKeyPicker("JPKey", { Text = "Jump Power", Mode = "Toggle", NoUI = true, SyncToggleState = true })
 
@@ -35873,7 +35890,7 @@ Escape Timer: %*]]
 
 					task.spawn(function()
 						while toggles.SpinT.Value do
-							local v22, v23, v24 = tbl12.Char()
+							local v22, v23, v24 = featureUtils.Char()
 
 							if v23 then
 								bodyAngularVelocity.Parent = v23
@@ -35888,7 +35905,7 @@ Escape Timer: %*]]
 						end
 
 						bodyAngularVelocity:Destroy()
-						local v22, v23, v24 = tbl12.Char()
+						local v22, v23, v24 = featureUtils.Char()
 
 						if v24 then
 							v24.AutoRotate = true
@@ -35903,14 +35920,14 @@ Escape Timer: %*]]
 				Text = "Noclip",
 				Default = false,
 				Callback = function(noclip)
-					tbl8.Noclip = noclip
-					tbl12.WakeRuntimeGate("MovementPhysics")
+					toggleStates.Noclip = noclip
+					featureUtils.WakeRuntimeGate("MovementPhysics")
 
 					if not noclip then
-						local v22 = tbl12.Char()
+						local v22 = featureUtils.Char()
 
 						if v22 then
-							tbl12.ToggleCollisions(v22, true)
+							featureUtils.ToggleCollisions(v22, true)
 						end
 					end
 				end,
@@ -35920,7 +35937,7 @@ Escape Timer: %*]]
 				Text = "Inf Jump",
 				Default = false,
 				Callback = function(infJump)
-					tbl8.InfJump = infJump
+					toggleStates.InfJump = infJump
 				end,
 			}):AddKeyPicker("IJKey", { Text = "Inf Jump", Mode = "Toggle", NoUI = true, SyncToggleState = true })
 
@@ -35928,8 +35945,8 @@ Escape Timer: %*]]
 				Text = "Jerk Off",
 				Default = false,
 				Callback = function(jerkOff)
-					tbl8.JerkOff = jerkOff
-					local v22, v23, v24 = tbl12.Char()
+					toggleStates.JerkOff = jerkOff
+					local v22, v23, v24 = featureUtils.Char()
 					local v25 = v24
 					local animation = Instance.new("Animation")
 					animation.Name = "JerkOff"
@@ -35938,10 +35955,10 @@ Escape Timer: %*]]
 					local v26 = animator:LoadAnimation(animation)
 					v26:Play()
 
-					while task.wait(0.1) and tbl8.JerkOff and not flag11 do
+					while task.wait(0.1) and toggleStates.JerkOff and not isUnloading do
 						if v25.Health == 0 then
 							v26:Stop()
-							local result = localPlayer.CharacterAdded:Wait()
+							local result = LocalPlayer.CharacterAdded:Wait()
 
 							while true do
 								task.wait()
@@ -35951,7 +35968,7 @@ Escape Timer: %*]]
 								break
 							end
 
-							local v27, v28, v29 = tbl12.Char()
+							local v27, v28, v29 = featureUtils.Char()
 							v25 = v29
 							v26 = v25:WaitForChild("Animator", 2):LoadAnimation(animation)
 							v26:Play()
@@ -35970,10 +35987,10 @@ Escape Timer: %*]]
 				Text = "Position Desync",
 				Default = false,
 				Tooltip = "Basically invisibility (makes your character stay still for other players, but not for the server)",
-				Disabled = not tbl12.DesyncSupported,
+				Disabled = not featureUtils.DesyncSupported,
 				Risky = true,
 				DisabledTooltip = "Your exploit does not support this feature",
-				Callback = tbl12.SetDesync,
+				Callback = featureUtils.SetDesync,
 			}):AddKeyPicker("DesyncKey", {
 				Text = "Position Desync",
 				Default = nil,
@@ -35986,15 +36003,15 @@ Escape Timer: %*]]
 		end
 
 		do
-			local Teleporting = tbl15.Player:AddRightGroupbox("Teleporting", "house")
+			local Teleporting = tabs.Player:AddRightGroupbox("Teleporting", "house")
 
 			Teleporting:AddDropdown("TeleportToDropdown", {
-				Values = tbl7.TeleportLocations,
+				Values = sharedState.TeleportLocations,
 				Default = 1,
 				Multi = false,
 				Text = "Location",
 				Callback = function(teleportLocation)
-					tbl9.TeleportLocation = teleportLocation
+					settings.TeleportLocation = teleportLocation
 				end,
 			})
 
@@ -36006,15 +36023,15 @@ Escape Timer: %*]]
 						return
 					end
 
-					local connection = localPlayer.CharacterAdded:Connect(function(character)
-						local teleportLocation = tbl9.TeleportLocation
+					local connection = LocalPlayer.CharacterAdded:Connect(function(character)
+						local teleportLocation = settings.TeleportLocation
 						if not teleportLocation then
 							return
 						end
 						local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 0.5)
 
 						if humanoidRootPart then
-							tbl12.Teleport(humanoidRootPart, teleportLocation)
+							featureUtils.Teleport(humanoidRootPart, teleportLocation)
 						end
 					end)
 
@@ -36030,14 +36047,14 @@ Escape Timer: %*]]
 				Text = "Loop TP to Location",
 				Default = false,
 				Callback = function(loopTpLocation)
-					tbl8.LoopTpLocation = loopTpLocation
+					toggleStates.LoopTpLocation = loopTpLocation
 
 					task.spawn(function()
-						while tbl8.LoopTpLocation and task.wait() do
-							local v22, v23 = tbl12.Char()
+						while toggleStates.LoopTpLocation and task.wait() do
+							local v22, v23 = featureUtils.Char()
 
 							if v22 and v23 then
-								tbl12.Teleport(v23, tbl9.TeleportLocation.CFrame + Vector3.new(0, 10, 0))
+								featureUtils.Teleport(v23, settings.TeleportLocation.CFrame + Vector3.new(0, 10, 0))
 							end
 						end
 					end)
@@ -36046,8 +36063,8 @@ Escape Timer: %*]]
 		end
 
 		do
-			local Players2 = tbl15.Player:AddRightGroupbox("Players", "users")
-			tbl12.CreatePlayerDropdown(Players2, "TeleportTargets", tbl7.SelectedTeleportPlayers, false, false)
+			local Players2 = tabs.Player:AddRightGroupbox("Players", "users")
+			featureUtils.CreatePlayerDropdown(Players2, "TeleportTargets", sharedState.SelectedTeleportPlayers, false, false)
 
 			Players2:AddToggle("LoopSpectatePlayer", {
 				Text = "Spectate Player",
@@ -36055,8 +36072,8 @@ Escape Timer: %*]]
 				Callback = function()
 					task.spawn(function()
 						while toggles.LoopSpectatePlayer.Value and task.wait() do
-							local v22, v23, v24 = tbl12.Char()
-							local v25, v26, v27 = tbl12.Char(options.TeleportTargetsDropdown.Value)
+							local v22, v23, v24 = featureUtils.Char()
+							local v25, v26, v27 = featureUtils.Char(options.TeleportTargetsDropdown.Value)
 
 							if v23 and v26 and v27 then
 								currentCamera.CameraSubject = v27
@@ -36065,7 +36082,7 @@ Escape Timer: %*]]
 							end
 						end
 
-						local v22, v23, v24 = tbl12.Char()
+						local v22, v23, v24 = featureUtils.Char()
 
 						if v24 then
 							currentCamera.CameraSubject = v24
@@ -36080,8 +36097,8 @@ Escape Timer: %*]]
 				Callback = function()
 					while toggles.LoopTPToPlayer.Value and task.wait() do
 						local v22
-						v22, v22 = tbl12.Char()
-						local v23, v24 = tbl12.Char(options.TeleportTargetsDropdown.Value)
+						v22, v22 = featureUtils.Char()
+						local v23, v24 = featureUtils.Char(options.TeleportTargetsDropdown.Value)
 
 						if v22 and v24 then
 							v22.CFrame = v24.CFrame * CFrame.new(0, 0, 2)
@@ -36092,39 +36109,39 @@ Escape Timer: %*]]
 		end
 
 		do
-			local v22 = tbl15.Player:AddRightGroupbox("Look Event Figures", "person-standing")
+			local v22 = tabs.Player:AddRightGroupbox("Look Event Figures", "person-standing")
 
 			v22:AddDropdown("LookFigure", {
 				Text = "Figure",
 				Values = { "Sideways", "Upside Down" },
-				Default = tbl7.LookFigures.Figure,
+				Default = sharedState.LookFigures.Figure,
 				Multi = false,
 				Callback = function(figure)
-					tbl7.LookFigures.Figure = figure
+					sharedState.LookFigures.Figure = figure
 
-					if tbl7.LookFigures.Enabled then
-						tbl12.UpdateLookFigures(0)
+					if sharedState.LookFigures.Enabled then
+						featureUtils.UpdateLookFigures(0)
 					end
 				end,
 			})
 
-			v22:AddToggle("LookFigures", { Text = "Enabled", Default = false, Callback = tbl12.SetLookFigures })
+			v22:AddToggle("LookFigures", { Text = "Enabled", Default = false, Callback = featureUtils.SetLookFigures })
 
 			v22:AddToggle("LookFiguresPreview", {
 				Text = "Show Locally",
 				Default = true,
 				Callback = function(preview)
-					tbl7.LookFigures.Preview = preview
+					sharedState.LookFigures.Preview = preview
 
-					if tbl7.LookFigures.Enabled then
-						tbl12.UpdateLookFigures(0)
+					if sharedState.LookFigures.Enabled then
+						featureUtils.UpdateLookFigures(0)
 					end
 				end,
 			})
 		end
 
 		do
-			local Animations = tbl15.Player:AddRightGroupbox("Animations", "audio-lines")
+			local Animations = tabs.Player:AddRightGroupbox("Animations", "audio-lines")
 
 			local tbl16 = {
 				Struggle = "rbxassetid://7047322890",
@@ -36161,7 +36178,7 @@ Escape Timer: %*]]
 
 			for k, v22 in pairs(tbl16) do
 				table.insert(tbl17, k)
-				tbl7.AnimationWhitelist[v22:match("%d+")] = true
+				sharedState.AnimationWhitelist[v22:match("%d+")] = true
 			end
 
 			table.sort(tbl17)
@@ -36191,7 +36208,7 @@ Escape Timer: %*]]
 				if not (toggles.AnimationToggle and toggles.AnimationToggle.Value) then
 					return
 				end
-				local character = localPlayer.Character
+				local character = LocalPlayer.Character
 				if not character then
 					return
 				end
@@ -36248,7 +36265,7 @@ Escape Timer: %*]]
 				end
 			end)
 
-			localPlayer.CharacterAdded:Connect(function()
+			LocalPlayer.CharacterAdded:Connect(function()
 				task.wait(1)
 
 				if toggles.AnimationToggle and toggles.AnimationToggle.Value then
@@ -36260,7 +36277,7 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Line = tbl15.Combat:AddRightGroupbox("Line", "spline")
+		local Line = tabs.Combat:AddRightGroupbox("Line", "spline")
 
 		Line:AddSlider("ExtSpeedSlider", {
 			Text = "Extend speed",
@@ -36270,7 +36287,7 @@ Escape Timer: %*]]
 			Rounding = 0,
 			Compact = true,
 			Callback = function(increaseLineDistance)
-				tbl9.IncreaseLineDistance = increaseLineDistance
+				settings.IncreaseLineDistance = increaseLineDistance
 			end,
 		})
 
@@ -36278,7 +36295,7 @@ Escape Timer: %*]]
 			Text = "Toggle Extend Line",
 			Default = false,
 			Callback = function(moreLineExtend)
-				tbl8.MoreLineExtend = moreLineExtend
+				toggleStates.MoreLineExtend = moreLineExtend
 			end,
 		})
 
@@ -36292,7 +36309,7 @@ Escape Timer: %*]]
 			Rounding = 0,
 			Compact = true,
 			Callback = function(superStrength)
-				tbl9.SuperStrength = superStrength
+				settings.SuperStrength = superStrength
 			end,
 		})
 
@@ -36300,13 +36317,13 @@ Escape Timer: %*]]
 			Text = "Super Strength",
 			Default = false,
 			Callback = function(superStrength)
-				tbl8.SuperStrength = superStrength
+				toggleStates.SuperStrength = superStrength
 			end,
 		})
 	end
 
 	do
-		local v20 = tbl15.Combat:AddRightTabbox("Server Lag")
+		local v20 = tabs.Combat:AddRightTabbox("Server Lag")
 		local Lines = v20:AddTab("Lines", "spline")
 
 		Lines:AddToggle("LineLagToggle", {
@@ -36314,11 +36331,11 @@ Escape Timer: %*]]
 			Default = false,
 			DisabledTooltip = "This function is currently being managed by another function.",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("LagServer", arg)
+				featureUtils.SetRuntimeToggle("LagServer", arg)
 
 				if not arg then
 					task.wait(0.1)
-					tbl11.CreateGrabLine:FireServer()
+					remotes.CreateGrabLine:FireServer()
 				end
 			end,
 		}):AddKeyPicker("LineLagKey", {
@@ -36337,7 +36354,7 @@ Escape Timer: %*]]
 			Rounding = 0,
 			Compact = true,
 			Callback = function(lagLines)
-				tbl9.LagLines = lagLines
+				settings.LagLines = lagLines
 			end,
 		})
 
@@ -36350,14 +36367,14 @@ Escape Timer: %*]]
 			Callback = function()
 				task.spawn(function()
 					while toggles.CrazyLineToggle.Value do
-						for _, v21 in pairs(tbl7.PlayerList) do
-							if v21 ~= localPlayer then
-								local torso = tbl12.Char(v21)
+						for _, v21 in pairs(sharedState.PlayerList) do
+							if v21 ~= LocalPlayer then
+								local torso = featureUtils.Char(v21)
 								torso = torso and torso:FindFirstChild("Torso")
 
 								if torso then
-									tbl11.CreateGrabLine:FireServer(torso, CFrame.identity)
-									fn20(options.SoftLagSlider.Value)
+									remotes.CreateGrabLine:FireServer(torso, CFrame.identity)
+									waitForHeartbeatElapsed(options.SoftLagSlider.Value)
 								end
 							end
 						end
@@ -36383,17 +36400,17 @@ Escape Timer: %*]]
 			Risky = true,
 			Tooltip = "Only use if you know what you're doing!",
 			Callback = function(packetLagServer)
-				tbl8.PacketLagServer = packetLagServer
-				local packet = tbl11.Packet
+				toggleStates.PacketLagServer = packetLagServer
+				local packet = remotes.Packet
 				if not packet then
 					return
 				end
 
 				task.spawn(function()
-					while tbl8.PacketLagServer do
-						local n36 = #tbl9.PacketPrefix
-						packet:FireServer(tbl9.PacketPrefix .. string.rep("0", math.floor(tbl9.Packets * 1000000) - n36))
-						fn20(tbl9.PacketDelay)
+					while toggleStates.PacketLagServer do
+						local n36 = #settings.PacketPrefix
+						packet:FireServer(settings.PacketPrefix .. string.rep("0", math.floor(settings.Packets * 1000000) - n36))
+						waitForHeartbeatElapsed(settings.PacketDelay)
 					end
 				end)
 			end,
@@ -36411,12 +36428,12 @@ Escape Timer: %*]]
 			Risky = true,
 			Tooltip = "Only use if you know what you're doing!",
 			Func = function()
-				local packet = tbl11.Packet
+				local packet = remotes.Packet
 				if not packet then
 					return
 				end
-				local n36 = #tbl9.PacketPrefix
-				packet:FireServer(tbl9.PacketPrefix .. string.rep("0", math.floor(tbl9.Packets * 1000000) - n36))
+				local n36 = #settings.PacketPrefix
+				packet:FireServer(settings.PacketPrefix .. string.rep("0", math.floor(settings.Packets * 1000000) - n36))
 			end,
 		}):AddKeyPicker("OnePacketKey", { Text = "Packet Once", Default = nil, Mode = "Press", NoUI = true })
 
@@ -36431,7 +36448,7 @@ Escape Timer: %*]]
 			Compact = true,
 			Suffix = " MB",
 			Callback = function(packets)
-				tbl9.Packets = packets
+				settings.Packets = packets
 			end,
 		})
 
@@ -36444,7 +36461,7 @@ Escape Timer: %*]]
 			Compact = true,
 			Suffix = " seconds",
 			Callback = function(packetDelay)
-				tbl9.PacketDelay = packetDelay
+				settings.PacketDelay = packetDelay
 			end,
 		})
 
@@ -36453,7 +36470,7 @@ Escape Timer: %*]]
 			Tooltip = "If exploiters have a packet detector, this prefix will show up for them if the detector shows the text",
 			ClearTextOnFocus = false,
 			Callback = function(arg)
-				tbl9.PacketPrefix = tostring(arg)
+				settings.PacketPrefix = tostring(arg)
 			end,
 		})
 
@@ -36464,24 +36481,24 @@ Escape Timer: %*]]
 			Text = "Break Server (Lobotomy)",
 			Tooltip = "This requires GUCCI Anti-Grab to be on! Breaks the server's grabs, casinos, etc.",
 			Func = function()
-				if not tbl8.GucciAntiGrab then
-					return fn18("Turn on GUCCI Anti-Grab in the Shield Tab for this to work!", "Lobotomy")
+				if not toggleStates.GucciAntiGrab then
+					return notify("Turn on GUCCI Anti-Grab in the Shield Tab for this to work!", "Lobotomy")
 				end
-				local v22, v23, v24 = tbl12.Char()
+				local v22, v23, v24 = featureUtils.Char()
 				if not v23 or not v24 or v24.Health == 0 then
-					return fn18("Can't do lobotomy because of your character being unavailable!", "Lobotomy")
+					return notify("Can't do lobotomy because of your character being unavailable!", "Lobotomy")
 				end
-				local loboStrength = tbl9.LoboStrength
+				local loboStrength = settings.LoboStrength
 				v21:SetDisabled(true)
 				toggles.GucciAntiGrab:SetDisabled(true)
-				fn18("This will take some time, please wait...", "Lobotomy")
+				notify("This will take some time, please wait...", "Lobotomy")
 
 				for i = 0, loboStrength * 45 do
 					if i % 5 == 0 then
 						task.wait()
 					end
 
-					tbl11.RagdollRemote:FireServer(v23, 0)
+					remotes.RagdollRemote:FireServer(v23, 0)
 				end
 
 				toggles.GucciAntiGrab:SetDisabled(false)
@@ -36489,7 +36506,7 @@ Escape Timer: %*]]
 				v24.Sit = true
 				task.wait(0.1)
 				v24.Sit = false
-				fn18("Lobotomy has been done! Now you can't spawn anything, and when you grab someone, they get frozen in animation! Keep in mind that if you die, it will stop.", "Lobotomy")
+				notify("Lobotomy has been done! Now you can't spawn anything, and when you grab someone, they get frozen in animation! Keep in mind that if you die, it will stop.", "Lobotomy")
 				v21:SetDisabled(false)
 			end,
 		})
@@ -36504,13 +36521,13 @@ Escape Timer: %*]]
 			Rounding = 0,
 			Compact = true,
 			Callback = function(arg)
-				tbl9.LoboStrength = arg / 3
+				settings.LoboStrength = arg / 3
 			end,
 		})
 	end
 
 	do
-		local Grabs = tbl15.Combat:AddLeftGroupbox("Grabs", "hand-grab")
+		local Grabs = tabs.Combat:AddLeftGroupbox("Grabs", "hand-grab")
 
 		Grabs:AddDropdown("GrabsDropdown", {
 			Values = {
@@ -36533,7 +36550,7 @@ Escape Timer: %*]]
 			Text = "Grabs",
 			Tooltip = "What will you do to the things that you grab with a line",
 			Callback = function(grabs)
-				tbl7.Grabs = grabs
+				sharedState.Grabs = grabs
 			end,
 		})
 
@@ -36541,7 +36558,7 @@ Escape Timer: %*]]
 			Text = "Toggle Grabs",
 			Default = false,
 			Callback = function(grab)
-				tbl8.Grab = grab
+				toggleStates.Grab = grab
 			end,
 		})
 
@@ -36558,13 +36575,13 @@ Escape Timer: %*]]
 			Text = "Unstick Grab",
 			Tooltip = "What toys to unstick from the player",
 			Callback = function(unstickGrab)
-				tbl9.UnstickGrab = unstickGrab
+				settings.UnstickGrab = unstickGrab
 			end,
 		})
 	end
 
 	do
-		local Auras = tbl15.Combat:AddLeftGroupbox("Auras", "salad")
+		local Auras = tabs.Combat:AddLeftGroupbox("Auras", "salad")
 
 		Auras:AddDropdown("AurasDropdown", {
 			Values = {
@@ -36590,7 +36607,7 @@ Escape Timer: %*]]
 			Text = "Auras",
 			Tooltip = "What will you do to the PLAYERS that are near you at the selected distance",
 			Callback = function(auras)
-				tbl7.Auras = auras
+				sharedState.Auras = auras
 			end,
 		})
 
@@ -36602,8 +36619,8 @@ Escape Timer: %*]]
 			Rounding = 0,
 			Compact = true,
 			Callback = function(auraDistance)
-				tbl9.AuraDistance = auraDistance
-				tbl12.UpdateAuraVisualSettings()
+				settings.AuraDistance = auraDistance
+				featureUtils.UpdateAuraVisualSettings()
 			end,
 		})
 
@@ -36611,8 +36628,8 @@ Escape Timer: %*]]
 			Text = "Toggle Auras",
 			Default = false,
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("Aura", arg)
-				tbl12.RefreshAuraVisuals()
+				featureUtils.SetRuntimeToggle("Aura", arg)
+				featureUtils.RefreshAuraVisuals()
 			end,
 		})
 
@@ -36620,15 +36637,15 @@ Escape Timer: %*]]
 			Text = "Show Aura Radius",
 			Default = false,
 			Callback = function(auraVisualizer)
-				tbl8.AuraVisualizer = auraVisualizer
-				tbl12.RefreshAuraVisuals()
+				toggleStates.AuraVisualizer = auraVisualizer
+				featureUtils.RefreshAuraVisuals()
 			end,
 		}):AddColorPicker("AuraVisualColor", {
-			Default = tbl7.AuraVisualSettings.AuraColor,
+			Default = sharedState.AuraVisualSettings.AuraColor,
 			Title = "Aura Color",
 			Callback = function(auraColor)
-				tbl7.AuraVisualSettings.AuraColor = auraColor
-				tbl12.UpdateAuraVisualSettings()
+				sharedState.AuraVisualSettings.AuraColor = auraColor
+				featureUtils.UpdateAuraVisualSettings()
 			end,
 		})
 
@@ -36636,7 +36653,7 @@ Escape Timer: %*]]
 			Text = "Exclude Targets",
 			Default = true,
 			Callback = function(excludeTarget)
-				tbl8.ExcludeTarget = excludeTarget
+				toggleStates.ExcludeTarget = excludeTarget
 			end,
 		})
 
@@ -36652,13 +36669,13 @@ Escape Timer: %*]]
 			Text = "Limbs to delete",
 			Tooltip = "What limbs will you delete in the delete limbs aura",
 			Callback = function(targetedLimbAura)
-				tbl9.TargetedLimbAura = targetedLimbAura
+				settings.TargetedLimbAura = targetedLimbAura
 			end,
 		})
 	end
 
 	do
-		local v20 = tbl15.Combat:AddLeftGroupbox("Toy Auras", "shapes")
+		local v20 = tabs.Combat:AddLeftGroupbox("Toy Auras", "shapes")
 
 		v20:AddDropdown("TAurasDropdown", {
 			Values = { "Destroy", "Fling", "Teleport to Spawn", "Bounce", "Anchor" },
@@ -36668,21 +36685,21 @@ Escape Timer: %*]]
 			Text = "Auras",
 			Tooltip = "What will you do to the TOYS that are near you",
 			Callback = function(toyAuras)
-				tbl7.ToyAuras = toyAuras
-				tbl12.WakeRuntimeGate("ToyAuraEffects")
+				sharedState.ToyAuras = toyAuras
+				featureUtils.WakeRuntimeGate("ToyAuraEffects")
 			end,
 		})
 
 		v20:AddSlider("ToyAuraDistance", {
 			Text = "Aura Distance",
-			Default = tbl9.ToyAuraDistance,
+			Default = settings.ToyAuraDistance,
 			Min = 5,
 			Max = 31,
 			Rounding = 0,
 			Compact = true,
 			Callback = function(toyAuraDistance)
-				tbl9.ToyAuraDistance = toyAuraDistance
-				tbl12.UpdateAuraVisualSettings()
+				settings.ToyAuraDistance = toyAuraDistance
+				featureUtils.UpdateAuraVisualSettings()
 			end,
 		})
 
@@ -36690,9 +36707,9 @@ Escape Timer: %*]]
 			Text = "Toggle Toy Auras",
 			Default = false,
 			Callback = function(toyAuras)
-				tbl8.ToyAuras = toyAuras
-				tbl12.WakeRuntimeGate("ToyAuraEffects")
-				tbl12.RefreshAuraVisuals()
+				toggleStates.ToyAuras = toyAuras
+				featureUtils.WakeRuntimeGate("ToyAuraEffects")
+				featureUtils.RefreshAuraVisuals()
 			end,
 		})
 
@@ -36700,29 +36717,29 @@ Escape Timer: %*]]
 			Text = "Show Toy Aura Radius",
 			Default = false,
 			Callback = function(toyAuraVisualizer)
-				tbl8.ToyAuraVisualizer = toyAuraVisualizer
-				tbl12.RefreshAuraVisuals()
+				toggleStates.ToyAuraVisualizer = toyAuraVisualizer
+				featureUtils.RefreshAuraVisuals()
 			end,
 		}):AddColorPicker("ToyAuraVisualColor", {
-			Default = tbl7.AuraVisualSettings.ToyAuraColor,
+			Default = sharedState.AuraVisualSettings.ToyAuraColor,
 			Title = "Toy Aura Color",
 			Callback = function(toyAuraColor)
-				tbl7.AuraVisualSettings.ToyAuraColor = toyAuraColor
-				tbl12.UpdateAuraVisualSettings()
+				sharedState.AuraVisualSettings.ToyAuraColor = toyAuraColor
+				featureUtils.UpdateAuraVisualSettings()
 			end,
 		})
 	end
 
 	do
-		local Antis = tbl15.Invincibility:AddLeftGroupbox("Antis", "brick-wall-shield")
+		local Antis = tabs.Invincibility:AddLeftGroupbox("Antis", "brick-wall-shield")
 
 		Antis:AddToggle("AntiGrab", {
 			Text = "Anti Grab",
 			Default = false,
 			Tooltip = "The most default anti-grab",
 			Callback = function(antiGrab)
-				tbl8.AntiGrab = antiGrab
-				tbl12.AntiGrab()
+				toggleStates.AntiGrab = antiGrab
+				featureUtils.AntiGrab()
 			end,
 		})
 
@@ -36731,7 +36748,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Can't be touched.",
 			Callback = function(arg)
-				tbl12.SetGucciAntiGrab(arg)
+				featureUtils.SetGucciAntiGrab(arg)
 			end,
 		}):AddKeyPicker("GucciK", {
 			Text = "[GUCCI] Anti Grab",
@@ -36746,7 +36763,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "People can't grab you using Blobman",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AntiBlobman", arg)
+				featureUtils.SetRuntimeToggle("AntiBlobman", arg)
 			end,
 		})
 
@@ -36755,7 +36772,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Anti Blob-kill, etc.",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AntiInputLag", arg)
+				featureUtils.SetRuntimeToggle("AntiInputLag", arg)
 			end,
 		}):AddKeyPicker("AntiNetK", {
 			Text = "Anti Network Ownership",
@@ -36770,7 +36787,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Makes you not able to be exploded",
 			Callback = function(antiExplosion)
-				tbl8.AntiExplosion = antiExplosion
+				toggleStates.AntiExplosion = antiExplosion
 			end,
 		})
 
@@ -36779,7 +36796,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Makes you not able to be burnt",
 			Callback = function(antiBurn)
-				tbl8.AntiBurn = antiBurn
+				toggleStates.AntiBurn = antiBurn
 			end,
 		})
 
@@ -36788,7 +36805,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Teleports you up if you go far down into the void",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AntiVoid", arg)
+				featureUtils.SetRuntimeToggle("AntiVoid", arg)
 			end,
 		})
 
@@ -36797,8 +36814,8 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Default shuriken anti-kick",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AntiKick", arg)
-				tbl12.WakeRuntimeGate("PCLDTracking")
+				featureUtils.SetRuntimeToggle("AntiKick", arg)
+				featureUtils.WakeRuntimeGate("PCLDTracking")
 			end,
 		})
 
@@ -36807,7 +36824,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Unable to get kicked at all",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AntiKick2", arg)
+				featureUtils.SetRuntimeToggle("AntiKick2", arg)
 			end,
 		})
 
@@ -36816,16 +36833,16 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Protects your character from sticky toys",
 			Callback = function(antiSticky)
-				tbl8.AntiSticky = antiSticky
+				toggleStates.AntiSticky = antiSticky
 
 				task.spawn(function()
-					while tbl8.AntiSticky and task.wait(0.1) do
-						local v20 = tbl12.Char()
+					while toggleStates.AntiSticky and task.wait(0.1) do
+						local v20 = featureUtils.Char()
 
 						if v20 then
 							for _, v21 in pairs(v20:QueryDescendants("BasePart")) do
 								for _, v22 in pairs(v21:GetConnectedParts()) do
-									if not (v22.Name ~= "StickyPart" or v22:IsDescendantOf(v17) or v22:IsDescendantOf(workspace.PlotItems) and not localPlayer.InOwnedPlot.Value) then
+									if not (v22.Name ~= "StickyPart" or v22:IsDescendantOf(spawnedToysFolder) or v22:IsDescendantOf(workspace.PlotItems) and not LocalPlayer.InOwnedPlot.Value) then
 										for _, child in pairs(v22:GetChildren()) do
 											if child:IsA("TouchInterest") then
 												child:Destroy()
@@ -36835,10 +36852,10 @@ Escape Timer: %*]]
 										local parent2 = v22.Parent
 
 										if parent2 then
-											local v23 = tbl12.FindNicePart(parent2)
+											local v23 = featureUtils.FindNicePart(parent2)
 
 											if v23 then
-												tbl12.Grab(v23)
+												featureUtils.Grab(v23)
 											end
 										end
 									end
@@ -36855,14 +36872,14 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Prevents you from getting snowballed",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AntiSnowball", arg)
+				featureUtils.SetRuntimeToggle("AntiSnowball", arg)
 
 				if not arg then
-					local v20 = tbl12.Char()
+					local v20 = featureUtils.Char()
 					if not v20 then
 						return
 					end
-					tbl12.ToggleCollisions(v20, true)
+					featureUtils.ToggleCollisions(v20, true)
 				end
 			end,
 		})
@@ -36872,7 +36889,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Bananas won't touch you",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AntiBanana", arg)
+				featureUtils.SetRuntimeToggle("AntiBanana", arg)
 			end,
 		})
 
@@ -36881,7 +36898,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "You won't get painted",
 			Callback = function(antiPaint)
-				tbl8.AntiPaint = antiPaint
+				toggleStates.AntiPaint = antiPaint
 
 				task.spawn(function()
 					local tbl16 = {}
@@ -36892,7 +36909,7 @@ Escape Timer: %*]]
 
 							if antiPaint then
 								tbl16[descendant] = descendant:GetPropertyChangedSignal("CanTouch"):Connect(function()
-									if not tbl8.AntiPaint then
+									if not toggleStates.AntiPaint then
 										return
 									end
 									descendant.CanTouch = false
@@ -36910,7 +36927,7 @@ Escape Timer: %*]]
 
 						repeat
 							task.wait()
-						until not tbl8.AntiPaint
+						until not toggleStates.AntiPaint
 
 						connection:Disconnect()
 
@@ -36954,22 +36971,22 @@ Escape Timer: %*]]
 			Tooltip = "Anti Line-Lag & Sticky-Lag",
 			Callback = function(arg)
 				local enabled = not arg
-				if enabled and tbl7.LookFigures.Enabled then
+				if enabled and sharedState.LookFigures.Enabled then
 					toggles.AntiLag:SetValue(true)
 					return
 				end
-				localPlayer.PlayerScripts.CharacterAndBeamMove.Enabled = enabled
-				localPlayer.PlayerScripts.StickyPartsTouchDetection.Enabled = enabled
-				tbl12.SetAntiShurikenLag(arg)
+				LocalPlayer.PlayerScripts.CharacterAndBeamMove.Enabled = enabled
+				LocalPlayer.PlayerScripts.StickyPartsTouchDetection.Enabled = enabled
+				featureUtils.SetAntiShurikenLag(arg)
 
 				if arg then
 					task.delay(1.5, function()
-						if flag11 or not toggles.AntiLag.Value then
+						if isUnloading or not toggles.AntiLag.Value then
 							return
 						end
 
-						for _, v20 in pairs(tbl7.PlayerList) do
-							local v21 = tbl12.Char(v20)
+						for _, v20 in pairs(sharedState.PlayerList) do
+							local v21 = featureUtils.Char(v20)
 
 							if v21 then
 								for _, child in pairs(v21:GetChildren()) do
@@ -36989,7 +37006,7 @@ Escape Timer: %*]]
 			Default = true,
 			Tooltip = "Enables anti-lag for you if too low fps",
 			Callback = function(autoAntiLag)
-				tbl8.AutoAntiLag = autoAntiLag
+				toggleStates.AutoAntiLag = autoAntiLag
 			end,
 		})
 
@@ -37000,9 +37017,9 @@ Escape Timer: %*]]
 			Callback = function()
 				task.spawn(function()
 					while toggles.AntiInvis and toggles.AntiInvis.Value do
-						for _, v20 in tbl7.PlayerList, nil, nil do
-							if v20 ~= localPlayer then
-								local v21, v22, v23 = tbl12.Char(v20)
+						for _, v20 in sharedState.PlayerList, nil, nil do
+							if v20 ~= LocalPlayer then
+								local v21, v22, v23 = featureUtils.Char(v20)
 
 								if v22 then
 									v22.Massless = false
@@ -37030,7 +37047,7 @@ Escape Timer: %*]]
 			Default = true,
 			Tooltip = "Checks for kick frame and resets when needed",
 			Callback = function(autoReset)
-				tbl8.AutoReset = autoReset
+				toggleStates.AutoReset = autoReset
 			end,
 		})
 
@@ -37039,11 +37056,11 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Teleports you infinitely so you're unable to be grabbed",
 			Callback = function(loopTP)
-				tbl8.LoopTP = loopTP
+				toggleStates.LoopTP = loopTP
 
 				task.spawn(function()
 					local v20
-					v20, v20 = tbl12.Char()
+					v20, v20 = featureUtils.Char()
 					local cFrame2
 
 					if v20 then
@@ -37052,20 +37069,20 @@ Escape Timer: %*]]
 						cFrame2 = CFrame.new(0, -5, 0)
 					end
 
-					while tbl8.LoopTP and fn20(0.04) do
-						local v21 = tbl12.Char()
+					while toggleStates.LoopTP and waitForHeartbeatElapsed(0.04) do
+						local v21 = featureUtils.Char()
 
 						if v21 then
 							local random = math.random
 							local cframe = CFrame.new(math.random(-1000, 1000), -7.35, random(-1000, 1000))
-							tbl12.PivotTo(v21, cframe)
+							featureUtils.PivotTo(v21, cframe)
 						end
 					end
 
-					local v21 = tbl12.Char()
+					local v21 = featureUtils.Char()
 
 					if v21 then
-						tbl12.PivotTo(v21, cFrame2)
+						featureUtils.PivotTo(v21, cFrame2)
 					end
 				end)
 			end,
@@ -37073,15 +37090,14 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Miscellaneous = tbl15.Invincibility:AddRightGroupbox("Miscellaneous", "bolt")
-
+		local Miscellaneous = tabs.Invincibility:AddRightGroupbox("Miscellaneous", "bolt")
 		Miscellaneous:AddToggle("DisblVoid", {
 			Text = "Disable Void",
 			Default = true,
 			Tooltip = "Makes you not get killed in void",
 			DisabledTooltip = "This function is currently being managed by another function.",
 			Callback = function(destroyVoid)
-				tbl8.DestroyVoid = destroyVoid
+				toggleStates.DestroyVoid = destroyVoid
 
 				if destroyVoid then
 					workspace.FallenPartsDestroyHeight = (0/0)
@@ -37097,11 +37113,11 @@ Escape Timer: %*]]
 			Tooltip = "Walk on water",
 			Callback = function(arg)
 				for _, child in pairs(alwaysHereTweenedObjects.Ocean.Object.ObjectModel:GetChildren()) do
-					local tbl16 = tbl7.WaterPartStates[child]
+					local tbl16 = sharedState.WaterPartStates[child]
 
 					if arg and not tbl16 then
 						tbl16 = { child.CanCollide, child.Transparency }
-						tbl7.WaterPartStates[child] = tbl16
+						sharedState.WaterPartStates[child] = tbl16
 					end
 
 					if arg then
@@ -37123,7 +37139,7 @@ Escape Timer: %*]]
 						child.Transparency = transparency
 
 						if not (toggles.CustomWaterT and toggles.CustomWaterT.Value) then
-							tbl7.WaterPartStates[child] = nil
+							sharedState.WaterPartStates[child] = nil
 						end
 					end
 				end
@@ -37159,18 +37175,18 @@ Escape Timer: %*]]
 			Callback = function(arg)
 				if arg then
 					task.spawn(function()
-						while task.wait(0.1) and toggles.OtherInvCollisions.Value and not flag11 do
-							for _, v20 in tbl12.Char():QueryDescendants("BasePart") do
+						while task.wait(0.1) and toggles.OtherInvCollisions.Value and not isUnloading do
+							for _, v20 in featureUtils.Char():QueryDescendants("BasePart") do
 								PhysicsService:SetPartCollisionGroup(v20, "PlotPlayers")
 							end
 						end
 
-						for _, v20 in tbl12.Char():QueryDescendants("BasePart") do
+						for _, v20 in featureUtils.Char():QueryDescendants("BasePart") do
 							local v21 = PhysicsService
 							local setPartCollisionGroup = v21.SetPartCollisionGroup
 							local str5
 
-							if not localPlayer.InOwnedPlot.Value then
+							if not LocalPlayer.InOwnedPlot.Value then
 								str5 = "Players"
 							else
 								str5 = "PlotPlayers"
@@ -37185,19 +37201,19 @@ Escape Timer: %*]]
 
 		local LastGrabbedLabel = Miscellaneous:AddLabel("LastGrabbedLabel", { Text = "Last person who grabbed you: nobody", DoesWrap = true })
 
-		tbl12.UpdateLastGrabbedLabel = function()
-			LastGrabbedLabel:SetVisible(tbl9.WhoGrabbed ~= nil)
+		featureUtils.UpdateLastGrabbedLabel = function()
+			LastGrabbedLabel:SetVisible(settings.WhoGrabbed ~= nil)
 
-			if tbl9.WhoGrabbed then
-				LastGrabbedLabel:SetText("Last person who grabbed you: " .. tbl9.WhoGrabbed)
+			if settings.WhoGrabbed then
+				LastGrabbedLabel:SetText("Last person who grabbed you: " .. settings.WhoGrabbed)
 			end
 		end
 	end
 
-	tbl12.UpdateLastGrabbedLabel()
+	featureUtils.UpdateLastGrabbedLabel()
 
 	do
-		local v20 = tbl15.Invincibility:AddLeftGroupbox("Counter-attack", "airplay")
+		local v20 = tabs.Invincibility:AddLeftGroupbox("Counter-attack", "airplay")
 
 		v20:AddDropdown("CADropdown", {
 			Values = { "Grab", "Kill", "Void", "Delete Limbs", "Fling", "Teleport to Spawn", "Anchor" },
@@ -37206,7 +37222,7 @@ Escape Timer: %*]]
 			Text = "Consequences",
 			Tooltip = "What will you do when someone touches you and you have Counter-attack on",
 			Callback = function(counterMethod)
-				tbl9.CounterMethod = counterMethod
+				settings.CounterMethod = counterMethod
 			end,
 		})
 
@@ -37215,7 +37231,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "People who touch you will have the selected consequences",
 			Callback = function(counterAttack)
-				tbl8.CounterAttack = counterAttack
+				toggleStates.CounterAttack = counterAttack
 			end,
 		})
 
@@ -37231,13 +37247,13 @@ Escape Timer: %*]]
 			Text = "Limbs to delete",
 			Tooltip = "What limbs will you delete",
 			Callback = function(targetedLimbCA)
-				tbl9.TargetedLimbCA = targetedLimbCA
+				settings.TargetedLimbCA = targetedLimbCA
 			end,
 		})
 	end
 
 	do
-		local Config = tbl15.Invincibility:AddRightGroupbox("Config", "settings")
+		local Config = tabs.Invincibility:AddRightGroupbox("Config", "settings")
 
 		Config:AddSlider("AntiLagSens", {
 			Text = "Auto Anti-Lag Sensitivity",
@@ -37246,7 +37262,7 @@ Escape Timer: %*]]
 			Max = 20,
 			Suffix = " FPS",
 			Callback = function(antiLagSens)
-				tbl9.AntiLagSens = antiLagSens
+				settings.AntiLagSens = antiLagSens
 			end,
 		})
 
@@ -37257,7 +37273,7 @@ Escape Timer: %*]]
 			Default = true,
 			Tooltip = "Leaves after four detected kick flags instead of continuing to reset",
 			Callback = function(autoLeave)
-				tbl8.AutoLeave = autoLeave
+				toggleStates.AutoLeave = autoLeave
 			end,
 		})
 
@@ -37270,7 +37286,7 @@ Escape Timer: %*]]
 			Text = "Anti-Grab Type",
 			Tooltip = "Type of default Anti-Grab",
 			Callback = function(agType)
-				tbl9.AGType = agType
+				settings.AGType = agType
 			end,
 		})
 
@@ -37282,13 +37298,13 @@ Escape Timer: %*]]
 			Tooltip = "What vehicle will you sit on during Gucci Anti Grab",
 			Callback = function(arg)
 				if arg == "Blobman" then
-					tbl9.GucciType = "CreatureBlobman"
+					settings.GucciType = "CreatureBlobman"
 				elseif arg == "Tractor [Invisible]" then
-					tbl9.GucciType = "TractorGreen"
+					settings.GucciType = "TractorGreen"
 				elseif arg == "Train [Invisible]" then
-					tbl9.GucciType = "Train"
+					settings.GucciType = "Train"
 				elseif arg == "Sleigh [Invisible]" then
-					tbl9.GucciType = "SantaSleigh"
+					settings.GucciType = "SantaSleigh"
 				end
 			end,
 		})
@@ -37332,7 +37348,7 @@ Escape Timer: %*]]
 			Text = "Type",
 			Tooltip = "What interactable item will you use when doing anti-Net Owner",
 			Callback = function(antiInputType)
-				tbl9.AntiInputType = antiInputType
+				settings.AntiInputType = antiInputType
 			end,
 		})
 
@@ -37344,7 +37360,7 @@ Escape Timer: %*]]
 			Suffix = " sec",
 			Rounding = 2,
 			Callback = function(inputLgDelay)
-				tbl9.InputLgDelay = inputLgDelay
+				settings.InputLgDelay = inputLgDelay
 			end,
 		})
 
@@ -37352,17 +37368,17 @@ Escape Timer: %*]]
 
 		Config:AddSlider("ItemTransAK", {
 			Text = "Item Transparency",
-			Default = tbl9.AILTransparency,
+			Default = settings.AILTransparency,
 			Min = 0,
 			Max = 1,
 			Rounding = 2,
 			Callback = function(ailTransparency)
-				tbl9.AILTransparency = ailTransparency
+				settings.AILTransparency = ailTransparency
 			end,
 		})
 
 		Config:AddDivider("Anti-Kick")
-		local antiKickSettings = tbl7.AntiKickSettings
+		local antiKickSettings = sharedState.AntiKickSettings
 
 		local AntiKickHL = Config:AddToggle("AntiKickHL", {
 			Text = "Highlight",
@@ -37389,8 +37405,8 @@ Escape Timer: %*]]
 			end,
 		})
 
-		tbl12.AddRainbowToggle(Config, "RGBAKFill", "RGB Fill", "AKFill")
-		tbl12.AddRainbowToggle(Config, "RGBAKOutline", "RGB Outline", "AKOutline")
+		featureUtils.AddRainbowToggle(Config, "RGBAKFill", "RGB Fill", "AKFill")
+		featureUtils.AddRainbowToggle(Config, "RGBAKOutline", "RGB Outline", "AKOutline")
 
 		Config:AddSlider("FillTransAK", {
 			Text = "Fill Transparency",
@@ -37427,20 +37443,20 @@ Escape Timer: %*]]
 	end
 
 	do
-		local selectedPlayers = tbl7.SelectedPlayers
-		tbl12.CreatePlayerDropdown(tbl15.Target:AddLeftGroupbox("Target", "circle-user-round"), "Target", selectedPlayers)
+		local selectedPlayers = sharedState.SelectedPlayers
+		featureUtils.CreatePlayerDropdown(tabs.Target:AddLeftGroupbox("Target", "circle-user-round"), "Target", selectedPlayers)
 	end
 
 	do
-		local Apply = tbl15.Target:AddLeftGroupbox("Apply", "dock")
-		tbl12.CreateLoopToggle(Apply, "LoopApplyMethodTSel", "LoopApplyMethodT", false, false, tbl7.SelectedPlayers)
-		tbl12.CreateLoopToggle(Apply, "LoopApplyMethodTServ", "LoopApplyMethodTServer", true, false, tbl7.SelectedPlayers)
-		tbl12.CreateApplyButton(Apply, false, false, tbl7.SelectedPlayers)
-		tbl12.CreateApplyButton(Apply, true, false, tbl7.SelectedPlayers)
+		local Apply = tabs.Target:AddLeftGroupbox("Apply", "dock")
+		featureUtils.CreateLoopToggle(Apply, "LoopApplyMethodTSel", "LoopApplyMethodT", false, false, sharedState.SelectedPlayers)
+		featureUtils.CreateLoopToggle(Apply, "LoopApplyMethodTServ", "LoopApplyMethodTServer", true, false, sharedState.SelectedPlayers)
+		featureUtils.CreateApplyButton(Apply, false, false, sharedState.SelectedPlayers)
+		featureUtils.CreateApplyButton(Apply, true, false, sharedState.SelectedPlayers)
 	end
 
 	do
-		local v20 = tbl15.Target:AddRightGroupbox("Method Settings", "apple")
+		local v20 = tabs.Target:AddRightGroupbox("Method Settings", "apple")
 
 		v20:AddDropdown("MethodSettingsTargets", {
 			Values = {
@@ -37457,7 +37473,7 @@ Escape Timer: %*]]
 			AllowNull = true,
 			Text = "Methods",
 			Callback = function(targetMethods)
-				tbl7.TargetMethods = targetMethods
+				sharedState.TargetMethods = targetMethods
 			end,
 		})
 
@@ -37471,7 +37487,7 @@ Escape Timer: %*]]
 			Default = 1,
 			Text = "Delay Mode",
 			Callback = function(nkDelayMode)
-				tbl9.NKDelayMode = nkDelayMode
+				settings.NKDelayMode = nkDelayMode
 			end,
 		})
 
@@ -37479,7 +37495,7 @@ Escape Timer: %*]]
 			Text = "Loop Ragdoll",
 			Default = true,
 			Callback = function(ragdollInNK)
-				tbl8.RagdollInNK = ragdollInNK
+				toggleStates.RagdollInNK = ragdollInNK
 			end,
 		})
 
@@ -37487,19 +37503,19 @@ Escape Timer: %*]]
 			Text = "Remove Anti-Kick",
 			Default = true,
 			Callback = function(deleteShurInNK)
-				tbl8.DeleteShurInNK = deleteShurInNK
+				toggleStates.DeleteShurInNK = deleteShurInNK
 			end,
 		})
 
 		v21:AddToggle("EKIToggle", {
 			Text = "Experimental Kick Improvements [BETA]",
 			Risky = true,
-			Default = tbl8.EKI,
+			Default = toggleStates.EKI,
 			Tooltip = "Improves the kick, but can get very buggy! This also doesn't work on bad executors",
 			DisabledTooltip = "Your executor does not support this feature!",
 			Disabled = typeof(sethiddenproperty) ~= "function",
 			Callback = function(eki)
-				tbl8.EKI = eki
+				toggleStates.EKI = eki
 			end,
 		})
 
@@ -37511,7 +37527,7 @@ Escape Timer: %*]]
 			Compact = true,
 			Rounding = 0,
 			Callback = function(nkOffset)
-				tbl9.NKOffset = nkOffset
+				settings.NKOffset = nkOffset
 			end,
 		})
 
@@ -37520,10 +37536,10 @@ Escape Timer: %*]]
 			Tooltip = "Teleports you to a platform where victim cant spawn anti-kick shurikens, though it affects you as well [ONLY WORKS WHEN YOU HAVE Meowixa ANTI-KICK ON AND ONLY WORKS GOOD ON CHEATERS]",
 			Func = function()
 				local v22
-				v22, v22 = tbl12.Char()
+				v22, v22 = featureUtils.Char()
 
 				if v22 then
-					tbl12.Teleport(v22, part3.CFrame + Vector3.new(0, 10, 0))
+					featureUtils.Teleport(v22, part3.CFrame + Vector3.new(0, 10, 0))
 				end
 			end,
 		})
@@ -37536,7 +37552,7 @@ Escape Timer: %*]]
 			Default = 1,
 			Text = "Kick Server Method",
 			Callback = function(kickServerMethod)
-				tbl9.KickServerMethod = kickServerMethod
+				settings.KickServerMethod = kickServerMethod
 			end,
 		})
 
@@ -37549,7 +37565,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "This takes 1.5 seconds, use only if you have time!",
 			Callback = function(ragdollInRG)
-				tbl8.RagdollInRG = ragdollInRG
+				toggleStates.RagdollInRG = ragdollInRG
 			end,
 		})
 
@@ -37557,15 +37573,15 @@ Escape Timer: %*]]
 			Text = "Fix Gucci Remover",
 			Tooltip = "Fixes Remove Gucci bugs if it's not working",
 			Func = function()
-				for k in tbl7.SelectedPlayers, nil, nil do
-					local v23, v24 = tbl12.GetInventory(k)
+				for k in sharedState.SelectedPlayers, nil, nil do
+					local v23, v24 = featureUtils.GetInventory(k)
 
 					if v23 then
 						for _, v25 in v23:GetChildren() do
 							local vehicleSeat = v25:FindFirstChildWhichIsA("VehicleSeat") or v25:FindFirstChildWhichIsA("Seat")
 
 							if vehicleSeat then
-								tbl12.ResetGucciSeat(vehicleSeat)
+								featureUtils.ResetGucciSeat(vehicleSeat)
 							end
 						end
 
@@ -37574,7 +37590,7 @@ Escape Timer: %*]]
 								local vehicleSeat = v25:FindFirstChildWhichIsA("VehicleSeat") or v25:FindFirstChildWhichIsA("Seat")
 
 								if vehicleSeat then
-									tbl12.ResetGucciSeat(vehicleSeat)
+									featureUtils.ResetGucciSeat(vehicleSeat)
 								end
 							end
 						end
@@ -37585,30 +37601,30 @@ Escape Timer: %*]]
 	end
 
 	do
-		local selectedPlayersBlob = tbl7.SelectedPlayersBlob
-		tbl12.CreatePlayerDropdown(tbl15.Blobman:AddLeftGroupbox("Target", "circle-user-round"), "Blobman", selectedPlayersBlob)
+		local selectedPlayersBlob = sharedState.SelectedPlayersBlob
+		featureUtils.CreatePlayerDropdown(tabs.Blobman:AddLeftGroupbox("Target", "circle-user-round"), "Blobman", selectedPlayersBlob)
 	end
 
 	do
-		local Apply = tbl15.Blobman:AddLeftGroupbox("Apply", "dock")
-		tbl12.CreateLoopToggle(Apply, "LoopApplyMethodSel", "LoopApplyMethod", false, true, tbl7.SelectedPlayersBlob)
-		tbl12.CreateLoopToggle(Apply, "LoopApplyMethodServ", "LoopApplyMethodServer", true, true, tbl7.SelectedPlayersBlob)
-		tbl12.CreateApplyButton(Apply, false, true, tbl7.SelectedPlayersBlob)
-		tbl12.CreateApplyButton(Apply, true, true, tbl7.SelectedPlayersBlob)
+		local Apply = tabs.Blobman:AddLeftGroupbox("Apply", "dock")
+		featureUtils.CreateLoopToggle(Apply, "LoopApplyMethodSel", "LoopApplyMethod", false, true, sharedState.SelectedPlayersBlob)
+		featureUtils.CreateLoopToggle(Apply, "LoopApplyMethodServ", "LoopApplyMethodServer", true, true, sharedState.SelectedPlayersBlob)
+		featureUtils.CreateApplyButton(Apply, false, true, sharedState.SelectedPlayersBlob)
+		featureUtils.CreateApplyButton(Apply, true, true, sharedState.SelectedPlayersBlob)
 	end
 
 	do
-		local Settings = tbl15.Blobman:AddRightGroupbox("Settings", "settings")
+		local Settings = tabs.Blobman:AddRightGroupbox("Settings", "settings")
 
 		Settings:AddToggle("AutoSeatBlobman", {
 			Text = "Auto Sit Blobman",
 			Default = false,
 			Callback = function(autoSeatBlobman)
-				tbl8.AutoSeatBlobman = autoSeatBlobman
+				toggleStates.AutoSeatBlobman = autoSeatBlobman
 
 				task.spawn(function()
-					while tbl8.AutoSeatBlobman and task.wait(0.1) do
-						tbl14.Sit()
+					while toggleStates.AutoSeatBlobman and task.wait(0.1) do
+						gameHelpers.Sit()
 					end
 				end)
 			end,
@@ -37620,11 +37636,11 @@ Escape Timer: %*]]
 			SyncToggleState = true,
 		})
 
-		Settings:AddToggle("FreezeBlob", { Text = "Freeze Blobman", Default = false, Callback = tbl14.SetFrozen })
+		Settings:AddToggle("FreezeBlob", { Text = "Freeze Blobman", Default = false, Callback = gameHelpers.SetFrozen })
 	end
 
 	do
-		local v20 = tbl15.Blobman:AddRightGroupbox("Method Settings", "apple")
+		local v20 = tabs.Blobman:AddRightGroupbox("Method Settings", "apple")
 
 		v20:AddDropdown("MethodSettingsBlobs", {
 			Values = { "Kick", "Kill", "Bring", "Lock", "Follow", "Remove Gucci" },
@@ -37632,7 +37648,7 @@ Escape Timer: %*]]
 			Multi = false,
 			Text = "Blobman Method",
 			Callback = function(blobMethod)
-				tbl9.BlobMethod = blobMethod
+				settings.BlobMethod = blobMethod
 			end,
 		})
 
@@ -37647,9 +37663,9 @@ Escape Timer: %*]]
 			Text = "Kick Method",
 			Callback = function(arg)
 				if arg == "Grab-Drop" then
-					tbl9.BKMethod = 1
+					settings.BKMethod = 1
 				elseif arg == "Grab-Release" then
-					tbl9.BKMethod = 2
+					settings.BKMethod = 2
 				end
 			end,
 		})
@@ -37658,7 +37674,7 @@ Escape Timer: %*]]
 			Text = "Remove Anti-Kick [Sticky]",
 			Default = true,
 			Callback = function(deleteShurInBlobK)
-				tbl8.DeleteShurInBlobK = deleteShurInBlobK
+				toggleStates.DeleteShurInBlobK = deleteShurInBlobK
 			end,
 		})
 
@@ -37669,7 +37685,7 @@ Escape Timer: %*]]
 			Default = false,
 			Text = "Net Owner Spam",
 			Callback = function(networkOwnerInKick)
-				tbl8.NetworkOwnerInKick = networkOwnerInKick
+				toggleStates.NetworkOwnerInKick = networkOwnerInKick
 			end,
 		})
 
@@ -37680,7 +37696,7 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Barrier = tbl15.Toys:AddRightGroupbox("Barrier", "circle-slash")
+		local Barrier = tabs.Toys:AddRightGroupbox("Barrier", "circle-slash")
 		local flag12 = false
 		local flag13 = false
 
@@ -37689,7 +37705,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Disables the destruction of non-house toys inside houses and vice-versa",
 			Callback = function(arg)
-				flag12 = arg and not flag11
+				flag12 = arg and not isUnloading
 				if not flag12 or flag13 then
 					return
 				end
@@ -37702,29 +37718,29 @@ Escape Timer: %*]]
 					local flag14 = false
 
 					local function fn21()
-						if v21 and v20 and v20.Parent and localPlayer.Character and v20:IsDescendantOf(localPlayer.Character) then
-							tbl12.Teleport(v20, v21)
+						if v21 and v20 and v20.Parent and LocalPlayer.Character and v20:IsDescendantOf(LocalPlayer.Character) then
+							featureUtils.Teleport(v20, v21)
 						end
 
 						v21 = nil
 						v20 = nil
 
 						if flag14 then
-							tbl7.States.Owning = false
+							sharedState.States.Owning = false
 							flag14 = false
 						end
 
 						if FoodHamburger then
-							tbl7.ToyAuraReserved[FoodHamburger] = nil
-							tbl12.DestroyToy(FoodHamburger)
+							sharedState.ToyAuraReserved[FoodHamburger] = nil
+							featureUtils.DestroyToy(FoodHamburger)
 							FoodHamburger = nil
 						end
 					end
 
 					local ok, result = pcall(function()
-						if tbl12.IsBarrierBroken() then
+						if featureUtils.IsBarrierBroken() then
 							if flag12 then
-								fn18("Barrier is already broken!")
+								notify("Barrier is already broken!")
 
 								if toggles.DeleteBarriers then
 									toggles.DeleteBarriers:SetValue(true)
@@ -37736,16 +37752,16 @@ Escape Timer: %*]]
 
 						while true do
 							if flag12 and task.wait() then
-								local v22, v23, v24 = tbl12.Char()
+								local v22, v23, v24 = featureUtils.Char()
 
-								if not (v23 and v24 and v24.Health > 0) or tbl7.States.Owning then
+								if not (v23 and v24 and v24.Health > 0) or sharedState.States.Owning then
 									continue
 								else
 									local function fn22()
-										return flag12 and localPlayer.Character == v22 and v23.Parent and v24.Health > 0
+										return flag12 and LocalPlayer.Character == v22 and v23.Parent and v24.Health > 0
 									end
 
-									FoodHamburger = tbl12.SpawnToy("FoodHamburger", nil, 4, true)
+									FoodHamburger = featureUtils.SpawnToy("FoodHamburger", nil, 4, true)
 
 									if not FoodHamburger then
 										continue
@@ -37758,7 +37774,7 @@ Escape Timer: %*]]
 											fn21()
 											continue
 										else
-											while fn22() and tbl7.States.Owning do
+											while fn22() and sharedState.States.Owning do
 												task.wait()
 											end
 
@@ -37770,19 +37786,19 @@ Escape Timer: %*]]
 												v20 = v23
 												v21 = cFrame2
 												flag14 = true
-												tbl7.States.Owning = true
-												tbl12.Teleport(v23, workspace.Waypoints.BlueHouse)
+												sharedState.States.Owning = true
+												featureUtils.Teleport(v23, workspace.Waypoints.BlueHouse)
 												local now2 = os.clock()
 
 												while true do
 													task.wait()
-													if not (not fn22() or localPlayer.InPlot.Value or os.clock() - now2 > 0.7) then
+													if not (not fn22() or LocalPlayer.InPlot.Value or os.clock() - now2 > 0.7) then
 														continue
 													end
 													break
 												end
 
-												if not fn22() or not localPlayer.InPlot.Value then
+												if not fn22() or not LocalPlayer.InPlot.Value then
 													fn21()
 													continue
 												else
@@ -37810,8 +37826,8 @@ Escape Timer: %*]]
 														fn21()
 														continue
 													else
-														tbl12.DestroyToy(FoodHamburger)
-														tbl7.ToyAuraReserved[FoodHamburger] = nil
+														featureUtils.DestroyToy(FoodHamburger)
+														sharedState.ToyAuraReserved[FoodHamburger] = nil
 														FoodHamburger = nil
 														task.wait(0.5)
 														fn21()
@@ -37821,9 +37837,9 @@ Escape Timer: %*]]
 														else
 															task.wait(1)
 
-															if flag12 and tbl12.IsBarrierBroken() then
+															if flag12 and featureUtils.IsBarrierBroken() then
 																if flag12 then
-																	fn18("Barrier has been broken!")
+																	notify("Barrier has been broken!")
 
 																	if toggles.DeleteBarriers then
 																		toggles.DeleteBarriers:SetValue(true)
@@ -37861,8 +37877,8 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Effects = tbl15.Toys:AddRightGroupbox("Effects", "flask-conical")
-		tbl12.CreatePlayerDropdown(Effects, "Toy Effects", tbl7.SelectedPlayersEffect)
+		local Effects = tabs.Toys:AddRightGroupbox("Effects", "flask-conical")
+		featureUtils.CreatePlayerDropdown(Effects, "Toy Effects", sharedState.SelectedPlayersEffect)
 		Effects:AddDivider("Method")
 
 		Effects:AddDropdown("MethodSettingsTEf", {
@@ -37871,18 +37887,18 @@ Escape Timer: %*]]
 			AllowNull = true,
 			Text = "Effects",
 			Callback = function(toyEffects)
-				tbl7.ToyEffects = toyEffects
+				sharedState.ToyEffects = toyEffects
 
 				if not toyEffects.Fling then
-					tbl12.ClearFling()
+					featureUtils.ClearFling()
 				end
 			end,
 		})
 
-		tbl12.CreateLoopToggle(Effects, "LoopApplyMethodEFSel", "LoopApplyMethodEF", false, false, tbl7.SelectedPlayersEffect, tbl12.ProcessToyEffects)
-		tbl12.CreateLoopToggle(Effects, "LoopApplyMethodEFServ", "LoopApplyMethodEFServer", true, false, tbl7.SelectedPlayersEffect, tbl12.ProcessToyEffects)
-		tbl12.CreateApplyButton(Effects, false, false, tbl7.SelectedPlayersEffect, tbl12.ProcessToyEffects)
-		tbl12.CreateApplyButton(Effects, true, false, tbl7.SelectedPlayersEffect, tbl12.ProcessToyEffects)
+		featureUtils.CreateLoopToggle(Effects, "LoopApplyMethodEFSel", "LoopApplyMethodEF", false, false, sharedState.SelectedPlayersEffect, featureUtils.ProcessToyEffects)
+		featureUtils.CreateLoopToggle(Effects, "LoopApplyMethodEFServ", "LoopApplyMethodEFServer", true, false, sharedState.SelectedPlayersEffect, featureUtils.ProcessToyEffects)
+		featureUtils.CreateApplyButton(Effects, false, false, sharedState.SelectedPlayersEffect, featureUtils.ProcessToyEffects)
+		featureUtils.CreateApplyButton(Effects, true, false, sharedState.SelectedPlayersEffect, featureUtils.ProcessToyEffects)
 		local v20 = Effects:AddDependencyBox()
 		v20:SetupDependencies({ { options.MethodSettingsTEf, "Delete Limbs" } })
 		v20:AddDivider("Delete Limb Settings")
@@ -37895,7 +37911,7 @@ Escape Timer: %*]]
 			Text = "Limbs to delete",
 			Tooltip = "What limbs will you delete in the delete limbs toy effect",
 			Callback = function(targetedLimbTE)
-				tbl9.TargetedLimbTE = targetedLimbTE
+				settings.TargetedLimbTE = targetedLimbTE
 			end,
 		})
 
@@ -37909,18 +37925,18 @@ Escape Timer: %*]]
 			Multi = false,
 			Text = "Fling Method",
 			Callback = function(method)
-				if tbl7.FlingState.Method ~= method then
-					tbl12.ClearFling()
+				if sharedState.FlingState.Method ~= method then
+					featureUtils.ClearFling()
 				end
 
-				tbl7.FlingState.Method = method
+				sharedState.FlingState.Method = method
 			end,
 		})
 	end
 
 	do
-		local v20 = tbl15.Toys:AddLeftGroupbox("Toys Aura", "tornado")
-		local toysAuraSettings = tbl7.ToysAuraSettings
+		local v20 = tabs.Toys:AddLeftGroupbox("Toys Aura", "tornado")
+		local toysAuraSettings = sharedState.ToysAuraSettings
 
 		local function fn21(arg, arg2, arg3)
 			v20:AddToggle(arg, {
@@ -37930,8 +37946,8 @@ Escape Timer: %*]]
 					toysAuraSettings[arg3] = arg4
 
 					if arg3 == "Enabled" then
-						tbl12.SetToysAuraConnection(arg4)
-						tbl12.WakeRuntimeGate("ToyAuraEffects")
+						featureUtils.SetToysAuraConnection(arg4)
+						featureUtils.WakeRuntimeGate("ToyAuraEffects")
 					end
 				end,
 			})
@@ -38000,8 +38016,8 @@ Escape Timer: %*]]
 		fn21("ToggleToysAura", "Enabled", "Enabled")
 
 		v20:AddDropdown("ShapesDropdown", {
-			Values = tbl13.ShapeNames,
-			Default = table.find(tbl13.ShapeNames, toysAuraSettings.Shape) or 1,
+			Values = modelState.ShapeNames,
+			Default = table.find(modelState.ShapeNames, toysAuraSettings.Shape) or 1,
 			Multi = false,
 			Searchable = true,
 			Text = "Shape",
@@ -38020,7 +38036,7 @@ Escape Timer: %*]]
 			Text = "Grab Type",
 			Callback = function(ownType)
 				toysAuraSettings.OwnType = ownType
-				tbl12.WakeRuntimeGate("ToyAuraEffects")
+				featureUtils.WakeRuntimeGate("ToyAuraEffects")
 			end,
 		})
 
@@ -38029,7 +38045,7 @@ Escape Timer: %*]]
 			Default = toysAuraSettings.LimitEnabled,
 			Callback = function(limitEnabled)
 				toysAuraSettings.LimitEnabled = limitEnabled
-				tbl13.TrimModels()
+				modelState.TrimModels()
 			end,
 		})
 
@@ -38045,7 +38061,7 @@ Escape Timer: %*]]
 			Compact = true,
 			Callback = function(limit)
 				toysAuraSettings.Limit = limit
-				tbl13.TrimModels()
+				modelState.TrimModels()
 			end,
 		})
 
@@ -38059,8 +38075,8 @@ Escape Timer: %*]]
 					for i = #toysAuraSettings.Models, 1, -1 do
 						local v22 = toysAuraSettings.Models[i]
 
-						if v22 and not v22:IsDescendantOf(v17) then
-							tbl13.RemoveModel(v22, true)
+						if v22 and not v22:IsDescendantOf(spawnedToysFolder) then
+							modelState.RemoveModel(v22, true)
 						end
 					end
 				end
@@ -38075,15 +38091,15 @@ Escape Timer: %*]]
 					local tbl16
 
 					if toysAuraSettings.OwnInventoryOnly then
-						tbl16 = { v17 }
+						tbl16 = { spawnedToysFolder }
 					else
-						tbl16 = tbl7.Inventories
+						tbl16 = sharedState.Inventories
 					end
 
 					for _, v23 in v22(tbl16) do
 						for _, child in pairs(v23:GetChildren()) do
 							if child:IsA("Model") and child.Name ~= "ShurikenRSC" then
-								tbl13.AddModel(child, true, 0.25)
+								modelState.AddModel(child, true, 0.25)
 							end
 						end
 
@@ -38096,7 +38112,7 @@ Escape Timer: %*]]
 		v20:AddButton({
 			Text = "Release Toys",
 			Func = function()
-				tbl13.ClearModels(true)
+				modelState.ClearModels(true)
 			end,
 		})
 
@@ -38131,15 +38147,15 @@ Escape Timer: %*]]
 		local v22 = v20:AddDependencyBox()
 		v22:SetupDependencies({ { options.PositionTypeDropdown, "Players" } })
 
-		tbl12.CreatePlayerDropdown(v22, "TAPDD", tbl7.SelectedToysAuraPlayers, false, false, function(selectedTAPlayer)
-			tbl9.SelectedTAPlayer = selectedTAPlayer
+		featureUtils.CreatePlayerDropdown(v22, "TAPDD", sharedState.SelectedToysAuraPlayers, false, false, function(selectedTAPlayer)
+			settings.SelectedTAPlayer = selectedTAPlayer
 		end)
 
 		v20:AddButton({
 			Text = "Set Custom Position",
 			Func = function()
 				local v23
-				v23, v23 = tbl12.Char()
+				v23, v23 = featureUtils.Char()
 
 				if v23 then
 					toysAuraSettings.CustomPos = CFrame.new(v23.Position)
@@ -38158,8 +38174,8 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Explosions = tbl15.Toys:AddRightGroupbox("Explosions", "bomb")
-		tbl12.CreatePlayerDropdown(Explosions, "Explosions", tbl7.SelectedPlayersExp)
+		local Explosions = tabs.Toys:AddRightGroupbox("Explosions", "bomb")
+		featureUtils.CreatePlayerDropdown(Explosions, "Explosions", sharedState.SelectedPlayersExp)
 		Explosions:AddDivider()
 
 		Explosions:AddDropdown("ExplosionType", {
@@ -38171,7 +38187,7 @@ Escape Timer: %*]]
 			Searchable = true,
 			Text = "Explosion Type",
 			Callback = function(explosionMethod)
-				tbl9.ExplosionMethod = explosionMethod
+				settings.ExplosionMethod = explosionMethod
 			end,
 		})
 
@@ -38182,7 +38198,7 @@ Escape Timer: %*]]
 			Max = 17,
 			Rounding = 0,
 			Callback = function(missilesToFire)
-				tbl9.MissilesToFire = missilesToFire
+				settings.MissilesToFire = missilesToFire
 			end,
 		})
 
@@ -38193,21 +38209,21 @@ Escape Timer: %*]]
 			Text = "Auto Explode Target",
 			Default = false,
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AutoExplodeTarget", arg)
+				featureUtils.SetRuntimeToggle("AutoExplodeTarget", arg)
 			end,
 		})
 	end
 
 	do
-		local anchorSettings = tbl7.AnchorSettings
-		local v20 = tbl15.Toys:AddLeftGroupbox("Anchor System", "anchor")
+		local anchorSettings = sharedState.AnchorSettings
+		local v20 = tabs.Toys:AddLeftGroupbox("Anchor System", "anchor")
 
 		v20:AddLabel("Fill Color"):AddColorPicker("AnchorFill", {
 			Default = anchorSettings.FillColor,
 			Title = "Fill Color",
 			Callback = function(fillColor)
 				anchorSettings.FillColor = fillColor
-				tbl12.UpdateAnchorColors()
+				featureUtils.UpdateAnchorColors()
 			end,
 		})
 
@@ -38216,33 +38232,33 @@ Escape Timer: %*]]
 			Title = "Outline Color",
 			Callback = function(outlineColor)
 				anchorSettings.OutlineColor = outlineColor
-				tbl12.UpdateAnchorColors()
+				featureUtils.UpdateAnchorColors()
 			end,
 		})
 
 		v20:AddButton({
 			Text = "Release All",
 			Func = function()
-				tbl12.ClearAnchors()
+				featureUtils.ClearAnchors()
 			end,
 		}):AddKeyPicker("ReleaseAll", { Text = "Release All", Mode = "Press", NoUI = true })
 	end
 
 	do
-		local v20 = tbl15.Toys:AddLeftGroupbox("Object Groups", "group")
+		local v20 = tabs.Toys:AddLeftGroupbox("Object Groups", "group")
 		local flag12 = false
 
 		local function fn21(arg, arg2)
-			local v21 = tbl7.ObjectGroups[tbl9.ObjectGroup]
-			if flag12 or flag11 or not v21 then
+			local v21 = sharedState.ObjectGroups[settings.ObjectGroup]
+			if flag12 or isUnloading or not v21 then
 				return
 			end
 			v21[arg] = arg2
-			tbl12.UpdateObjectGroup(v21)
+			featureUtils.UpdateObjectGroup(v21)
 		end
 
 		local function fn22()
-			local v21 = tbl7.ObjectGroups[tbl9.ObjectGroup]
+			local v21 = sharedState.ObjectGroups[settings.ObjectGroup]
 			flag12 = true
 
 			for k, v22 in pairs({ GroupNoclip = "Noclip", GroupHighlight = "Highlight" }) do
@@ -38270,7 +38286,7 @@ Escape Timer: %*]]
 				if v21 then
 					fillColor = v21.FillColor
 				else
-					fillColor = tbl7.AnchorSettings.FillColor
+					fillColor = sharedState.AnchorSettings.FillColor
 				end
 
 				setValue(groupFill, fillColor)
@@ -38284,7 +38300,7 @@ Escape Timer: %*]]
 				if v21 then
 					outlineColor = v21.OutlineColor
 				else
-					outlineColor = tbl7.AnchorSettings.OutlineColor
+					outlineColor = sharedState.AnchorSettings.OutlineColor
 				end
 
 				setValue(groupOutline, outlineColor)
@@ -38299,8 +38315,8 @@ Escape Timer: %*]]
 			Multi = false,
 			AllowNull = true,
 			Callback = function(objectGroup)
-				tbl9.ObjectGroup = objectGroup
-				local v21 = tbl7.ObjectGroups[objectGroup]
+				settings.ObjectGroup = objectGroup
+				local v21 = sharedState.ObjectGroups[objectGroup]
 				local objects = 0
 
 				if v21 then
@@ -38309,16 +38325,16 @@ Escape Timer: %*]]
 					end
 				end
 
-				if tbl9.ObjectGroupLabel then
-					tbl9.ObjectGroupLabel:SetText("Objects: " .. objects)
+				if settings.ObjectGroupLabel then
+					settings.ObjectGroupLabel:SetText("Objects: " .. objects)
 				end
 
 				fn22()
 			end,
 		})
 
-		tbl9.ObjectGroupLabel = v20:AddLabel("Objects: 0", true)
-		v20:AddButton({ Text = "Create Group", Func = tbl12.CreateObjectGroup })
+		settings.ObjectGroupLabel = v20:AddLabel("Objects: 0", true)
+		v20:AddButton({ Text = "Create Group", Func = featureUtils.CreateObjectGroup })
 
 		v20:AddToggle("GroupNoclip", {
 			Text = "Noclip Toys",
@@ -38336,13 +38352,13 @@ Escape Timer: %*]]
 			end,
 		}):AddColorPicker("GroupFill", {
 			Title = "Fill Color",
-			Default = tbl7.AnchorSettings.FillColor,
+			Default = sharedState.AnchorSettings.FillColor,
 			Callback = function(arg)
 				fn21("FillColor", arg)
 			end,
 		}):AddColorPicker("GroupOutline", {
 			Title = "Outline Color",
-			Default = tbl7.AnchorSettings.OutlineColor,
+			Default = sharedState.AnchorSettings.OutlineColor,
 			Callback = function(arg)
 				fn21("OutlineColor", arg)
 			end,
@@ -38350,15 +38366,15 @@ Escape Timer: %*]]
 
 		fn22()
 		v20:AddDivider()
-		v20:AddButton({ Text = "Add Object", Func = tbl12.AddObjectToGroup }):AddKeyPicker("GroupAddObject", { Text = "Add Object to Group", Mode = "Press", NoUI = true })
+		v20:AddButton({ Text = "Add Object", Func = featureUtils.AddObjectToGroup }):AddKeyPicker("GroupAddObject", { Text = "Add Object to Group", Mode = "Press", NoUI = true })
 
 		v20:AddButton({
 			Text = "Remove Object",
 			Func = function()
-				local v21 = tbl12.GetObjectTarget()
+				local v21 = featureUtils.GetObjectTarget()
 
 				if v21 then
-					tbl12.RemoveObjectFromGroup(v21)
+					featureUtils.RemoveObjectFromGroup(v21)
 				end
 			end,
 		}):AddKeyPicker("GroupRemoveObject", { Text = "Remove Object from Group", Mode = "Press", NoUI = true })
@@ -38368,10 +38384,10 @@ Escape Timer: %*]]
 		v20:AddButton({
 			Text = "Anchor / Release Group",
 			Func = function()
-				local v21 = tbl7.ObjectGroups[tbl9.ObjectGroup]
+				local v21 = sharedState.ObjectGroups[settings.ObjectGroup]
 
 				if v21 and v21.Leader then
-					tbl12.SetAnchored(v21.Leader.Target, not v21.Anchored)
+					featureUtils.SetAnchored(v21.Leader.Target, not v21.Anchored)
 				end
 			end,
 		})
@@ -38379,19 +38395,19 @@ Escape Timer: %*]]
 		v20:AddButton({
 			Text = "Delete Group",
 			Func = function()
-				tbl12.DeleteObjectGroup(tbl9.ObjectGroup)
+				featureUtils.DeleteObjectGroup(settings.ObjectGroup)
 			end,
 		})
 	end
 
 	do
-		local Experimental = tbl15.Toys:AddRightGroupbox("Experimental", "flask-conical")
+		local Experimental = tabs.Toys:AddRightGroupbox("Experimental", "flask-conical")
 		Experimental:AddDivider("Anchored Parts")
 		local n36 = 1
 		local enabled = false
 		local n37 = 0
 		local obj = setmetatable({}, { __mode = "k" })
-		local brokenPartHighlight = tbl7.BrokenPartHighlight
+		local brokenPartHighlight = sharedState.BrokenPartHighlight
 
 		Experimental:AddToggle("BreakPartAffectsYou", {
 			Text = "Affects you",
@@ -38412,7 +38428,7 @@ Escape Timer: %*]]
 		local HighlightBrokenParts = Experimental:AddToggle("HighlightBrokenParts", {
 			Text = "Highlight Broken Parts",
 			Default = false,
-			Callback = tbl12.SetBrokenPartHighlights,
+			Callback = featureUtils.SetBrokenPartHighlights,
 		})
 
 		HighlightBrokenParts:AddColorPicker("BrokenPartFill", {
@@ -38423,7 +38439,7 @@ Escape Timer: %*]]
 				local brokenPartFill = options.BrokenPartFill
 				brokenPartHighlight.FillColor = fillColor
 				brokenPartHighlight.FillTransparency = brokenPartFill and brokenPartFill.Transparency or brokenPartHighlight.FillTransparency
-				tbl12.SetBrokenPartHighlights(tbl8.HighlightBrokenParts)
+				featureUtils.SetBrokenPartHighlights(toggleStates.HighlightBrokenParts)
 			end,
 		})
 
@@ -38435,12 +38451,12 @@ Escape Timer: %*]]
 				local brokenPartOutline = options.BrokenPartOutline
 				brokenPartHighlight.OutlineColor = outlineColor
 				brokenPartHighlight.OutlineTransparency = brokenPartOutline and brokenPartOutline.Transparency or brokenPartHighlight.OutlineTransparency
-				tbl12.SetBrokenPartHighlights(tbl8.HighlightBrokenParts)
+				featureUtils.SetBrokenPartHighlights(toggleStates.HighlightBrokenParts)
 			end,
 		})
 
 		local function fn21(arg)
-			local v20 = arg or tbl12.GetTarget()
+			local v20 = arg or featureUtils.GetTarget()
 			if not v20 or not v20:IsA("BasePart") then
 				return
 			end
@@ -38452,37 +38468,37 @@ Escape Timer: %*]]
 				cframe = CFrame.new(0, -2.3e9, 0)
 			end
 
-			local NinjaShuriken = tbl12.SpawnToy("NinjaShuriken")
+			local NinjaShuriken = featureUtils.SpawnToy("NinjaShuriken")
 			local stickyPart = NinjaShuriken and NinjaShuriken:WaitForChild("StickyPart", 0.5)
 			local stickyWeld = stickyPart and stickyPart:WaitForChild("StickyWeld", 0.5)
 			if not stickyWeld then
-				return tbl12.DestroyToy(NinjaShuriken)
+				return featureUtils.DestroyToy(NinjaShuriken)
 			end
 
-			if not tbl12.SNO(stickyPart) then
-				return tbl12.DestroyToy(NinjaShuriken)
+			if not featureUtils.SNO(stickyPart) then
+				return featureUtils.DestroyToy(NinjaShuriken)
 			end
-			tbl12.TrackBrokenPart(v20, stickyWeld)
+			featureUtils.TrackBrokenPart(v20, stickyWeld)
 			n37 += 1
 			local str5 = "BreakPartAffectsYou" .. n37
 
-			tbl12.SetRuntimeConnection(str5, stickyWeld:GetPropertyChangedSignal("Enabled"), true, function()
+			featureUtils.SetRuntimeConnection(str5, stickyWeld:GetPropertyChangedSignal("Enabled"), true, function()
 				if stickyWeld.Enabled ~= enabled then
 					stickyWeld.Enabled = enabled
 				end
 			end)
 
-			tbl12.SetRuntimeConnection(str5 .. "Cleanup", stickyWeld.Destroying, true, function()
+			featureUtils.SetRuntimeConnection(str5 .. "Cleanup", stickyWeld.Destroying, true, function()
 				obj[stickyWeld] = nil
-				tbl12.UntrackBrokenPart(v20, stickyWeld)
-				tbl12.SetRuntimeConnection(str5, nil, false)
-				tbl12.SetRuntimeConnection(str5 .. "Cleanup", nil, false)
+				featureUtils.UntrackBrokenPart(v20, stickyWeld)
+				featureUtils.SetRuntimeConnection(str5, nil, false)
+				featureUtils.SetRuntimeConnection(str5 .. "Cleanup", nil, false)
 			end)
 
 			local v21 = enabled
 			obj[stickyWeld] = true
 			stickyWeld.Enabled = v21
-			tbl11.StickyPartEvent:FireServer(stickyPart, v20, cframe)
+			remotes.StickyPartEvent:FireServer(stickyPart, v20, cframe)
 		end
 
 		Experimental:AddLabel("Decollide Part"):AddKeyPicker("DecollidePart", {
@@ -38499,7 +38515,7 @@ Escape Timer: %*]]
 		Experimental:AddButton({
 			Text = "Create Button",
 			Func = function()
-				v20 = lib:AddDraggableButton("Break Part", function()
+				v20 = uiLibrary:AddDraggableButton("Break Part", function()
 					fn21()
 				end)
 			end,
@@ -38580,7 +38596,7 @@ Escape Timer: %*]]
 			Text = "Break",
 			Func = function()
 				local value = options.WhichToBreak.Value
-				local v21 = tbl7.BreakParts[value]
+				local v21 = sharedState.BreakParts[value]
 
 				if v21 then
 					local v22 = v21()
@@ -38588,7 +38604,7 @@ Escape Timer: %*]]
 					if v22 then
 						for _, child in pairs(v22:GetChildren()) do
 							if child:IsA("BasePart") then
-								tbl12.BlackHole(child.AssemblyRootPart)
+								featureUtils.BlackHole(child.AssemblyRootPart)
 								break
 							end
 						end
@@ -38607,27 +38623,27 @@ Escape Timer: %*]]
 		})
 
 		Experimental:AddDivider("Misc")
-		Experimental:AddButton({ Text = "Destroy Train", Func = tbl12.DestroyTrain })
+		Experimental:AddButton({ Text = "Destroy Train", Func = featureUtils.DestroyTrain })
 
 		Experimental:AddButton({
 			Text = "Make Tsunami",
 			Func = function()
 				local cframe = CFrame.new
-				tbl12.BlackHole(workspace.Map.AlwaysHereTweenedObjects.Ocean.Object.ObjectModel:GetChildren()[22], cframe(4294967296, 2147483648, 2147483648))
+				featureUtils.BlackHole(workspace.Map.AlwaysHereTweenedObjects.Ocean.Object.ObjectModel:GetChildren()[22], cframe(4294967296, 2147483648, 2147483648))
 			end,
 		})
 	end
 
 	do
-		local Misc = tbl15.Toys:AddLeftGroupbox("Misc", "funnel")
+		local Misc = tabs.Toys:AddLeftGroupbox("Misc", "funnel")
 
 		Misc:AddDropdown("CoconutFormsDropdown", {
-			Values = tbl7.CoconutForms.Names,
+			Values = sharedState.CoconutForms.Names,
 			Multi = true,
 			AllowNull = true,
 			Text = "Forms",
 			Callback = function(selected)
-				local coconutForms = tbl7.CoconutForms
+				local coconutForms = sharedState.CoconutForms
 
 				for i = #coconutForms.Order, 1, -1 do
 					if not selected[coconutForms.Order[i]] then
@@ -38642,20 +38658,20 @@ Escape Timer: %*]]
 				end
 
 				coconutForms.Selected = selected
-				tbl12.RefreshCoconutForms()
+				featureUtils.RefreshCoconutForms()
 			end,
 		})
 
-		Misc:AddToggle("CoconutFormsToggle", { Text = "Coconut Forms", Callback = tbl12.SetCoconutForms })
+		Misc:AddToggle("CoconutFormsToggle", { Text = "Coconut Forms", Callback = featureUtils.SetCoconutForms })
 
 		Misc:AddSlider("CoconutFormsTransparency", {
 			Text = "Transparency",
-			Default = tbl7.CoconutForms.Transparency,
+			Default = sharedState.CoconutForms.Transparency,
 			Min = 0,
 			Max = 1,
 			Rounding = 2,
 			Compact = true,
-			Callback = tbl12.SetCoconutTransparency,
+			Callback = featureUtils.SetCoconutTransparency,
 		})
 
 		local v20 = Misc:AddDependencyBox()
@@ -38663,24 +38679,24 @@ Escape Timer: %*]]
 
 		v20:AddSlider("CoconutShaftLength", {
 			Text = "Penis Shaft Length",
-			Default = tbl7.CoconutForms.ShaftLength,
+			Default = sharedState.CoconutForms.ShaftLength,
 			Min = 2,
 			Max = 11,
 			Rounding = 0,
 			Compact = true,
-			Callback = tbl12.SetCoconutShaftLength,
+			Callback = featureUtils.SetCoconutShaftLength,
 		})
 
 		v20:AddSlider("CoconutShaftSpacing", {
 			Text = "Penis Shaft Spacing",
-			Default = tbl7.CoconutForms.ShaftSpacing,
+			Default = sharedState.CoconutForms.ShaftSpacing,
 			Min = 0.9,
 			Max = 3,
 			Rounding = 2,
 			Compact = true,
 			Callback = function(shaftSpacing)
-				tbl7.CoconutForms.ShaftSpacing = shaftSpacing
-				tbl12.RefreshCoconutForms()
+				sharedState.CoconutForms.ShaftSpacing = shaftSpacing
+				featureUtils.RefreshCoconutForms()
 			end,
 		})
 
@@ -38689,13 +38705,13 @@ Escape Timer: %*]]
 
 		v21:AddSlider("CoconutWingsSpacing", {
 			Text = "Wings Spacing",
-			Default = tbl7.CoconutForms.WingSpacing,
+			Default = sharedState.CoconutForms.WingSpacing,
 			Min = 0.9,
 			Max = 3,
 			Rounding = 2,
 			Compact = true,
 			Callback = function(wingSpacing)
-				tbl7.CoconutForms.WingSpacing = wingSpacing
+				sharedState.CoconutForms.WingSpacing = wingSpacing
 			end,
 		})
 
@@ -38705,11 +38721,11 @@ Escape Timer: %*]]
 		v22:AddDropdown("CoconutCapeMode", {
 			Text = "Cape Layout",
 			Values = { "2x3", "4x3" },
-			Default = tbl7.CoconutForms.CapeMode,
+			Default = sharedState.CoconutForms.CapeMode,
 			Multi = false,
 			Callback = function(capeMode)
-				tbl7.CoconutForms.CapeMode = capeMode
-				tbl12.RefreshCoconutForms()
+				sharedState.CoconutForms.CapeMode = capeMode
+				featureUtils.RefreshCoconutForms()
 			end,
 		})
 
@@ -38718,25 +38734,25 @@ Escape Timer: %*]]
 
 		v23:AddSlider("Coconut67Spacing", {
 			Text = "67 Spacing",
-			Default = tbl7.CoconutForms.Spacing67,
+			Default = sharedState.CoconutForms.Spacing67,
 			Min = 0,
 			Max = 3,
 			Rounding = 2,
 			Compact = true,
 			Callback = function(spacing67)
-				tbl7.CoconutForms.Spacing67 = spacing67
-				tbl12.RefreshCoconutForms()
+				sharedState.CoconutForms.Spacing67 = spacing67
+				featureUtils.RefreshCoconutForms()
 			end,
 		})
 
 		v23:AddDropdown("Coconut67Display", {
 			Values = { "Show to Front", "Show to Back" },
-			Default = tbl7.CoconutForms.Display67,
+			Default = sharedState.CoconutForms.Display67,
 			Multi = false,
 			Text = "67 Direction",
 			Callback = function(display67)
-				tbl7.CoconutForms.Display67 = display67
-				tbl12.RefreshCoconutForms()
+				sharedState.CoconutForms.Display67 = display67
+				featureUtils.RefreshCoconutForms()
 			end,
 		})
 
@@ -38746,14 +38762,14 @@ Escape Timer: %*]]
 		Misc:AddToggle("DestroyAllHoldables", {
 			Text = "Break all Holdables",
 			Callback = function(breakAllHoldables)
-				tbl8.BreakAllHoldables = breakAllHoldables
+				toggleStates.BreakAllHoldables = breakAllHoldables
 
-				while tbl8.BreakAllHoldables do
-					if tbl12.Char() then
-						for _, v24 in tbl7.Inventories, nil, nil do
+				while toggleStates.BreakAllHoldables do
+					if featureUtils.Char() then
+						for _, v24 in sharedState.Inventories, nil, nil do
 							for _, v25 in v24:GetChildren() do
 								if v25:IsA("Model") and v25:FindFirstChild("HoldPart") then
-									tbl12.BreakHoldable(v25)
+									featureUtils.BreakHoldable(v25)
 								end
 							end
 
@@ -38769,13 +38785,13 @@ Escape Timer: %*]]
 		Misc:AddButton({
 			Text = "Destroy All Toys",
 			Func = function()
-				if tbl7.States.DestroyingToys then
+				if sharedState.States.DestroyingToys then
 					return
 				end
-				tbl7.States.DestroyingToys = true
+				sharedState.States.DestroyingToys = true
 				local tbl16 = {}
 
-				for _, inventory in pairs(tbl7.Inventories) do
+				for _, inventory in pairs(sharedState.Inventories) do
 					for _, child in pairs(inventory:GetChildren()) do
 						if child:IsA("Model") then
 							tbl16[#tbl16 + 1] = child
@@ -38783,26 +38799,26 @@ Escape Timer: %*]]
 					end
 				end
 
-				local v24 = lib:Notify({
+				local v24 = uiLibrary:Notify({
 					Title = "Meowixa",
 					Description = "Destroyed 0/" .. #tbl16 .. " toys",
 					Persist = true,
-					SoundId = n34,
+					SoundId = defaultNotificationSound,
 					BigIcon = "rbxassetid://11382080197",
-					Volume = n35,
+					Volume = notificationVolume,
 					IconColor = Color3.new(1, 1, 1),
 				})
 
 				for i, v25 in ipairs(tbl16) do
-					tbl12.DestroyObject(v25)
+					featureUtils.DestroyObject(v25)
 					v24:ChangeDescription("Destroyed " .. i .. "/" .. #tbl16 .. " toys")
 				end
 
-				while tbl9.DestroyThread and not flag11 do
+				while settings.DestroyThread and not isUnloading do
 					RunService.Heartbeat:Wait()
 				end
 
-				tbl7.States.DestroyingToys = false
+				sharedState.States.DestroyingToys = false
 
 				task.delay(0.25, function()
 					v24:Destroy()
@@ -38812,25 +38828,25 @@ Escape Timer: %*]]
 	end
 
 	do
-		local espConfig = tbl7.ESPConfig
+		local espConfig = sharedState.ESPConfig
 
 		local function fn21(arg, arg2, arg3)
 			espConfig[arg][arg2] = arg3
-			tbl12.UpdateESP(arg)
+			featureUtils.UpdateESP(arg)
 		end
 
-		local esp = tbl15.Visual:AddLeftTabbox("ESP")
+		local esp = tabs.Visual:AddLeftTabbox("ESP")
 		local Toggles = esp:AddTab("Toggles", "toggle-right")
 
 		Toggles:AddToggle("PlrESPT", {
 			Text = "Player ESP",
 			Default = false,
 			Callback = function(playerESP)
-				tbl8.PlayerESP = playerESP
-				tbl12.UpdateESP("Player")
+				toggleStates.PlayerESP = playerESP
+				featureUtils.UpdateESP("Player")
 
 				if playerESP then
-					tbl12.RefreshESP("Player")
+					featureUtils.RefreshESP("Player")
 				end
 			end,
 		})
@@ -38871,14 +38887,14 @@ Escape Timer: %*]]
 			Text = "Server ESP [PCLD]",
 			Default = false,
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("PCLDESP", arg)
-				tbl12.WakeRuntimeGate("PCLDTracking")
-				tbl12.SetSmoothPCLDConnection()
-				tbl12.UpdateESP("Server")
+				featureUtils.SetRuntimeToggle("PCLDESP", arg)
+				featureUtils.WakeRuntimeGate("PCLDTracking")
+				featureUtils.SetSmoothPCLDConnection()
+				featureUtils.UpdateESP("Server")
 
 				if arg then
-					tbl12.RefreshESP("Server")
-					task.defer(tbl12.SnapPCLDESP)
+					featureUtils.RefreshESP("Server")
+					task.defer(featureUtils.SnapPCLDESP)
 				end
 			end,
 		})
@@ -38919,11 +38935,11 @@ Escape Timer: %*]]
 			Text = "Sticky ESP",
 			Default = false,
 			Callback = function(stickyESP)
-				tbl8.StickyESP = stickyESP
-				tbl12.UpdateESP("Sticky")
+				toggleStates.StickyESP = stickyESP
+				featureUtils.UpdateESP("Sticky")
 
 				if stickyESP then
-					tbl12.RefreshESP("Sticky")
+					featureUtils.RefreshESP("Sticky")
 				end
 			end,
 		})
@@ -38948,8 +38964,8 @@ Escape Timer: %*]]
 			Text = "Blackhole ESP",
 			Default = false,
 			Callback = function(blackholeESP)
-				tbl8.BlackholeESP = blackholeESP
-				tbl12.UpdateESP("Blackhole")
+				toggleStates.BlackholeESP = blackholeESP
+				featureUtils.UpdateESP("Blackhole")
 			end,
 		})
 
@@ -39031,8 +39047,8 @@ Escape Timer: %*]]
 			end,
 		})
 
-		tbl12.AddRainbowToggle(v20, "PlayerFillRainbow", "Rainbow Fill", "HighlightFill")
-		tbl12.AddRainbowToggle(v20, "PlayerOutlineRainbow", "Rainbow Outline", "HighlightOutline")
+		featureUtils.AddRainbowToggle(v20, "PlayerFillRainbow", "Rainbow Fill", "HighlightFill")
+		featureUtils.AddRainbowToggle(v20, "PlayerOutlineRainbow", "Rainbow Outline", "HighlightOutline")
 		local v21 = Config:AddDependencyBox()
 		v21:SetupDependencies({ { options.EspConfDD, "Player ESP" } })
 		v21:AddDivider("Name")
@@ -39046,7 +39062,7 @@ Escape Timer: %*]]
 		})
 
 		v21:AddDropdown("FFNameESP", {
-			Values = tbl7.ESPFonts,
+			Values = sharedState.ESPFonts,
 			Default = 2,
 			Multi = false,
 			Text = "Font Face",
@@ -39098,8 +39114,8 @@ Escape Timer: %*]]
 			end,
 		})
 
-		tbl12.AddRainbowToggle(v21, "NameFillRainbow", "Rainbow Name", "NameEspFill")
-		tbl12.AddRainbowToggle(v21, "NameOutlineRainbow", "Rainbow Outline", "NameOutline")
+		featureUtils.AddRainbowToggle(v21, "NameFillRainbow", "Rainbow Name", "NameEspFill")
+		featureUtils.AddRainbowToggle(v21, "NameOutlineRainbow", "Rainbow Outline", "NameOutline")
 
 		v21:AddSlider("NameOutlTrans", {
 			Text = "Outline Transparency",
@@ -39144,11 +39160,11 @@ Escape Timer: %*]]
 			Text = "Smooth Movement",
 			Default = true,
 			Callback = function(smoothPCLD)
-				tbl8.SmoothPCLD = smoothPCLD
-				tbl12.SetSmoothPCLDConnection()
+				toggleStates.SmoothPCLD = smoothPCLD
+				featureUtils.SetSmoothPCLDConnection()
 
 				if not smoothPCLD then
-					tbl12.SnapPCLDESP()
+					featureUtils.SnapPCLDESP()
 				end
 			end,
 		})
@@ -39191,8 +39207,8 @@ Escape Timer: %*]]
 			end,
 		})
 
-		tbl12.AddRainbowToggle(v22, "PCLDFillRainbow", "Rainbow Fill", "PCLDFill")
-		tbl12.AddRainbowToggle(v22, "PCLDOutlineRainbow", "Rainbow Outline", "PCLDOutline")
+		featureUtils.AddRainbowToggle(v22, "PCLDFillRainbow", "Rainbow Fill", "PCLDFill")
+		featureUtils.AddRainbowToggle(v22, "PCLDOutlineRainbow", "Rainbow Outline", "PCLDOutline")
 		v22:AddDivider("Owner Name")
 
 		v22:AddToggle("PCLDNameEnabled", {
@@ -39204,7 +39220,7 @@ Escape Timer: %*]]
 		})
 
 		v22:AddDropdown("FFPCLDNameESP", {
-			Values = tbl7.ESPFonts,
+			Values = sharedState.ESPFonts,
 			Default = 2,
 			Multi = false,
 			Text = "Font Face",
@@ -39247,8 +39263,8 @@ Escape Timer: %*]]
 			end,
 		})
 
-		tbl12.AddRainbowToggle(v22, "PCLDNameFillRainbow", "Rainbow Name", "PCLDNameEspFill")
-		tbl12.AddRainbowToggle(v22, "PCLDNameOutlineRainbow", "Rainbow Outline", "PCLDNameOutline")
+		featureUtils.AddRainbowToggle(v22, "PCLDNameFillRainbow", "Rainbow Name", "PCLDNameEspFill")
+		featureUtils.AddRainbowToggle(v22, "PCLDNameOutlineRainbow", "Rainbow Outline", "PCLDNameOutline")
 
 		v22:AddSlider("PCLDNameOutlTrans", {
 			Text = "Name Outline Transparency",
@@ -39337,8 +39353,8 @@ Escape Timer: %*]]
 			end,
 		})
 
-		tbl12.AddRainbowToggle(v23, "StickyFillRainbow", "Rainbow Fill", "StickyFill")
-		tbl12.AddRainbowToggle(v23, "StickyOutlineRainbow", "Rainbow Outline", "StickyOutline")
+		featureUtils.AddRainbowToggle(v23, "StickyFillRainbow", "Rainbow Fill", "StickyFill")
+		featureUtils.AddRainbowToggle(v23, "StickyOutlineRainbow", "Rainbow Outline", "StickyOutline")
 		local v24 = Config:AddDependencyBox()
 		v24:SetupDependencies({ { options.EspConfDD, "Blackhole ESP" } })
 		v24:AddDivider("Highlight")
@@ -39367,12 +39383,12 @@ Escape Timer: %*]]
 			end,
 		})
 
-		tbl12.AddRainbowToggle(v24, "BlackholeFillRainbow", "Rainbow Fill", "BlackholeFill")
-		tbl12.AddRainbowToggle(v24, "BlackholeOutlineRainbow", "Rainbow Outline", "BlackholeOutline")
+		featureUtils.AddRainbowToggle(v24, "BlackholeFillRainbow", "Rainbow Fill", "BlackholeFill")
+		featureUtils.AddRainbowToggle(v24, "BlackholeOutlineRainbow", "Rainbow Outline", "BlackholeOutline")
 		v24:AddDivider("Text")
 
 		v24:AddDropdown("FFBHESP", {
-			Values = tbl7.ESPFonts,
+			Values = sharedState.ESPFonts,
 			Default = 2,
 			Multi = false,
 			Text = "Font Face",
@@ -39418,7 +39434,7 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Camera = tbl15.Visual:AddRightGroupbox("Camera", "camera")
+		local Camera = tabs.Visual:AddRightGroupbox("Camera", "camera")
 
 		Camera:AddToggle("DisableBlurT", {
 			Text = "Disable Ragdoll Blur",
@@ -39439,12 +39455,12 @@ Escape Timer: %*]]
 			Default = false,
 			Callback = function(arg)
 				if arg then
-					localPlayer.CameraMode = "Classic"
-					localPlayer.CameraMaxZoomDistance = "inf"
-					localPlayer.CameraMinZoomDistance = 20
-					localPlayer.CameraMinZoomDistance = 0.5
+					LocalPlayer.CameraMode = "Classic"
+					LocalPlayer.CameraMaxZoomDistance = "inf"
+					LocalPlayer.CameraMinZoomDistance = 20
+					LocalPlayer.CameraMinZoomDistance = 0.5
 				else
-					localPlayer.CameraMode = "LockFirstPerson"
+					LocalPlayer.CameraMode = "LockFirstPerson"
 				end
 			end,
 		}):AddKeyPicker("ThirdPersonK", {
@@ -39455,7 +39471,7 @@ Escape Timer: %*]]
 			SyncToggleState = true,
 		})
 
-		Camera:AddToggle("CameraNoclip", { Text = "Camera Noclip", Default = false, Callback = tbl12.SetCameraNoclip })
+		Camera:AddToggle("CameraNoclip", { Text = "Camera Noclip", Default = false, Callback = featureUtils.SetCameraNoclip })
 
 		Camera:AddSlider("FOVsl", {
 			Text = "FOV",
@@ -39463,7 +39479,7 @@ Escape Timer: %*]]
 			Min = 30,
 			Max = 120,
 			Callback = function(arg)
-				tbl12.SetFOV(arg, false)
+				featureUtils.SetFOV(arg, false)
 			end,
 		})
 
@@ -39473,7 +39489,7 @@ Escape Timer: %*]]
 			if not localTransparencyModifier then
 				return
 			end
-			local v20 = tbl12.Char()
+			local v20 = featureUtils.Char()
 			if not (v20 and v20:FindFirstChild("Head")) then
 				return
 			end
@@ -39497,7 +39513,7 @@ Escape Timer: %*]]
 			Text = "Realistic First Person",
 			Default = false,
 			Callback = function(arg)
-				tbl12.SetRuntimeConnection("RealisticFirstPerson", RunService.RenderStepped, arg, fn22)
+				featureUtils.SetRuntimeConnection("RealisticFirstPerson", RunService.RenderStepped, arg, fn22)
 
 				if arg then
 					fn22()
@@ -39522,7 +39538,7 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Graphics = tbl15.Visual:AddRightGroupbox("Graphics", "file-image")
+		local Graphics = tabs.Visual:AddRightGroupbox("Graphics", "file-image")
 		local n36 = 0
 		local n37 = 0.004
 		local n38 = 128
@@ -39538,11 +39554,11 @@ Escape Timer: %*]]
 		local function fn22(arg)
 			local now2 = os.clock()
 
-			for i = #tbl7.WaterParts, 1, -1 do
+			for i = #sharedState.WaterParts, 1, -1 do
 				if arg ~= n36 then
 					return false
 				end
-				local v20 = tbl7.WaterParts[i]
+				local v20 = sharedState.WaterParts[i]
 				local v21 = v20[1]
 				local transparency = v20[2]
 
@@ -39555,27 +39571,27 @@ Escape Timer: %*]]
 
 					v21.Transparency = transparency
 
-					if not value and tbl7.WaterPartStates[v21] then
-						v21.CanCollide = tbl7.WaterPartStates[v21][1]
-						tbl7.WaterPartStates[v21] = nil
+					if not value and sharedState.WaterPartStates[v21] then
+						v21.CanCollide = sharedState.WaterPartStates[v21][1]
+						sharedState.WaterPartStates[v21] = nil
 					end
 				end
 
-				tbl7.WaterParts[i] = nil
+				sharedState.WaterParts[i] = nil
 				now2 = fn21(now2)
 			end
 
-			for i = #tbl7.WaterRegions, 1, -1 do
+			for i = #sharedState.WaterRegions, 1, -1 do
 				if arg ~= n36 then
 					return false
 				end
-				terrain:FillRegion(tbl7.WaterRegions[i], 4, Enum.Material.Air)
-				tbl7.WaterRegions[i] = nil
+				terrain:FillRegion(sharedState.WaterRegions[i], 4, Enum.Material.Air)
+				sharedState.WaterRegions[i] = nil
 				now2 = fn21(now2)
 			end
 
-			table.clear(tbl7.WaterRegions)
-			table.clear(tbl7.WaterParts)
+			table.clear(sharedState.WaterRegions)
+			table.clear(sharedState.WaterParts)
 			return true
 		end
 
@@ -39607,7 +39623,7 @@ Escape Timer: %*]]
 								if arg3 == n36 then
 									local n43 = math.min(z + n38, n40.Z)
 									local v21 = Region3.new(Vector3.new(x, y, z), Vector3.new(n41, n42, n43))
-									tbl7.WaterRegions[#tbl7.WaterRegions + 1] = v21
+									sharedState.WaterRegions[#sharedState.WaterRegions + 1] = v21
 									terrain:FillRegion(v21, 4, Enum.Material.Water)
 									arg4 = fn21(arg4)
 									z = n43
@@ -39645,18 +39661,18 @@ Escape Timer: %*]]
 					return
 				end
 				local objectModel = workspace.Map.AlwaysHereTweenedObjects.Ocean.Object.ObjectModel
-				local vector = Vector3.new(0, tbl9.WaterYOffset, 0)
+				local vector = Vector3.new(0, settings.WaterYOffset, 0)
 				local tbl16 = {}
 
 				for _, v21 in ipairs(objectModel:QueryDescendants("BasePart")) do
-					local tbl17 = tbl7.WaterPartStates[v21]
+					local tbl17 = sharedState.WaterPartStates[v21]
 
 					if not tbl17 then
 						if v21.Transparency == 1 then
 							continue
 						end
 						tbl17 = { v21.CanCollide, v21.Transparency }
-						tbl7.WaterPartStates[v21] = tbl17
+						sharedState.WaterPartStates[v21] = tbl17
 					end
 
 					if tbl17[2] ~= 1 then
@@ -39668,7 +39684,7 @@ Escape Timer: %*]]
 					local v22 = v21[1]
 
 					if v22.Parent then
-						tbl7.WaterParts[#tbl7.WaterParts + 1] = { v22, v21[2] }
+						sharedState.WaterParts[#sharedState.WaterParts + 1] = { v22, v21[2] }
 						v22.Transparency = 1
 					end
 				end
@@ -39712,7 +39728,7 @@ Escape Timer: %*]]
 				tbl16.Enabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.Swimming)
 
 				tbl16.Connection = humanoid.StateChanged:Connect(function(old, new)
-					if new == Enum.HumanoidStateType.Swimming and tbl8.NonSwimmableWater and toggles.CustomWaterT.Value then
+					if new == Enum.HumanoidStateType.Swimming and toggleStates.NonSwimmableWater and toggles.CustomWaterT.Value then
 						humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 					end
 				end)
@@ -39726,11 +39742,11 @@ Escape Timer: %*]]
 			end
 		end
 
-		tbl12.RestoreWaterSettings = function()
+		featureUtils.RestoreWaterSettings = function()
 			fn24(false)
 			fn25(false)
 
-			for k, waterPartState in pairs(tbl7.WaterPartStates) do
+			for k, waterPartState in pairs(sharedState.WaterPartStates) do
 				if k.Parent then
 					local v20 = waterPartState[2]
 					k.CanCollide = waterPartState[1]
@@ -39738,9 +39754,9 @@ Escape Timer: %*]]
 				end
 			end
 
-			table.clear(tbl7.WaterPartStates)
+			table.clear(sharedState.WaterPartStates)
 
-			for k, waterSetting in pairs(tbl7.WaterSettings) do
+			for k, waterSetting in pairs(sharedState.WaterSettings) do
 				terrain[k] = waterSetting
 			end
 		end
@@ -39752,12 +39768,12 @@ Escape Timer: %*]]
 			Default = false,
 			Callback = function(arg)
 				fn24(arg)
-				local v20, v21, v22 = tbl12.Char()
-				fn25(arg and tbl8.NonSwimmableWater, v22)
+				local v20, v21, v22 = featureUtils.Char()
+				fn25(arg and toggleStates.NonSwimmableWater, v22)
 			end,
 		}):AddColorPicker("CustomWaterP", {
 			Text = "Water Color",
-			Default = tbl7.WaterSettings.WaterColor,
+			Default = sharedState.WaterSettings.WaterColor,
 			Callback = function(waterColor)
 				terrain.WaterColor = waterColor
 			end,
@@ -39770,15 +39786,15 @@ Escape Timer: %*]]
 			Text = "Non-Swimmable Water",
 			Tooltip = "Makes your character fall through Terrain water instead of swimming",
 			Callback = function(nonSwimmableWater)
-				tbl8.NonSwimmableWater = nonSwimmableWater
-				local v21, v22, v23 = tbl12.Char()
+				toggleStates.NonSwimmableWater = nonSwimmableWater
+				local v21, v22, v23 = featureUtils.Char()
 				fn25(nonSwimmableWater and toggles.CustomWaterT.Value, v23)
 			end,
 		})
 
 		v20:AddSlider("WaterWaveSize", {
 			Text = "Wave Size",
-			Default = math.round(tbl7.WaterSettings.WaterWaveSize * 100) / 100,
+			Default = math.round(sharedState.WaterSettings.WaterWaveSize * 100) / 100,
 			Min = 0,
 			Max = 1,
 			Rounding = 2,
@@ -39790,7 +39806,7 @@ Escape Timer: %*]]
 
 		v20:AddSlider("WaterWaveSpeed", {
 			Text = "Wave Speed",
-			Default = math.round(tbl7.WaterSettings.WaterWaveSpeed * 10) / 10,
+			Default = math.round(sharedState.WaterSettings.WaterWaveSpeed * 10) / 10,
 			Min = 0,
 			Max = 100,
 			Rounding = 1,
@@ -39802,7 +39818,7 @@ Escape Timer: %*]]
 
 		v20:AddSlider("WaterTransparency", {
 			Text = "Transparency",
-			Default = math.round(tbl7.WaterSettings.WaterTransparency * 100) / 100,
+			Default = math.round(sharedState.WaterSettings.WaterTransparency * 100) / 100,
 			Min = 0,
 			Max = 1,
 			Rounding = 2,
@@ -39814,7 +39830,7 @@ Escape Timer: %*]]
 
 		v20:AddSlider("WaterReflectance", {
 			Text = "Reflectance",
-			Default = math.round(tbl7.WaterSettings.WaterReflectance * 100) / 100,
+			Default = math.round(sharedState.WaterSettings.WaterReflectance * 100) / 100,
 			Min = 0,
 			Max = 1,
 			Rounding = 2,
@@ -39824,8 +39840,8 @@ Escape Timer: %*]]
 			end,
 		})
 
-		localPlayer.CharacterAdded:Connect(function(character)
-			if flag11 or not tbl8.NonSwimmableWater or not toggles.CustomWaterT.Value then
+		LocalPlayer.CharacterAdded:Connect(function(character)
+			if isUnloading or not toggleStates.NonSwimmableWater or not toggles.CustomWaterT.Value then
 				return
 			end
 			local humanoid = character:WaitForChild("Humanoid", 5)
@@ -39874,7 +39890,7 @@ Escape Timer: %*]]
 			Text = "Shaders",
 			Default = false,
 			Callback = function(shaders)
-				tbl8.Shaders = shaders
+				toggleStates.Shaders = shaders
 				fn26()
 
 				if shaders then
@@ -39944,7 +39960,7 @@ Escape Timer: %*]]
 			Callback = function(brightness)
 				tbl17.Settings.Brightness = brightness
 
-				if tbl8.Shaders then
+				if toggleStates.Shaders then
 					Lighting.Brightness = brightness
 				end
 			end,
@@ -39960,7 +39976,7 @@ Escape Timer: %*]]
 			Callback = function(exposure)
 				tbl17.Settings.Exposure = exposure
 
-				if tbl8.Shaders then
+				if toggleStates.Shaders then
 					Lighting.ExposureCompensation = exposure
 				end
 			end,
@@ -40001,17 +40017,17 @@ Escape Timer: %*]]
 		})
 
 		Graphics:AddDivider("Particles")
-		local particleSettings = tbl7.ParticleSettings
+		local particleSettings = sharedState.ParticleSettings
 
 		local function fn27(arg, arg2)
 			particleSettings[arg] = arg2
 
 			if particleSettings.Enabled then
-				tbl12.UpdateParticles(arg)
+				featureUtils.UpdateParticles(arg)
 			end
 		end
 
-		Graphics:AddToggle("ParticlesT", { Text = "Particles", Default = false, Callback = tbl12.SetParticlesEnabled }):AddColorPicker("ParticlesCo", {
+		Graphics:AddToggle("ParticlesT", { Text = "Particles", Default = false, Callback = featureUtils.SetParticlesEnabled }):AddColorPicker("ParticlesCo", {
 			Default = particleSettings.Color,
 			Title = "Color",
 			Callback = function(arg)
@@ -40035,8 +40051,8 @@ Escape Timer: %*]]
 					fn27("Texture", "rbxassetid://14443362047")
 				elseif arg == "Circles" then
 					fn27("Texture", "rbxassetid://242109931")
-				elseif arg == "Custom" and tbl9.CustomParticle then
-					fn27("Texture", tbl9.CustomParticle)
+				elseif arg == "Custom" and settings.CustomParticle then
+					fn27("Texture", settings.CustomParticle)
 				end
 			end,
 		})
@@ -40048,8 +40064,8 @@ Escape Timer: %*]]
 			Text = "Custom Image ID/Link",
 			ClearTextOnFocus = false,
 			Callback = function(arg)
-				tbl12.ResolveAssetInput(arg, "ParticleTexture", "image", function(customParticle)
-					tbl9.CustomParticle = customParticle
+				featureUtils.ResolveAssetInput(arg, "ParticleTexture", "image", function(customParticle)
+					settings.CustomParticle = customParticle
 
 					if options.ParticlesDropdown.Value == "Custom" then
 						fn27("Texture", customParticle or "rbxassetid://242109931")
@@ -40105,7 +40121,7 @@ Escape Timer: %*]]
 		})
 
 		Graphics:AddDivider("Boost FPS")
-		Graphics:AddToggle("BoostFPS", { Text = "Boost FPS", Default = false, Callback = tbl12.SetBoostFPS })
+		Graphics:AddToggle("BoostFPS", { Text = "Boost FPS", Default = false, Callback = featureUtils.SetBoostFPS })
 
 		Graphics:AddDropdown("BoostFPSOptions", {
 			Text = "Disable",
@@ -40113,27 +40129,27 @@ Escape Timer: %*]]
 			Default = { "Materials", "Textures", "Reflections", "Shadows" },
 			Multi = true,
 			AllowNull = true,
-			Callback = tbl12.SetBoostFPSOptions,
+			Callback = featureUtils.SetBoostFPSOptions,
 		})
 	end
 
 	do
-		local Character = tbl15.Visual:AddRightGroupbox("Character", "person-standing")
+		local Character = tabs.Visual:AddRightGroupbox("Character", "person-standing")
 
 		Character:AddToggle("ForcefieldChar", {
 			Text = "Highlight Your Character",
 			Default = false,
-			Callback = tbl12.SetCharacterHighlight,
+			Callback = featureUtils.SetCharacterHighlight,
 		}):AddColorPicker("ForcefieldColor", {
-			Default = tbl9.ForcefieldColor,
+			Default = settings.ForcefieldColor,
 			Title = "Highlight Color",
 			Callback = function(forcefieldColor)
-				tbl9.ForcefieldColor = forcefieldColor
-				tbl12.UpdateCharacterHighlight()
+				settings.ForcefieldColor = forcefieldColor
+				featureUtils.UpdateCharacterHighlight()
 			end,
 		})
 
-		tbl12.AddRainbowToggle(Character, "RGBForcefieldChar", "RGB Highlight", "ForcefieldColor")
+		featureUtils.AddRainbowToggle(Character, "RGBForcefieldChar", "RGB Highlight", "ForcefieldColor")
 
 		Character:AddDropdown("CharacterHighlightAffect", {
 			Text = "Affect",
@@ -40142,31 +40158,31 @@ Escape Timer: %*]]
 			Multi = true,
 			AllowNull = true,
 			Callback = function(characterHighlightAffects)
-				tbl7.CharacterHighlightAffects = characterHighlightAffects
-				tbl12.SetCharacterHighlight(tbl8.ForcefieldChar)
+				sharedState.CharacterHighlightAffects = characterHighlightAffects
+				featureUtils.SetCharacterHighlight(toggleStates.ForcefieldChar)
 			end,
 		})
 
 		Character:AddDivider("China Hat")
 
-		Character:AddToggle("ChinaHat", { Text = "China Hat", Default = false, Callback = tbl12.SetChinaHat }):AddColorPicker("ChinaHatColor", {
-			Default = tbl9.ChinaHatColor,
+		Character:AddToggle("ChinaHat", { Text = "China Hat", Default = false, Callback = featureUtils.SetChinaHat }):AddColorPicker("ChinaHatColor", {
+			Default = settings.ChinaHatColor,
 			Title = "Hat Color",
 			Callback = function(chinaHatColor)
-				tbl9.ChinaHatColor = chinaHatColor
-				tbl12.UpdateChinaHat()
+				settings.ChinaHatColor = chinaHatColor
+				featureUtils.UpdateChinaHat()
 			end,
 		})
 
-		tbl12.AddRainbowToggle(Character, "RGBChinaHat", "RGB China Hat", "ChinaHatColor")
+		featureUtils.AddRainbowToggle(Character, "RGBChinaHat", "RGB China Hat", "ChinaHatColor")
 	end
 
 	do
-		local v20 = tbl15.Visual:AddLeftTabbox("Game Tweaks")
+		local v20 = tabs.Visual:AddLeftTabbox("Game Tweaks")
 		local v21 = v20:AddTab(nil, "spline")
 		local tbl16 = {}
 
-		for k in tbl7.LineTypes, nil, nil do
+		for k in sharedState.LineTypes, nil, nil do
 			table.insert(tbl16, k)
 		end
 
@@ -40177,7 +40193,7 @@ Escape Timer: %*]]
 			Searchable = true,
 			Text = "Line Texture",
 			Callback = function(customLine)
-				tbl9.CustomLine = customLine
+				settings.CustomLine = customLine
 			end,
 		})
 
@@ -40185,7 +40201,7 @@ Escape Timer: %*]]
 			Text = "Toggle Custom Line",
 			Default = false,
 			Callback = function(customLine)
-				tbl8.CustomLine = customLine
+				toggleStates.CustomLine = customLine
 			end,
 		})
 
@@ -40196,18 +40212,18 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Shows you info about the object you're currently grabbing, what should I Add in this?",
 			Callback = function(goi)
-				tbl8.GOI = goi
+				toggleStates.GOI = goi
 			end,
 		})
 
 		local v22 = v20:AddTab(nil, "crosshair")
 
-		v22:AddToggle("CustomCrosshair", { Text = "Custom Crosshair", Default = false, Callback = tbl12.SetCustomCrosshair }):AddColorPicker("CustomCrosshairColor", {
-			Default = tbl9.CustomCrosshairColor,
+		v22:AddToggle("CustomCrosshair", { Text = "Custom Crosshair", Default = false, Callback = featureUtils.SetCustomCrosshair }):AddColorPicker("CustomCrosshairColor", {
+			Default = settings.CustomCrosshairColor,
 			Title = "Crosshair Color",
 			Callback = function(customCrosshairColor)
-				tbl9.CustomCrosshairColor = customCrosshairColor
-				tbl12.UpdateCustomCrosshair()
+				settings.CustomCrosshairColor = customCrosshairColor
+				featureUtils.UpdateCustomCrosshair()
 			end,
 		})
 
@@ -40215,31 +40231,31 @@ Escape Timer: %*]]
 			Text = "Image Link/ID",
 			ClearTextOnFocus = false,
 			Callback = function(arg)
-				tbl12.ResolveAssetInput(arg, "CrosshairImage", "image", function(customCrosshairImage)
-					tbl9.CustomCrosshairImage = customCrosshairImage
-					tbl12.UpdateCustomCrosshair()
+				featureUtils.ResolveAssetInput(arg, "CrosshairImage", "image", function(customCrosshairImage)
+					settings.CustomCrosshairImage = customCrosshairImage
+					featureUtils.UpdateCustomCrosshair()
 				end)
 			end,
 		})
 
 		v22:AddSlider("CustomCrosshairSize", {
 			Text = "Crosshair Size",
-			Default = tbl9.CustomCrosshairSize,
+			Default = settings.CustomCrosshairSize,
 			Min = 8,
 			Max = 128,
 			Rounding = 0,
 			Suffix = " px",
 			Compact = true,
 			Callback = function(customCrosshairSize)
-				tbl9.CustomCrosshairSize = customCrosshairSize
-				tbl12.UpdateCustomCrosshair()
+				settings.CustomCrosshairSize = customCrosshairSize
+				featureUtils.UpdateCustomCrosshair()
 			end,
 		})
 
 		local v23 = v20:AddTab(nil, 91048141324648)
 
-		tbl12.UpdateBlackHoleImage = function()
-			local flag12 = tbl8.CustomBlackHole and tbl9.CustomBlackhole ~= nil
+		featureUtils.UpdateBlackHoleImage = function()
+			local flag12 = toggleStates.CustomBlackHole and settings.CustomBlackhole ~= nil
 
 			for _, v24 in workspace:GetChildren() do
 				if not (v24.Name ~= "BlackHoleKick" and v24.Name ~= "StayedBH") then
@@ -40252,7 +40268,7 @@ Escape Timer: %*]]
 						local customBlackhole
 
 						if flag12 then
-							customBlackhole = tbl9.CustomBlackhole
+							customBlackhole = settings.CustomBlackhole
 						else
 							customBlackhole = "rbxassetid://9920612764"
 						end
@@ -40261,7 +40277,7 @@ Escape Timer: %*]]
 						local customBHColor
 
 						if flag12 then
-							customBHColor = tbl9.CustomBHColor
+							customBHColor = settings.CustomBHColor
 						else
 							customBHColor = Color3.new(0, 0, 0)
 						end
@@ -40291,8 +40307,8 @@ Escape Timer: %*]]
 			Text = "Sound ID/MP3 Link",
 			ClearTextOnFocus = false,
 			Callback = function(arg)
-				tbl12.ResolveAssetInput(arg, "BlackholeSound", "sound", function(customBlackholeSound)
-					tbl9.CustomBlackholeSound = customBlackholeSound
+				featureUtils.ResolveAssetInput(arg, "BlackholeSound", "sound", function(customBlackholeSound)
+					settings.CustomBlackholeSound = customBlackholeSound
 				end)
 			end,
 		})
@@ -40301,7 +40317,7 @@ Escape Timer: %*]]
 			Text = "Toggle Custom Sound",
 			Default = false,
 			Callback = function(customBlackholeSound)
-				tbl8.CustomBlackholeSound = customBlackholeSound
+				toggleStates.CustomBlackholeSound = customBlackholeSound
 			end,
 		})
 
@@ -40311,9 +40327,9 @@ Escape Timer: %*]]
 			Text = "Image Link/ID",
 			ClearTextOnFocus = false,
 			Callback = function(arg)
-				tbl12.ResolveAssetInput(arg, "BlackholeImage", "image", function(customBlackhole)
-					tbl9.CustomBlackhole = customBlackhole
-					tbl12.UpdateBlackHoleImage()
+				featureUtils.ResolveAssetInput(arg, "BlackholeImage", "image", function(customBlackhole)
+					settings.CustomBlackhole = customBlackhole
+					featureUtils.UpdateBlackHoleImage()
 				end)
 			end,
 		})
@@ -40322,8 +40338,8 @@ Escape Timer: %*]]
 			Text = "Toggle Custom Image",
 			Default = false,
 			Callback = function(customBlackHole)
-				tbl8.CustomBlackHole = customBlackHole
-				tbl12.UpdateBlackHoleImage()
+				toggleStates.CustomBlackHole = customBlackHole
+				featureUtils.UpdateBlackHoleImage()
 			end,
 		})
 
@@ -40333,7 +40349,7 @@ Escape Timer: %*]]
 			Default = Color3.new(1, 1, 1),
 			Title = "Blackhole Color",
 			Callback = function(customBHColor)
-				tbl9.CustomBHColor = customBHColor
+				settings.CustomBHColor = customBHColor
 
 				for _, v24 in workspace:GetChildren() do
 					if not (v24.Name ~= "BlackHoleKick" and v24.Name ~= "StayedBH") then
@@ -40365,7 +40381,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Makes blackholes not disappear after spinning, until you turn this off.",
 			Callback = function(blackholeStaying)
-				tbl8.BlackholeStaying = blackholeStaying
+				toggleStates.BlackholeStaying = blackholeStaying
 			end,
 		})
 
@@ -40483,7 +40499,7 @@ Escape Timer: %*]]
 				flag12 = flag12 or toggles[v25[1]].Value
 			end
 
-			tbl12.SetRuntimeConnection("MutedSounds", workspace.DescendantAdded, flag12, fn22)
+			featureUtils.SetRuntimeConnection("MutedSounds", workspace.DescendantAdded, flag12, fn22)
 
 			for k in tbl17, nil, nil do
 				fn22(k)
@@ -40496,8 +40512,8 @@ Escape Timer: %*]]
 			end
 		end
 
-		tbl12.ClearMutedSounds = function()
-			tbl12.SetRuntimeConnection("MutedSounds", nil, false)
+		featureUtils.ClearMutedSounds = function()
+			featureUtils.SetRuntimeConnection("MutedSounds", nil, false)
 
 			for k, v25 in tbl17, nil, nil do
 				if v25[2] then
@@ -40524,7 +40540,7 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Sky = tbl15.Visual:AddLeftGroupbox("Sky", "cloudy")
+		local Sky = tabs.Visual:AddLeftGroupbox("Sky", "cloudy")
 		local sky = Lighting:FindFirstChildOfClass("Sky")
 		local flag12 = not sky
 		local tbl16 = { Created = flag12, ClockTime = Lighting.ClockTime }
@@ -40586,8 +40602,8 @@ Escape Timer: %*]]
 			Text = "Custom Skybox",
 			Default = false,
 			Callback = function(arg)
-				if arg and tbl9.SkyboxImage then
-					fn22(tbl9.SkyboxImage)
+				if arg and settings.SkyboxImage then
+					fn22(settings.SkyboxImage)
 				else
 					fn22()
 				end
@@ -40598,8 +40614,8 @@ Escape Timer: %*]]
 			Text = "Skybox Link/Image ID",
 			ClearTextOnFocus = false,
 			Callback = function(arg)
-				tbl12.ResolveAssetInput(arg, "SkyboxImage", "image", function(skyboxImage)
-					tbl9.SkyboxImage = skyboxImage
+				featureUtils.ResolveAssetInput(arg, "SkyboxImage", "image", function(skyboxImage)
+					settings.SkyboxImage = skyboxImage
 
 					if toggles.CustomSkyboxT.Value then
 						fn22(skyboxImage)
@@ -40681,9 +40697,9 @@ Escape Timer: %*]]
 			end,
 		})
 
-		tbl12.AddRainbowToggle(Sky, "RGBClouds", "RGB Clouds", "CloudColor")
+		featureUtils.AddRainbowToggle(Sky, "RGBClouds", "RGB Clouds", "CloudColor")
 
-		tbl12.RestoreSkySettings = function()
+		featureUtils.RestoreSkySettings = function()
 			Lighting.ClockTime = tbl16.ClockTime
 
 			if tbl16.Created then
@@ -40710,23 +40726,23 @@ Escape Timer: %*]]
 	end
 
 	do
-		local selectedPlayersAC = tbl7.SelectedPlayersAC
+		local selectedPlayersAC = sharedState.SelectedPlayersAC
 
-		tbl12.CreatePlayerDropdown(tbl15.AutoClicker:AddLeftGroupbox("Target", "user"), "AutoClicker", selectedPlayersAC, true, true, function()
-			if tbl12.SyncACPoseTargets then
-				tbl12.SyncACPoseTargets()
+		featureUtils.CreatePlayerDropdown(tabs.AutoClicker:AddLeftGroupbox("Target", "user"), "AutoClicker", selectedPlayersAC, true, true, function()
+			if featureUtils.SyncACPoseTargets then
+				featureUtils.SyncACPoseTargets()
 			end
 		end)
 	end
 
 	do
-		local Config = tbl15.AutoClicker:AddLeftGroupbox("Config", "settings")
+		local Config = tabs.AutoClicker:AddLeftGroupbox("Config", "settings")
 
 		Config:AddToggle("AutoClicker", {
 			Text = "Toggle",
 			Default = false,
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AutoClicker", arg)
+				featureUtils.SetRuntimeToggle("AutoClicker", arg)
 			end,
 		})
 
@@ -40736,19 +40752,19 @@ Escape Timer: %*]]
 			Tooltip = "Keeps separate position and limb settings for every selected target",
 			Callback = function(arg)
 				if arg then
-					local selectedACPoseTarget = tbl9.SelectedACPoseTarget
-					tbl9.SelectedACPoseTarget = nil
-					tbl8.IndependentACPoses = true
+					local selectedACPoseTarget = settings.SelectedACPoseTarget
+					settings.SelectedACPoseTarget = nil
+					toggleStates.IndependentACPoses = true
 
-					if tbl12.SyncACPoseTargets then
-						tbl12.SyncACPoseTargets(selectedACPoseTarget)
+					if featureUtils.SyncACPoseTargets then
+						featureUtils.SyncACPoseTargets(selectedACPoseTarget)
 					end
 				else
-					if tbl9.SelectedACPoseTarget then
-						tbl12.CaptureACPose(tbl9.SelectedACPoseTarget)
+					if settings.SelectedACPoseTarget then
+						featureUtils.CaptureACPose(settings.SelectedACPoseTarget)
 					end
 
-					tbl8.IndependentACPoses = false
+					toggleStates.IndependentACPoses = false
 				end
 			end,
 		})
@@ -40763,8 +40779,8 @@ Escape Timer: %*]]
 			Searchable = true,
 			AllowNull = true,
 			Text = "Edit Target Pose",
-			FormatListValue = tbl12.FormatPlayer,
-			FormatDisplayValue = tbl12.FormatPlayer,
+			FormatListValue = featureUtils.FormatPlayer,
+			FormatDisplayValue = featureUtils.FormatPlayer,
 			Callback = function(arg)
 				local v21
 
@@ -40774,37 +40790,37 @@ Escape Timer: %*]]
 					v21 = Players:FindFirstChild(arg)
 				end
 
-				local selectedACPoseTarget = tbl9.SelectedACPoseTarget
+				local selectedACPoseTarget = settings.SelectedACPoseTarget
 
 				if selectedACPoseTarget and selectedACPoseTarget ~= v21 then
-					tbl12.CaptureACPose(selectedACPoseTarget)
+					featureUtils.CaptureACPose(selectedACPoseTarget)
 				end
 
-				tbl9.SelectedACPoseTarget = v21
+				settings.SelectedACPoseTarget = v21
 
 				if v21 then
-					task.defer(tbl12.LoadACEditorPose, tbl7.AutoClickerTargetPoses[v21.UserId] or tbl12.CaptureACPose(v21))
+					task.defer(featureUtils.LoadACEditorPose, sharedState.AutoClickerTargetPoses[v21.UserId] or featureUtils.CaptureACPose(v21))
 				end
 			end,
 		})
 
-		tbl12.SyncACPoseTargets = function(arg)
+		featureUtils.SyncACPoseTargets = function(arg)
 			if not options.ACPoseTarget then
 				return
 			end
 
-			if tbl8.IndependentACPoses and tbl9.SelectedACPoseTarget then
-				tbl12.CaptureACPose(tbl9.SelectedACPoseTarget)
+			if toggleStates.IndependentACPoses and settings.SelectedACPoseTarget then
+				featureUtils.CaptureACPose(settings.SelectedACPoseTarget)
 			end
 
 			local tbl16 = {}
 
-			for k in pairs(tbl7.SelectedPlayersAC) do
+			for k in pairs(sharedState.SelectedPlayersAC) do
 				if k and k.Parent then
 					tbl16[#tbl16 + 1] = k.Name
 
-					if tbl8.IndependentACPoses and not tbl7.AutoClickerTargetPoses[k.UserId] then
-						tbl12.CaptureACPose(k)
+					if toggleStates.IndependentACPoses and not sharedState.AutoClickerTargetPoses[k.UserId] then
+						featureUtils.CaptureACPose(k)
 					end
 				end
 			end
@@ -40814,13 +40830,13 @@ Escape Timer: %*]]
 			end)
 
 			options.ACPoseTarget:SetValues(tbl16)
-			local selectedACPoseTarget = arg or tbl9.SelectedACPoseTarget
+			local selectedACPoseTarget = arg or settings.SelectedACPoseTarget
 
 			if typeof(selectedACPoseTarget) == "Instance" then
 				selectedACPoseTarget = selectedACPoseTarget.Name
 			end
 
-			if not tbl8.IndependentACPoses then
+			if not toggleStates.IndependentACPoses then
 				selectedACPoseTarget = selectedACPoseTarget and not table.find(tbl16, selectedACPoseTarget)
 
 				if selectedACPoseTarget then
@@ -40842,15 +40858,15 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Centers every target pose around the selected player instead of you",
 			Callback = function(customACPoseCenter)
-				tbl8.CustomACPoseCenter = customACPoseCenter
+				toggleStates.CustomACPoseCenter = customACPoseCenter
 			end,
 		})
 
 		local v21 = Config:AddDependencyBox()
 		v21:SetupDependencies({ { toggles.CustomACPoseCenter, true } })
 
-		tbl12.CreatePlayerDropdown(v21, "ACPoseCenter", tbl7.SelectedACPoseCenters, false, false, function(selectedACPoseCenter)
-			tbl9.SelectedACPoseCenter = selectedACPoseCenter
+		featureUtils.CreatePlayerDropdown(v21, "ACPoseCenter", sharedState.SelectedACPoseCenters, false, false, function(selectedACPoseCenter)
+			settings.SelectedACPoseCenter = selectedACPoseCenter
 		end, "Pose Center")
 
 		Config:AddDivider("Position")
@@ -40863,8 +40879,8 @@ Escape Timer: %*]]
 			Compact = true,
 			Rounding = 1,
 			Callback = function(arg)
-				local autoClickerOffset = tbl9.AutoClickerOffset
-				tbl9.AutoClickerOffset = CFrame.new(arg, autoClickerOffset.Y, autoClickerOffset.Z)
+				local autoClickerOffset = settings.AutoClickerOffset
+				settings.AutoClickerOffset = CFrame.new(arg, autoClickerOffset.Y, autoClickerOffset.Z)
 			end,
 		})
 
@@ -40876,8 +40892,8 @@ Escape Timer: %*]]
 			Compact = true,
 			Rounding = 1,
 			Callback = function(arg)
-				local autoClickerOffset = tbl9.AutoClickerOffset
-				tbl9.AutoClickerOffset = CFrame.new(autoClickerOffset.X, arg, autoClickerOffset.Z)
+				local autoClickerOffset = settings.AutoClickerOffset
+				settings.AutoClickerOffset = CFrame.new(autoClickerOffset.X, arg, autoClickerOffset.Z)
 			end,
 		})
 
@@ -40889,8 +40905,8 @@ Escape Timer: %*]]
 			Compact = true,
 			Rounding = 1,
 			Callback = function(arg)
-				local autoClickerOffset = tbl9.AutoClickerOffset
-				tbl9.AutoClickerOffset = CFrame.new(autoClickerOffset.X, autoClickerOffset.Y, arg)
+				local autoClickerOffset = settings.AutoClickerOffset
+				settings.AutoClickerOffset = CFrame.new(autoClickerOffset.X, autoClickerOffset.Y, arg)
 			end,
 		})
 
@@ -40902,13 +40918,13 @@ Escape Timer: %*]]
 			Rounding = 2,
 			Compact = true,
 			Callback = function(autoClickerTransparency)
-				tbl9.AutoClickerTransparency = autoClickerTransparency
+				settings.AutoClickerTransparency = autoClickerTransparency
 			end,
 		})
 	end
 
 	do
-		local v20 = tbl15.AutoClicker:AddRightTabbox()
+		local v20 = tabs.AutoClicker:AddRightTabbox()
 		local Offset = v20:AddTab("Offset", "move-diagonal")
 		local Rotation = v20:AddTab("Rotation", "refresh-cw")
 
@@ -40940,8 +40956,8 @@ Escape Timer: %*]]
 				Compact = true,
 				Rounding = 1,
 				Callback = function(arg)
-					local v23 = tbl7.ACRotation[v21]
-					tbl7.ACRotation[v21] = Vector3.new(arg, v23.Y, v23.Z)
+					local v23 = sharedState.ACRotation[v21]
+					sharedState.ACRotation[v21] = Vector3.new(arg, v23.Y, v23.Z)
 				end,
 			})
 
@@ -40953,8 +40969,8 @@ Escape Timer: %*]]
 				Compact = true,
 				Rounding = 1,
 				Callback = function(arg)
-					local v23 = tbl7.ACRotation[v21]
-					tbl7.ACRotation[v21] = Vector3.new(v23.X, arg, v23.Z)
+					local v23 = sharedState.ACRotation[v21]
+					sharedState.ACRotation[v21] = Vector3.new(v23.X, arg, v23.Z)
 				end,
 			})
 
@@ -40966,8 +40982,8 @@ Escape Timer: %*]]
 				Compact = true,
 				Rounding = 1,
 				Callback = function(arg)
-					local v23 = tbl7.ACRotation[v21]
-					tbl7.ACRotation[v21] = Vector3.new(v23.X, v23.Y, arg)
+					local v23 = sharedState.ACRotation[v21]
+					sharedState.ACRotation[v21] = Vector3.new(v23.X, v23.Y, arg)
 				end,
 			})
 
@@ -40977,40 +40993,40 @@ Escape Timer: %*]]
 
 				v23:AddSlider("ACOSecXO" .. v21, {
 					Text = "X Offset",
-					Default = tbl7.ACOffset[v21].X,
+					Default = sharedState.ACOffset[v21].X,
 					Min = -5,
 					Max = 5,
 					Compact = true,
 					Rounding = 1,
 					Callback = function(arg)
-						local v24 = tbl7.ACOffset[v21]
-						tbl7.ACOffset[v21] = Vector3.new(arg, v24.Y, v24.Z)
+						local v24 = sharedState.ACOffset[v21]
+						sharedState.ACOffset[v21] = Vector3.new(arg, v24.Y, v24.Z)
 					end,
 				})
 
 				v23:AddSlider("ACOSecYO" .. v21, {
 					Text = "Y Offset",
-					Default = tbl7.ACOffset[v21].Y,
+					Default = sharedState.ACOffset[v21].Y,
 					Min = -5,
 					Max = 5,
 					Compact = true,
 					Rounding = 1,
 					Callback = function(arg)
-						local v24 = tbl7.ACOffset[v21]
-						tbl7.ACOffset[v21] = Vector3.new(v24.X, arg, v24.Z)
+						local v24 = sharedState.ACOffset[v21]
+						sharedState.ACOffset[v21] = Vector3.new(v24.X, arg, v24.Z)
 					end,
 				})
 
 				v23:AddSlider("ACOSecZO" .. v21, {
 					Text = "Z Offset",
-					Default = tbl7.ACOffset[v21].Z,
+					Default = sharedState.ACOffset[v21].Z,
 					Min = -5,
 					Max = 5,
 					Compact = true,
 					Rounding = 1,
 					Callback = function(arg)
-						local v24 = tbl7.ACOffset[v21]
-						tbl7.ACOffset[v21] = Vector3.new(v24.X, v24.Y, arg)
+						local v24 = sharedState.ACOffset[v21]
+						sharedState.ACOffset[v21] = Vector3.new(v24.X, v24.Y, arg)
 					end,
 				})
 			end
@@ -41018,27 +41034,27 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Presets = tbl15.AutoClicker:AddRightGroupbox("Presets", "settings-2")
+		local Presets = tabs.AutoClicker:AddRightGroupbox("Presets", "settings-2")
 		local tbl16 = {}
 
-		for k in tbl7.AutoClickerPoses, nil, nil do
+		for k in sharedState.AutoClickerPoses, nil, nil do
 			table.insert(tbl16, k)
 		end
 
 		local v20 = writefile and readfile and isfile and makefolder and isfolder and listfiles and delfile
 		local str5 = "Meowixa/AutoClickerPresets"
 
-		tbl12.LoadACPreset = function(arg)
-			return tbl12.LoadACEditorPose(arg)
+		featureUtils.LoadACPreset = function(arg)
+			return featureUtils.LoadACEditorPose(arg)
 		end
 
-		tbl12.SyncACCustomPresets = function(arg)
+		featureUtils.SyncACCustomPresets = function(arg)
 			if not options.ACCustomPoseS then
 				return
 			end
 			local tbl17 = {}
 
-			for k in tbl7.CustomACPresets, nil, nil do
+			for k in sharedState.CustomACPresets, nil, nil do
 				table.insert(tbl17, k)
 			end
 
@@ -41047,7 +41063,7 @@ Escape Timer: %*]]
 			end)
 
 			options.ACCustomPoseS:SetValues(tbl17)
-			local selectedCustomACPose = arg or tbl9.SelectedCustomACPose
+			local selectedCustomACPose = arg or settings.SelectedCustomACPose
 			local acCustomPoseS = options.ACCustomPoseS
 			local setValue = acCustomPoseS.SetValue
 
@@ -41058,7 +41074,7 @@ Escape Timer: %*]]
 			setValue(acCustomPoseS, selectedCustomACPose)
 		end
 
-		tbl12.SaveACCustomPresets = function(arg, arg2)
+		featureUtils.SaveACCustomPresets = function(arg, arg2)
 			if not v20 then
 				return false, "Your exploit does not support filesystem presets."
 			end
@@ -41105,12 +41121,12 @@ Escape Timer: %*]]
 						end)
 
 						if ok and typeof(result) == "table" then
-							tbl7.CustomACPresets[match] = result
+							sharedState.CustomACPresets[match] = result
 						end
 					end
 				end
 			end) then
-				fn18("Custom Auto-Clicker presets couldn't be loaded.")
+				notify("Custom Auto-Clicker presets couldn't be loaded.")
 			end
 		end
 
@@ -41121,20 +41137,20 @@ Escape Timer: %*]]
 			Searchable = true,
 			Text = "Choose Preset",
 			Callback = function(selectedACPose)
-				tbl9.SelectedACPose = selectedACPose
+				settings.SelectedACPose = selectedACPose
 			end,
 		})
 
 		Presets:AddButton({
 			Text = "Load Preset",
 			Func = function()
-				local v21 = tbl7.AutoClickerPoses[tbl9.SelectedACPose]
+				local v21 = sharedState.AutoClickerPoses[settings.SelectedACPose]
 				if not v21 then
 					return
 				end
 
-				if tbl12.LoadACPreset(v21) then
-					fn18("Successfully loaded preset!")
+				if featureUtils.LoadACPreset(v21) then
+					notify("Successfully loaded preset!")
 				end
 			end,
 		})
@@ -41146,7 +41162,7 @@ Escape Timer: %*]]
 			Placeholder = "Type a custom preset name",
 			Default = "",
 			Callback = function(arg)
-				tbl9.CustomACPresetName = tostring(arg or "")
+				settings.CustomACPresetName = tostring(arg or "")
 			end,
 		})
 
@@ -41158,11 +41174,11 @@ Escape Timer: %*]]
 			AllowNull = true,
 			Text = "Custom Preset",
 			Callback = function(selectedCustomACPose)
-				tbl9.SelectedCustomACPose = selectedCustomACPose
+				settings.SelectedCustomACPose = selectedCustomACPose
 			end,
 		})
 
-		tbl12.SyncACCustomPresets()
+		featureUtils.SyncACCustomPresets()
 		local flag12 = not v20
 
 		if flag12 then
@@ -41175,19 +41191,19 @@ Escape Timer: %*]]
 			Disabled = flag12,
 			DisabledTooltip = "Your exploit is missing readfile/writefile support.",
 			Func = function()
-				local str6 = tostring(tbl9.CustomACPresetName or ""):gsub("^%s+", ""):gsub("%s+$", ""):gsub("[%c<>:\"/\\|%?%*]", "")
+				local str6 = tostring(settings.CustomACPresetName or ""):gsub("^%s+", ""):gsub("%s+$", ""):gsub("[%c<>:\"/\\|%?%*]", "")
 				if str6 == "" then
-					fn18("Enter a preset name first.")
+					notify("Enter a preset name first.")
 					return
 				end
-				local v21 = tbl7.CustomACPresets[str6]
+				local v21 = sharedState.CustomACPresets[str6]
 				local tbl17 = {}
 				local bodyPos = {}
-				local num = tonumber(string.format("%.1f", tbl9.AutoClickerOffset.X))
-				local num2 = tonumber(string.format("%.1f", tbl9.AutoClickerOffset.Y))
+				local num = tonumber(string.format("%.1f", settings.AutoClickerOffset.X))
+				local num2 = tonumber(string.format("%.1f", settings.AutoClickerOffset.Y))
 				local v22 = tonumber
 				local format = string.format
-				local z = tbl9.AutoClickerOffset.Z
+				local z = settings.AutoClickerOffset.Z
 				bodyPos[1] = num
 				bodyPos[2] = num2
 
@@ -41199,7 +41215,7 @@ Escape Timer: %*]]
 				tbl17.BodyPos = bodyPos
 				tbl17.LimbOffsets = {}
 
-				for k, v23 in tbl7.ACRotation, nil, nil do
+				for k, v23 in sharedState.ACRotation, nil, nil do
 					local tbl18 = {}
 					local num3 = tonumber(string.format("%.1f", v23.X))
 					local num4 = tonumber(string.format("%.1f", v23.Y))
@@ -41217,7 +41233,7 @@ Escape Timer: %*]]
 					tbl17[k] = tbl18
 				end
 
-				for k, v23 in tbl7.ACOffset, nil, nil do
+				for k, v23 in sharedState.ACOffset, nil, nil do
 					local limbOffsets = tbl17.LimbOffsets
 					local tbl18 = {}
 					local num3 = tonumber(string.format("%.1f", v23.X))
@@ -41236,18 +41252,18 @@ Escape Timer: %*]]
 					limbOffsets[k] = tbl18
 				end
 
-				tbl7.CustomACPresets[str6] = tbl17
-				local v23, v24 = tbl12.SaveACCustomPresets(str6, tbl17)
+				sharedState.CustomACPresets[str6] = tbl17
+				local v23, v24 = featureUtils.SaveACCustomPresets(str6, tbl17)
 
 				if not v23 then
-					tbl7.CustomACPresets[str6] = v21
-					fn18("Couldn't save custom preset: " .. v24)
+					sharedState.CustomACPresets[str6] = v21
+					notify("Couldn't save custom preset: " .. v24)
 					return
 				end
 
-				tbl12.SyncACCustomPresets(str6)
+				featureUtils.SyncACCustomPresets(str6)
 				options.ACCustomPresetName:SetValue(str6)
-				local v25 = fn18
+				local v25 = notify
 				local str7
 
 				if v21 then
@@ -41265,21 +41281,21 @@ Escape Timer: %*]]
 			Disabled = flag12,
 			DisabledTooltip = "Your exploit is missing readfile/writefile support.",
 			Func = function()
-				if not tbl9.SelectedCustomACPose then
-					fn18("Select a custom preset first.")
+				if not settings.SelectedCustomACPose then
+					notify("Select a custom preset first.")
 					return
 				end
-				local v21 = tbl7.CustomACPresets[tbl9.SelectedCustomACPose]
+				local v21 = sharedState.CustomACPresets[settings.SelectedCustomACPose]
 
 				if not v21 then
-					fn18("That custom preset doesn't exist anymore.")
-					tbl12.SyncACCustomPresets()
+					notify("That custom preset doesn't exist anymore.")
+					featureUtils.SyncACCustomPresets()
 					return
 				end
 
-				if tbl12.LoadACPreset(v21) then
-					options.ACCustomPresetName:SetValue(tbl9.SelectedCustomACPose)
-					fn18("Successfully loaded custom preset!")
+				if featureUtils.LoadACPreset(v21) then
+					options.ACCustomPresetName:SetValue(settings.SelectedCustomACPose)
+					notify("Successfully loaded custom preset!")
 				end
 			end,
 		})
@@ -41291,25 +41307,25 @@ Escape Timer: %*]]
 			DoubleClick = true,
 			Risky = true,
 			Func = function()
-				if not tbl9.SelectedCustomACPose then
-					fn18("Select a custom preset first.")
+				if not settings.SelectedCustomACPose then
+					notify("Select a custom preset first.")
 					return
 				end
-				local v21 = tbl7.CustomACPresets[tbl9.SelectedCustomACPose]
-				tbl7.CustomACPresets[tbl9.SelectedCustomACPose] = nil
+				local v21 = sharedState.CustomACPresets[settings.SelectedCustomACPose]
+				sharedState.CustomACPresets[settings.SelectedCustomACPose] = nil
 
 				if not pcall(function()
-					delfile(str5 .. "/" .. tbl9.SelectedCustomACPose .. ".json")
+					delfile(str5 .. "/" .. settings.SelectedCustomACPose .. ".json")
 				end) then
-					tbl7.CustomACPresets[tbl9.SelectedCustomACPose] = v21
-					fn18("Couldn't delete custom preset.")
+					sharedState.CustomACPresets[settings.SelectedCustomACPose] = v21
+					notify("Couldn't delete custom preset.")
 					return
 				end
 
-				tbl9.SelectedCustomACPose = nil
+				settings.SelectedCustomACPose = nil
 				options.ACCustomPresetName:SetValue("")
-				tbl12.SyncACCustomPresets()
-				fn18("Deleted custom preset!")
+				featureUtils.SyncACCustomPresets()
+				notify("Deleted custom preset!")
 			end,
 		})
 
@@ -41318,15 +41334,15 @@ Escape Timer: %*]]
 		end
 	end
 
-	tbl12.GetTarget = function()
-		if not lib.IsMobile and mouse then
+	featureUtils.GetTarget = function()
+		if not uiLibrary.IsMobile and mouse then
 			return mouse.Target
 		end
 		local viewportSize = currentCamera.ViewportSize
 		local v20 = currentCamera:ViewportPointToRay(viewportSize.X / 2, viewportSize.Y / 2)
 		local raycastParams = RaycastParams.new()
 		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-		local v21 = tbl12.Char()
+		local v21 = featureUtils.Char()
 
 		if v21 then
 			raycastParams.FilterDescendantsInstances = { v21 }
@@ -41336,15 +41352,15 @@ Escape Timer: %*]]
 		return hit and hit.Instance
 	end
 
-	tbl12.GetHit = function()
-		if not lib.IsMobile and mouse then
+	featureUtils.GetHit = function()
+		if not uiLibrary.IsMobile and mouse then
 			return mouse.Hit
 		end
 		local viewportSize = currentCamera.ViewportSize
 		local v20 = currentCamera:ViewportPointToRay(viewportSize.X / 2, viewportSize.Y / 2)
 		local raycastParams = RaycastParams.new()
 		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-		local v21 = tbl12.Char()
+		local v21 = featureUtils.Char()
 
 		if v21 then
 			raycastParams.FilterDescendantsInstances = { v21 }
@@ -41362,32 +41378,32 @@ Escape Timer: %*]]
 		return cframe
 	end
 
-	tbl12.AddKeybind = function(arg, arg2, arg3, arg4, arg5, arg6)
+	featureUtils.AddKeybind = function(arg, arg2, arg3, arg4, arg5, arg6)
 		arg:AddLabel(arg3):AddKeyPicker(arg2, { Text = arg3, Default = arg4, NoUI = true, Mode = arg5, Callback = arg6 })
 
 		if arg5 == "Toggle" then
-			tbl7.ToggleStates[arg3] = false
+			sharedState.ToggleStates[arg3] = false
 		end
 
-		tbl7.RegisteredKeybinds[arg3] = function()
+		sharedState.RegisteredKeybinds[arg3] = function()
 			if arg5 == "Toggle" then
-				tbl7.ToggleStates[arg3] = not tbl7.ToggleStates[arg3]
-				arg6(tbl7.ToggleStates[arg3])
+				sharedState.ToggleStates[arg3] = not sharedState.ToggleStates[arg3]
+				arg6(sharedState.ToggleStates[arg3])
 			else
 				arg6(true)
 			end
 		end
 
-		table.insert(tbl7.KeybindNames, arg3)
+		table.insert(sharedState.KeybindNames, arg3)
 	end
 
-	tbl12.AddMobileButton = function(arg, position)
-		if not tbl7.RegisteredKeybinds[arg] or tbl7.ActiveDraggableButtons[arg] then
+	featureUtils.AddMobileButton = function(arg, position)
+		if not sharedState.RegisteredKeybinds[arg] or sharedState.ActiveDraggableButtons[arg] then
 			return
 		end
 
-		local v20 = lib:AddDraggableButton(arg, function()
-			local v20 = tbl7.RegisteredKeybinds[arg]
+		local v20 = uiLibrary:AddDraggableButton(arg, function()
+			local v20 = sharedState.RegisteredKeybinds[arg]
 
 			if v20 then
 				v20()
@@ -41398,49 +41414,49 @@ Escape Timer: %*]]
 			v20.Button.Position = position
 		end
 
-		tbl7.ActiveDraggableButtons[arg] = v20
+		sharedState.ActiveDraggableButtons[arg] = v20
 		return v20
 	end
 
-	tbl12.RemoveMobileButton = function(arg)
-		local v20 = tbl7.ActiveDraggableButtons[arg]
+	featureUtils.RemoveMobileButton = function(arg)
+		local v20 = sharedState.ActiveDraggableButtons[arg]
 		if not v20 then
 			return
 		end
 		v20:Destroy()
-		tbl7.ActiveDraggableButtons[arg] = nil
+		sharedState.ActiveDraggableButtons[arg] = nil
 	end
 
 	do
-		local LocalPlayer = tbl15.Keybinds:AddLeftGroupbox("LocalPlayer", "user")
+		local LocalPlayer = tabs.Keybinds:AddLeftGroupbox("LocalPlayer", "user")
 
 		LocalPlayer:AddToggle("SmoothClickTP", {
 			Text = "Smooth Click TP",
 			Default = true,
 			Callback = function(smoothClickTP)
-				tbl8.SmoothClickTP = smoothClickTP
+				toggleStates.SmoothClickTP = smoothClickTP
 			end,
 		})
 
 		local n36 = 0
 
-		tbl12.AddKeybind(LocalPlayer, "ClickTPKey", "Click TP", "Z", "Press", function()
-			if not tbl12.GetTarget() then
+		featureUtils.AddKeybind(LocalPlayer, "ClickTPKey", "Click TP", "Z", "Press", function()
+			if not featureUtils.GetTarget() then
 				return
 			end
 			n36 += 1
 			local v20 = n36
-			local v21, assemblyRootPart = tbl12.Char()
+			local v21, assemblyRootPart = featureUtils.Char()
 			assemblyRootPart = assemblyRootPart and assemblyRootPart.AssemblyRootPart
-			local v22 = tbl12.GetHit()
+			local v22 = featureUtils.GetHit()
 			if not assemblyRootPart or not v22 then
 				return
 			end
 			local position = assemblyRootPart.Position
 			local n37 = v22.Position + Vector3.new(0, 3, 0)
 			local n38 = assemblyRootPart.CFrame - assemblyRootPart.Position
-			if not tbl8.SmoothClickTP then
-				tbl12.Teleport(assemblyRootPart, CFrame.new(n37) * n38)
+			if not toggleStates.SmoothClickTP then
+				featureUtils.Teleport(assemblyRootPart, CFrame.new(n37) * n38)
 				return
 			end
 			local now2 = tick()
@@ -41451,7 +41467,7 @@ Escape Timer: %*]]
 				else
 					local n39 = math.min((tick() - now2) / 0.3, 1)
 					local n40 = n39 * (2 - n39)
-					tbl12.Teleport(assemblyRootPart, CFrame.new(position:Lerp(n37, n40)) * n38)
+					featureUtils.Teleport(assemblyRootPart, CFrame.new(position:Lerp(n37, n40)) * n38)
 					task.wait()
 					if not (n40 >= 1) then
 						continue
@@ -41461,8 +41477,8 @@ Escape Timer: %*]]
 			end
 		end)
 
-		tbl12.AddKeybind(LocalPlayer, "ResetCharKey", "Reset Character", nil, "Press", function()
-			local v20, v21, v22 = tbl12.Char()
+		featureUtils.AddKeybind(LocalPlayer, "ResetCharKey", "Reset Character", nil, "Press", function()
+			local v20, v21, v22 = featureUtils.Char()
 
 			if v22 and v22.Health ~= 0 then
 				v22.Health = 0
@@ -41470,52 +41486,52 @@ Escape Timer: %*]]
 			end
 		end)
 
-		tbl12.AddKeybind(LocalPlayer, "SitOnBlobmanKey", "Sit on Blobman", nil, "Press", function()
-			tbl14.Sit()
+		featureUtils.AddKeybind(LocalPlayer, "SitOnBlobmanKey", "Sit on Blobman", nil, "Press", function()
+			gameHelpers.Sit()
 		end)
 
-		tbl12.AddKeybind(LocalPlayer, "ZoomKey", "Zoom", nil, "Toggle", function(zoom)
-			tbl8.Zoom = zoom
+		featureUtils.AddKeybind(LocalPlayer, "ZoomKey", "Zoom", nil, "Toggle", function(zoom)
+			toggleStates.Zoom = zoom
 
 			if zoom then
 				pcall(function()
 					RunService:UnbindFromRenderStep("RSCZoom")
 				end)
 
-				RunService:BindToRenderStep("RSCZoom", Enum.RenderPriority.Camera.Value + 1, tbl12.UpdateZoomCamera)
+				RunService:BindToRenderStep("RSCZoom", Enum.RenderPriority.Camera.Value + 1, featureUtils.UpdateZoomCamera)
 				cFrame = currentCamera.CFrame
-				tbl12.TweenFOV(tbl9.ZoomFOV, 0.35)
+				featureUtils.TweenFOV(settings.ZoomFOV, 0.35)
 			else
 				pcall(function()
 					RunService:UnbindFromRenderStep("RSCZoom")
 				end)
 
 				cFrame = nil
-				tbl12.TweenFOV(fieldOfView, 0.35)
+				featureUtils.TweenFOV(originalFieldOfView, 0.35)
 			end
 		end)
 
-		tbl12.AddKeybind(LocalPlayer, "OwnSelfKey", "Escape any Grab", nil, "Press", tbl12.ExtraEscape)
+		featureUtils.AddKeybind(LocalPlayer, "OwnSelfKey", "Escape any Grab", nil, "Press", featureUtils.ExtraEscape)
 		LocalPlayer:AddDivider()
 
-		tbl12.AddKeybind(LocalPlayer, "RemoveLegsKey1", "Remove legs", nil, "Press", function()
-			tbl12.BreakLimb(localPlayer, "Legs")
+		featureUtils.AddKeybind(LocalPlayer, "RemoveLegsKey1", "Remove legs", nil, "Press", function()
+			featureUtils.BreakLimb(LocalPlayer, "Legs")
 		end)
 
-		tbl12.AddKeybind(LocalPlayer, "RemoveArmsKey1", "Remove arms", nil, "Press", function()
-			tbl12.BreakLimb(localPlayer, "Arms")
+		featureUtils.AddKeybind(LocalPlayer, "RemoveArmsKey1", "Remove arms", nil, "Press", function()
+			featureUtils.BreakLimb(LocalPlayer, "Arms")
 		end)
 
-		tbl12.AddKeybind(LocalPlayer, "RemoveAllKey1", "Remove legs and arms", nil, "Press", function()
-			tbl12.BreakLimb(localPlayer, "All")
+		featureUtils.AddKeybind(LocalPlayer, "RemoveAllKey1", "Remove legs and arms", nil, "Press", function()
+			featureUtils.BreakLimb(LocalPlayer, "All")
 		end)
 
 		LocalPlayer:AddDivider()
 
-		tbl12.AddKeybind(LocalPlayer, "FrontflipKey", "Frontflip", nil, "Press", function()
-			local v20, v21, v22 = tbl12.Char()
+		featureUtils.AddKeybind(LocalPlayer, "FrontflipKey", "Frontflip", nil, "Press", function()
+			local v20, v21, v22 = featureUtils.Char()
 
-			if v20 and v21 and v22 and v22.Health ~= 0 and not tbl8.GucciAntiGrab and not tbl8.Invisibility then
+			if v20 and v21 and v22 and v22.Health ~= 0 and not toggleStates.GucciAntiGrab and not toggleStates.Invisibility then
 				v22:ChangeState("Jumping")
 				task.wait()
 				v22.Sit = true
@@ -41532,10 +41548,10 @@ Escape Timer: %*]]
 			end
 		end)
 
-		tbl12.AddKeybind(LocalPlayer, "BackflipKey", "Backflip", nil, "Press", function()
-			local v20, v21, v22 = tbl12.Char()
+		featureUtils.AddKeybind(LocalPlayer, "BackflipKey", "Backflip", nil, "Press", function()
+			local v20, v21, v22 = featureUtils.Char()
 
-			if v20 and v21 and v22 and v22.Health ~= 0 and not tbl8.GucciAntiGrab and not tbl8.Invisibility then
+			if v20 and v21 and v22 and v22.Health ~= 0 and not toggleStates.GucciAntiGrab and not toggleStates.Invisibility then
 				v22:ChangeState("Jumping")
 				task.wait()
 				v22.Sit = true
@@ -41554,58 +41570,58 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Players2 = tbl15.Keybinds:AddRightGroupbox("Players", "users-round")
+		local Players2 = tabs.Keybinds:AddRightGroupbox("Players", "users-round")
 
-		tbl12.AddKeybind(Players2, "rmgucciplr", "Remove Gucci Plr", nil, "Press", function()
-			local v20 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Players2, "rmgucciplr", "Remove Gucci Plr", nil, "Press", function()
+			local v20 = featureUtils.GetTarget()
 
 			if v20 and v20.Parent and Players:FindFirstChild(v20.Parent.Name) then
-				tbl12.RemoveGucci(Players:FindFirstChild(v20.Parent.Name))
+				featureUtils.RemoveGucci(Players:FindFirstChild(v20.Parent.Name))
 			end
 		end)
 
-		tbl12.AddKeybind(Players2, "bringplr", "Bring Player", nil, "Press", function()
-			local v20 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Players2, "bringplr", "Bring Player", nil, "Press", function()
+			local v20 = featureUtils.GetTarget()
 			local playerFromCharacter = v20 and v20.Parent and Players:GetPlayerFromCharacter(v20.Parent)
 
 			if playerFromCharacter then
-				tbl12.BringPlayer(playerFromCharacter)
+				featureUtils.BringPlayer(playerFromCharacter)
 			end
 		end)
 
-		tbl12.AddKeybind(Players2, "killplr", "Kill Player", nil, "Press", function()
-			local v20 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Players2, "killplr", "Kill Player", nil, "Press", function()
+			local v20 = featureUtils.GetTarget()
 
 			if v20 and Players:FindFirstChild(v20.Parent.Name) then
 				local v21 = Players:FindFirstChild(v20.Parent.Name)
-				tbl12.Kill(v21)
+				featureUtils.Kill(v21)
 			end
 		end)
 
-		tbl12.AddKeybind(Players2, "bkickplr", "Blob Kick Player", nil, "Press", function()
-			local v20 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Players2, "bkickplr", "Blob Kick Player", nil, "Press", function()
+			local v20 = featureUtils.GetTarget()
 
 			if v20 and Players:FindFirstChild(v20.Parent.Name) then
 				local v21 = Players:FindFirstChild(v20.Parent.Name)
-				tbl14.Sit()
+				gameHelpers.Sit()
 
 				repeat
 					task.wait()
 				until parent
 
-				tbl14.Kick(v21)
+				gameHelpers.Kick(v21)
 				task.wait(0.1)
 
 				if parent then
-					tbl12.DestroyToy(parent)
+					featureUtils.DestroyToy(parent)
 				end
 			end
 		end)
 
 		Players2:AddDivider()
 
-		tbl12.AddKeybind(Players2, "RemoveLegsKey", "Remove Legs Mouse", nil, "Press", function()
-			local v20 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Players2, "RemoveLegsKey", "Remove Legs Mouse", nil, "Press", function()
+			local v20 = featureUtils.GetTarget()
 			if not v20 then
 				return
 			end
@@ -41613,11 +41629,11 @@ Escape Timer: %*]]
 			if not v21 then
 				return
 			end
-			tbl12.BreakLimb(v21, "Legs")
+			featureUtils.BreakLimb(v21, "Legs")
 		end)
 
-		tbl12.AddKeybind(Players2, "RemoveArmsKey", "Remove Arms Mouse", nil, "Press", function()
-			local v20 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Players2, "RemoveArmsKey", "Remove Arms Mouse", nil, "Press", function()
+			local v20 = featureUtils.GetTarget()
 			if not v20 then
 				return
 			end
@@ -41625,11 +41641,11 @@ Escape Timer: %*]]
 			if not v21 then
 				return
 			end
-			tbl12.BreakLimb(v21, "Arms")
+			featureUtils.BreakLimb(v21, "Arms")
 		end)
 
-		tbl12.AddKeybind(Players2, "RemoveAllKey", "Remove Legs & Arms Mouse", nil, "Press", function()
-			local v20 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Players2, "RemoveAllKey", "Remove Legs & Arms Mouse", nil, "Press", function()
+			local v20 = featureUtils.GetTarget()
 			if not v20 then
 				return
 			end
@@ -41637,35 +41653,35 @@ Escape Timer: %*]]
 			if not v21 then
 				return
 			end
-			tbl12.BreakLimb(v21, "All")
+			featureUtils.BreakLimb(v21, "All")
 		end)
 	end
 
 	do
-		local Objects = tbl15.Keybinds:AddRightGroupbox("Objects", "boxes")
+		local Objects = tabs.Keybinds:AddRightGroupbox("Objects", "boxes")
 
-		tbl12.AddKeybind(Objects, "SpawnPallet", "Spawn Pallet", nil, "Press", function()
-			tbl11.SpawnToy:InvokeServer("PalletLightBrown", currentCamera.CFrame, workspace.RotateOrientPart.Rotation)
+		featureUtils.AddKeybind(Objects, "SpawnPallet", "Spawn Pallet", nil, "Press", function()
+			remotes.SpawnToy:InvokeServer("PalletLightBrown", currentCamera.CFrame, workspace.RotateOrientPart.Rotation)
 		end)
 
-		tbl12.AddKeybind(Objects, "anchorobject", "Anchor Object", nil, "Press", tbl12.ToggleAnchor)
+		featureUtils.AddKeybind(Objects, "anchorobject", "Anchor Object", nil, "Press", featureUtils.ToggleAnchor)
 
-		tbl12.AddKeybind(Objects, "destroyobject", "Destroy Object", nil, "Press", function()
-			local parent2 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Objects, "destroyobject", "Destroy Object", nil, "Press", function()
+			local parent2 = featureUtils.GetTarget()
 			parent2 = parent2 and parent2.Parent
 
 			if parent2 then
-				tbl12.DestroyObject(parent2)
+				featureUtils.DestroyObject(parent2)
 			end
 		end)
 
-		tbl12.AddKeybind(Objects, "AutoClicker", "Auto Clicker", nil, "Press", function()
-			local v20 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Objects, "AutoClicker", "Auto Clicker", nil, "Press", function()
+			local v20 = featureUtils.GetTarget()
 			local parent2 = v20 and v20.Parent
 
-			if not parent2 or tbl7.AutoClicker[parent2] or parent2:IsDescendantOf(map) then
+			if not parent2 or sharedState.AutoClicker[parent2] or parent2:IsDescendantOf(map) then
 				if parent2 then
-					tbl7.AutoClicker[parent2] = nil
+					sharedState.AutoClicker[parent2] = nil
 				end
 
 				return
@@ -41681,7 +41697,7 @@ Escape Timer: %*]]
 			highlight.Adornee = parent2
 			highlight.Parent = parent2
 			highlight.FillColor = Color3.fromRGB(152, 171, 28)
-			tbl7.AutoClicker[parent2] = true
+			sharedState.AutoClicker[parent2] = true
 
 			if flag12 and parent2:FindFirstChild("HumanoidRootPart") then
 				local humanoidRootPart = parent2:FindFirstChild("HumanoidRootPart")
@@ -41694,18 +41710,18 @@ Escape Timer: %*]]
 
 				task.spawn(function()
 					while true do
-						if tbl7.AutoClicker[parent2] and humanoidRootPart.Parent and humanoid and humanoid.Parent and humanoid.Health ~= 0 and fn20() then
-							local v21, v22 = tbl12.Char()
+						if sharedState.AutoClicker[parent2] and humanoidRootPart.Parent and humanoid and humanoid.Parent and humanoid.Health ~= 0 and waitForHeartbeatElapsed() then
+							local v21, v22 = featureUtils.Char()
 
 							if not v22 then
 								continue
 							elseif not humanoidRootPart:IsDescendantOf(workspace.PlotItems) then
-								task.spawn(tbl12.Ragdoll, parent2)
+								task.spawn(featureUtils.Ragdoll, parent2)
 
-								if tbl12.GetMagnitude(v22, humanoidRootPart) <= 32 then
+								if featureUtils.GetMagnitude(v22, humanoidRootPart) <= 32 then
 									bodyPosition.Parent = humanoidRootPart
 									highlight.Enabled = true
-									tbl12.Grab(humanoidRootPart)
+									featureUtils.Grab(humanoidRootPart)
 								else
 									bodyPosition.Parent = nil
 									bodyPosition.Position = humanoidRootPart.Position
@@ -41719,71 +41735,71 @@ Escape Timer: %*]]
 						break
 					end
 
-					tbl7.AutoClicker[parent2] = nil
-					tbl12.RNO(humanoidRootPart)
+					sharedState.AutoClicker[parent2] = nil
+					featureUtils.RNO(humanoidRootPart)
 					highlight:Destroy()
 					bodyPosition:Destroy()
 				end)
 			elseif not flag12 then
-				if not tbl12.FindNicePart(parent2) then
-					tbl7.AutoClicker[parent2] = false
+				if not featureUtils.FindNicePart(parent2) then
+					sharedState.AutoClicker[parent2] = false
 					return
 				end
 
 				task.spawn(function()
-					while tbl7.AutoClicker[parent2] and v20.Parent and fn20() do
-						local v21, v22 = tbl12.Char()
+					while sharedState.AutoClicker[parent2] and v20.Parent and waitForHeartbeatElapsed() do
+						local v21, v22 = featureUtils.Char()
 
 						if v22 then
-							if tbl12.GetMagnitude(v22, v20) <= 20 then
+							if featureUtils.GetMagnitude(v22, v20) <= 20 then
 								highlight.Enabled = true
-								tbl12.Grab(v20)
+								featureUtils.Grab(v20)
 							else
 								highlight.Enabled = false
 							end
 						end
 					end
 
-					tbl7.AutoClicker[parent2] = nil
-					tbl12.RNO(v20)
+					sharedState.AutoClicker[parent2] = nil
+					featureUtils.RNO(v20)
 					highlight:Destroy()
 				end)
 			end
 		end)
 
-		tbl12.AddKeybind(Objects, "ControlObject", "Control Object", nil, "Press", function()
-			local parent2 = tbl12.GetTarget()
+		featureUtils.AddKeybind(Objects, "ControlObject", "Control Object", nil, "Press", function()
+			local parent2 = featureUtils.GetTarget()
 			parent2 = parent2 and parent2.Parent
 
-			if parent2 or tbl8.ControllingSomeone then
-				tbl12.ControlCharacter(parent2)
+			if parent2 or toggleStates.ControllingSomeone then
+				featureUtils.ControlCharacter(parent2)
 			end
 		end)
 
-		tbl12.AddKeybind(Objects, "ExpOnMouse", "Explode on Mouse", nil, "Press", function()
-			tbl12.ExplodeMissile(tbl12.GetHit().Position, "BombMissile")
+		featureUtils.AddKeybind(Objects, "ExpOnMouse", "Explode on Mouse", nil, "Press", function()
+			featureUtils.ExplodeMissile(featureUtils.GetHit().Position, "BombMissile")
 		end)
 	end
 
 	do
-		local v20 = tbl15.Keybinds:AddLeftGroupbox("Mobile Buttons", "smartphone")
-		local MobileKeybindsList = v20:AddDropdown("MobileKeybindsList", { Values = tbl7.KeybindNames, Default = 1, Multi = false, Text = "Select Keybind to Map" })
+		local v20 = tabs.Keybinds:AddLeftGroupbox("Mobile Buttons", "smartphone")
+		local MobileKeybindsList = v20:AddDropdown("MobileKeybindsList", { Values = sharedState.KeybindNames, Default = 1, Multi = false, Text = "Select Keybind to Map" })
 
 		v20:AddButton({
 			Text = "Create Button",
 			Func = function()
-				tbl12.AddMobileButton(MobileKeybindsList.Value)
+				featureUtils.AddMobileButton(MobileKeybindsList.Value)
 			end,
 		}):AddButton({
 			Text = "Remove Button",
 			Func = function()
-				tbl12.RemoveMobileButton(MobileKeybindsList.Value)
+				featureUtils.RemoveMobileButton(MobileKeybindsList.Value)
 			end,
 		})
 	end
 
 	do
-		local Gamepasses = tbl15.Misc:AddLeftTabbox("Gamepasses")
+		local Gamepasses = tabs.Misc:AddLeftTabbox("Gamepasses")
 		local Gamepasses2 = Gamepasses:AddTab("Gamepasses", "dollar-sign")
 		local tbl16 = { Enabled = false }
 
@@ -41792,7 +41808,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Increases your reach",
 			Callback = function(arg)
-				local flag12 = arg and not flag11
+				local flag12 = arg and not isUnloading
 				if tbl16.Enabled == flag12 then
 					return
 				end
@@ -41802,10 +41818,10 @@ Escape Timer: %*]]
 					local menuToys = ReplicatedStorage:FindFirstChild("MenuToys")
 					local furtherReachBoughtNotifier = gamepassEvents and gamepassEvents:FindFirstChild("FurtherReachBoughtNotifier")
 					local limitedTimeToyEvent = menuToys and menuToys:FindFirstChild("LimitedTimeToyEvent")
-					local fartherReach = localPlayer:FindFirstChild("FartherReach")
+					local fartherReach = LocalPlayer:FindFirstChild("FartherReach")
 					if not (furtherReachBoughtNotifier and furtherReachBoughtNotifier:IsA("RemoteEvent") and limitedTimeToyEvent and limitedTimeToyEvent:IsA("RemoteEvent")) or fartherReach and not fartherReach:IsA("BoolValue") then
 						toggles.FartherReach:SetValue(false)
-						return fn18("Further Reach is unavailable: required game objects are missing or invalid.")
+						return notify("Further Reach is unavailable: required game objects are missing or invalid.")
 					end
 					local v20 = tbl16
 					local v21 = tbl16
@@ -41824,7 +41840,7 @@ Escape Timer: %*]]
 					v25.LineValue = fartherReach
 					local line = tbl16.Line
 					local line2 = tbl16.Line
-					local v26 = localPlayer
+					local v26 = LocalPlayer
 					tbl16.Line.Name = "FartherReach"
 					line.Value = true
 					line2.Parent = v26
@@ -41834,11 +41850,11 @@ Escape Timer: %*]]
 					local connection = nil
 
 					local function fn21(character)
-						if not connection.Connected or flag11 then
+						if not connection.Connected or isUnloading then
 							return
 						end
 						local grabbingScript = character and character:WaitForChild("GrabbingScript", 5)
-						if not (connection.Connected and not flag11 and character == localPlayer.Character and grabbingScript and grabbingScript.Parent == character and grabbingScript:IsA("LocalScript")) then
+						if not (connection.Connected and not isUnloading and character == LocalPlayer.Character and grabbingScript and grabbingScript.Parent == character and grabbingScript:IsA("LocalScript")) then
 							return
 						end
 
@@ -41847,7 +41863,7 @@ Escape Timer: %*]]
 						end
 
 						local function fn22()
-							if connection.Connected and not flag11 and character == localPlayer.Character and grabbingScript.Parent == character and grabbingScript.Enabled and limitedTimeToyEvent.Parent then
+							if connection.Connected and not isUnloading and character == LocalPlayer.Character and grabbingScript.Parent == character and grabbingScript.Enabled and limitedTimeToyEvent.Parent then
 								limitedTimeToyEvent:FireServer()
 							end
 						end
@@ -41864,9 +41880,9 @@ Escape Timer: %*]]
 						task.delay(1, fn22)
 					end
 
-					connection = localPlayer.CharacterAdded:Connect(fn21)
+					connection = LocalPlayer.CharacterAdded:Connect(fn21)
 					tbl16.Connection = connection
-					task.spawn(fn21, localPlayer.Character)
+					task.spawn(fn21, LocalPlayer.Character)
 				else
 					tbl16.Enabled = false
 
@@ -41906,7 +41922,7 @@ Escape Timer: %*]]
 					v21.Line = nil
 					v22.Event = nil
 					v23.Notifier = nil
-					local grabbingScript = localPlayer.Character and localPlayer.Character:FindFirstChild("GrabbingScript")
+					local grabbingScript = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("GrabbingScript")
 
 					if grabbingScript and grabbingScript:IsA("LocalScript") then
 						grabbingScript.Enabled = false
@@ -41927,12 +41943,12 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Changes the color of your line to the selected gradient in Config",
 			Callback = function(gradientLine)
-				tbl8.GradientLine = gradientLine
+				toggleStates.GradientLine = gradientLine
 
 				task.spawn(function()
-					local gradients = tbl7.Gradients
+					local gradients = sharedState.Gradients
 
-					while task.wait(0.5) and tbl8.GradientLine and not flag11 do
+					while task.wait(0.5) and toggleStates.GradientLine and not isUnloading do
 						local updateLineColorsEvent = ReplicatedStorage.DataEvents.UpdateLineColorsEvent
 						local fireServer = updateLineColorsEvent.FireServer
 						local colorSequence = ColorSequence.new
@@ -41981,7 +41997,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Allows you to escape in 3 seconds instead of 12",
 			Callback = function(fasterEscape)
-				tbl8.FasterEscape = fasterEscape
+				toggleStates.FasterEscape = fasterEscape
 			end,
 		})
 
@@ -41995,87 +42011,87 @@ Escape Timer: %*]]
 			Rounding = 0,
 			Compact = true,
 			Callback = function(fasterEscape)
-				tbl9.FasterEscape = fasterEscape
+				settings.FasterEscape = fasterEscape
 			end,
 		})
 
 		Config:AddDivider()
 
 		Config:AddLabel("Line Color 1"):AddColorPicker("LineC1", {
-			Default = tbl7.Gradients.Color1,
+			Default = sharedState.Gradients.Color1,
 			Title = "Line Color 1",
 			Callback = function(color1)
-				tbl7.Gradients.Color1 = color1
+				sharedState.Gradients.Color1 = color1
 			end,
 		})
 
 		Config:AddLabel("Line Color 2"):AddColorPicker("LineC2", {
-			Default = tbl7.Gradients.Color2,
+			Default = sharedState.Gradients.Color2,
 			Title = "Line Color 2",
 			Callback = function(color2)
-				tbl7.Gradients.Color2 = color2
+				sharedState.Gradients.Color2 = color2
 			end,
 		})
 
 		Config:AddLabel("Line Color 3"):AddColorPicker("LineC3", {
-			Default = tbl7.Gradients.Color3,
+			Default = sharedState.Gradients.Color3,
 			Title = "Line Color 3",
 			Callback = function(color3)
-				tbl7.Gradients.Color3 = color3
+				sharedState.Gradients.Color3 = color3
 			end,
 		})
 
 		Config:AddLabel("Line Color 4"):AddColorPicker("LineC4", {
-			Default = tbl7.Gradients.Color4,
+			Default = sharedState.Gradients.Color4,
 			Title = "Line Color 4",
 			Callback = function(color4)
-				tbl7.Gradients.Color4 = color4
+				sharedState.Gradients.Color4 = color4
 			end,
 		})
 
 		Config:AddLabel("Line Color 5"):AddColorPicker("LineC5", {
-			Default = tbl7.Gradients.Color5,
+			Default = sharedState.Gradients.Color5,
 			Title = "Line Color 5",
 			Callback = function(color5)
-				tbl7.Gradients.Color5 = color5
+				sharedState.Gradients.Color5 = color5
 			end,
 		})
 
 		Config:AddLabel("Line Color 6"):AddColorPicker("LineC6", {
-			Default = tbl7.Gradients.Color6,
+			Default = sharedState.Gradients.Color6,
 			Title = "Line Color 6",
 			Callback = function(color6)
-				tbl7.Gradients.Color6 = color6
+				sharedState.Gradients.Color6 = color6
 			end,
 		})
 
 		Config:AddLabel("Line Color 7"):AddColorPicker("LineC7", {
-			Default = tbl7.Gradients.Color7,
+			Default = sharedState.Gradients.Color7,
 			Title = "Line Color 7",
 			Callback = function(color7)
-				tbl7.Gradients.Color7 = color7
+				sharedState.Gradients.Color7 = color7
 			end,
 		})
 
 		Config:AddLabel("Line Color 8"):AddColorPicker("LineC8", {
-			Default = tbl7.Gradients.Color8,
+			Default = sharedState.Gradients.Color8,
 			Title = "Line Color 8",
 			Callback = function(color8)
-				tbl7.Gradients.Color8 = color8
+				sharedState.Gradients.Color8 = color8
 			end,
 		})
 
 		Config:AddLabel("Dot Color"):AddColorPicker("Dot Color", {
-			Default = tbl7.Gradients.DotColor,
+			Default = sharedState.Gradients.DotColor,
 			Title = "Dot Color",
 			Callback = function(dotColor)
-				tbl7.Gradients.DotColor = dotColor
+				sharedState.Gradients.DotColor = dotColor
 			end,
 		})
 	end
 
 	do
-		local v20 = tbl15.Misc:AddRightGroupbox("Sound Spam", "volume-2")
+		local v20 = tabs.Misc:AddRightGroupbox("Sound Spam", "volume-2")
 
 		v20:AddDropdown("SoundsToSpam", {
 			Values = {
@@ -42239,7 +42255,7 @@ Escape Timer: %*]]
 			Searchable = true,
 			Text = "Sounds to spam",
 			Callback = function(sounds)
-				tbl7.Sounds = sounds
+				sharedState.Sounds = sounds
 			end,
 		})
 		v20:AddDivider()
@@ -42252,7 +42268,7 @@ Escape Timer: %*]]
 			Rounding = 2,
 			Compact = true,
 			Callback = function(soundsExternalDelay)
-				tbl9.SoundsExternalDelay = soundsExternalDelay
+				settings.SoundsExternalDelay = soundsExternalDelay
 			end,
 		})
 
@@ -42260,20 +42276,20 @@ Escape Timer: %*]]
 			Text = "Sound Spam",
 			Default = false,
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("SoundSpam", arg)
+				featureUtils.SetRuntimeToggle("SoundSpam", arg)
 			end,
 		})
 	end
 
 	do
-		local Auto = tbl15.Misc:AddLeftGroupbox("Auto", "bot")
+		local Auto = tabs.Misc:AddLeftGroupbox("Auto", "bot")
 
 		Auto:AddToggle("autohouse", {
 			Text = "Auto-House Teleport",
 			Default = false,
 			Tooltip = "Teleports you to the house you own at a small amount of time left",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AutoHouse", arg)
+				featureUtils.SetRuntimeToggle("AutoHouse", arg)
 			end,
 		})
 
@@ -42282,32 +42298,32 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Makes you claim the casino automatically",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("AutoSlot", arg)
+				featureUtils.SetRuntimeToggle("AutoSlot", arg)
 			end,
 		})
 	end
 
 	do
-		local v20 = tbl15.Misc:AddRightGroupbox("Aim Assist", "crosshair")
+		local v20 = tabs.Misc:AddRightGroupbox("Aim Assist", "crosshair")
 
 		v20:AddToggle("AimbotToggle", {
 			Text = "Toggle",
 			Default = false,
 			Tooltip = "Aims for you smoothly",
 			Callback = function(aimbotEnabled)
-				tbl7.AimSettings.AimbotEnabled = aimbotEnabled
-				tbl12.UpdateAimConnection()
+				sharedState.AimSettings.AimbotEnabled = aimbotEnabled
+				featureUtils.UpdateAimConnection()
 			end,
 		})
 
-		if not lib.IsMobile then
+		if not uiLibrary.IsMobile then
 			toggles.AimbotToggle:AddKeyPicker("AimbotKeybind", {
 				Text = "Aim Key",
 				Default = "X",
 				Mode = "Hold",
 				NoUI = false,
 				ChangedCallback = function(aimKey)
-					tbl7.AimSettings.AimKey = aimKey
+					sharedState.AimSettings.AimKey = aimKey
 				end,
 			})
 		end
@@ -42319,20 +42335,20 @@ Escape Timer: %*]]
 			Text = "Target Part",
 			Default = "Head",
 			Callback = function(targetPart)
-				tbl7.AimSettings.TargetPart = targetPart
+				sharedState.AimSettings.TargetPart = targetPart
 			end,
 		})
 
 		v20:AddToggle("AlwaysOnToggleAB", {
 			Text = "Always On",
-			Default = lib.IsMobile,
+			Default = uiLibrary.IsMobile,
 			Tooltip = "Aimbot is always on instead of being on-bind",
 			Callback = function(arg)
-				tbl7.AimSettings.AlwaysOn = lib.IsMobile or arg
+				sharedState.AimSettings.AlwaysOn = uiLibrary.IsMobile or arg
 			end,
 		})
 
-		if lib.IsMobile then
+		if uiLibrary.IsMobile then
 			toggles.AlwaysOnToggleAB:SetDisabled(true)
 		end
 
@@ -42341,14 +42357,14 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Enables a circle of where the aim will be working",
 			Callback = function(fovEnabled)
-				tbl7.AimSettings.FOVEnabled = fovEnabled
-				tbl12.UpdateAimConnection()
+				sharedState.AimSettings.FOVEnabled = fovEnabled
+				featureUtils.UpdateAimConnection()
 			end,
 		}):AddColorPicker("FovCircColor", {
 			Default = Color3.new(1, 1, 1),
 			Title = "Circle Color",
 			Callback = function(color)
-				tbl6.Stroke.Color = color
+				fieldOfViewDisplay.Stroke.Color = color
 			end,
 		})
 
@@ -42361,7 +42377,7 @@ Escape Timer: %*]]
 			Compact = true,
 			Suffix = " studs",
 			Callback = function(saDist)
-				tbl7.AimSettings.SADist = saDist
+				sharedState.AimSettings.SADist = saDist
 			end,
 		})
 
@@ -42373,7 +42389,7 @@ Escape Timer: %*]]
 			Rounding = 2,
 			Compact = true,
 			Callback = function(smoothness)
-				tbl7.AimSettings.Smoothness = smoothness
+				sharedState.AimSettings.Smoothness = smoothness
 			end,
 		})
 
@@ -42385,31 +42401,31 @@ Escape Timer: %*]]
 			Rounding = 0,
 			Compact = true,
 			Callback = function(fovRadius)
-				tbl7.AimSettings.FOVRadius = fovRadius
+				sharedState.AimSettings.FOVRadius = fovRadius
 			end,
 		})
 	end
 
 	do
-		local Triggerbot = tbl15.Misc:AddLeftGroupbox("Triggerbot", "mouse-left")
+		local Triggerbot = tabs.Misc:AddLeftGroupbox("Triggerbot", "mouse-left")
 
 		Triggerbot:AddToggle("TriggerToggle", {
 			Text = "Toggle",
 			Default = false,
 			Tooltip = "Clicks when you are aiming at a target",
 			Callback = function(triggerbotEnabled)
-				local aimSettings = tbl7.AimSettings
+				local aimSettings = sharedState.AimSettings
 
 				if aimSettings.TriggerbotEnabled ~= triggerbotEnabled then
 					aimSettings.TriggerVersion = aimSettings.TriggerVersion + 1
 				end
 
 				aimSettings.TriggerbotEnabled = triggerbotEnabled
-				tbl12.UpdateAimConnection()
+				featureUtils.UpdateAimConnection()
 			end,
 		})
 
-		if not lib.IsMobile then
+		if not uiLibrary.IsMobile then
 			toggles.TriggerToggle:AddKeyPicker("TriggerKeybind", {
 				Text = "Triggerbot",
 				Default = nil,
@@ -42430,7 +42446,7 @@ Escape Timer: %*]]
 			Rounding = 2,
 			Compact = true,
 			Callback = function(triggerDelay)
-				tbl7.AimSettings.TriggerDelay = triggerDelay
+				sharedState.AimSettings.TriggerDelay = triggerDelay
 			end,
 		})
 
@@ -42443,7 +42459,7 @@ Escape Timer: %*]]
 			Compact = true,
 			Suffix = " studs",
 			Callback = function(triggerDist)
-				tbl7.AimSettings.TriggerDist = triggerDist
+				sharedState.AimSettings.TriggerDist = triggerDist
 			end,
 		})
 
@@ -42456,7 +42472,7 @@ Escape Timer: %*]]
 			Compact = true,
 			Suffix = " seconds",
 			Callback = function(triggerCooldown)
-				tbl7.AimSettings.TriggerCooldown = triggerCooldown
+				sharedState.AimSettings.TriggerCooldown = triggerCooldown
 			end,
 		})
 
@@ -42464,7 +42480,7 @@ Escape Timer: %*]]
 			Text = "Camera Tricks",
 			Default = false,
 			Callback = function(triggerTricks)
-				tbl7.AimSettings.TriggerTricks = triggerTricks
+				sharedState.AimSettings.TriggerTricks = triggerTricks
 			end,
 		})
 
@@ -42477,7 +42493,7 @@ Escape Timer: %*]]
 			Default = "360 Spin",
 			Multi = false,
 			Callback = function(triggerTrick)
-				tbl7.AimSettings.TriggerTrick = triggerTrick
+				sharedState.AimSettings.TriggerTrick = triggerTrick
 			end,
 		})
 
@@ -42490,19 +42506,19 @@ Escape Timer: %*]]
 			Compact = true,
 			Suffix = "x",
 			Callback = function(triggerTrickSpeed)
-				tbl7.AimSettings.TriggerTrickSpeed = triggerTrickSpeed
+				sharedState.AimSettings.TriggerTrickSpeed = triggerTrickSpeed
 			end,
 		})
 	end
 
 	do
-		local v20 = tbl15.Misc:AddRightGroupbox("Silent Aim", "crosshair")
+		local v20 = tabs.Misc:AddRightGroupbox("Silent Aim", "crosshair")
 
 		v20:AddToggle("SilentAim", {
 			Text = "Silent Aim",
 			Default = false,
 			Tooltip = "Uses the game's raycast when supported, with a hitbox fallback",
-			Callback = tbl12.SetSilentAim,
+			Callback = featureUtils.SetSilentAim,
 		}):AddKeyPicker("SAIMKeybind", {
 			Text = "Silent Aim",
 			Default = nil,
@@ -42515,8 +42531,8 @@ Escape Timer: %*]]
 			Text = "Ignore Whitelisted",
 			Default = true,
 			Callback = function(silentAimIgnoreWhitelist)
-				tbl8.SilentAimIgnoreWhitelist = silentAimIgnoreWhitelist
-				tbl12.RefreshSilentAim()
+				toggleStates.SilentAimIgnoreWhitelist = silentAimIgnoreWhitelist
+				featureUtils.RefreshSilentAim()
 			end,
 		})
 
@@ -42524,21 +42540,21 @@ Escape Timer: %*]]
 			Text = "Selected Targets Only",
 			Default = false,
 			Callback = function(silentAimTargetsOnly)
-				tbl8.SilentAimTargetsOnly = silentAimTargetsOnly
-				tbl12.RefreshSilentAim()
+				toggleStates.SilentAimTargetsOnly = silentAimTargetsOnly
+				featureUtils.RefreshSilentAim()
 			end,
 		})
 
 		local v21 = v20:AddDependencyBox()
 		v21:SetupDependencies({ { SilentAimTargetsOnly, true } })
-		tbl12.CreatePlayerDropdown(v21, "SilentAimTargets", tbl7.SelectedSilentAimPlayers, true, false, tbl12.RefreshSilentAim)
+		featureUtils.CreatePlayerDropdown(v21, "SilentAimTargets", sharedState.SelectedSilentAimPlayers, true, false, featureUtils.RefreshSilentAim)
 
 		v20:AddToggle("SilentAimFOV", {
 			Text = "Show FOV Circle",
 			Default = false,
 			Callback = function(silentAimFOV)
-				tbl8.SilentAimFOV = silentAimFOV
-				tbl12.UpdateSilentAimFOV()
+				toggleStates.SilentAimFOV = silentAimFOV
+				featureUtils.UpdateSilentAimFOV()
 			end,
 		})
 
@@ -42546,15 +42562,15 @@ Escape Timer: %*]]
 
 		v20:AddSlider("SilentAimRadius", {
 			Text = "Aim Radius",
-			Default = tbl9.SAIMRadius,
+			Default = settings.SAIMRadius,
 			Min = 10,
 			Max = 400,
 			Rounding = 0,
 			Compact = true,
 			Suffix = " px",
 			Callback = function(saimRadius)
-				tbl9.SAIMRadius = saimRadius
-				tbl12.UpdateSilentAimFOV()
+				settings.SAIMRadius = saimRadius
+				featureUtils.UpdateSilentAimFOV()
 			end,
 		})
 
@@ -42567,19 +42583,19 @@ Escape Timer: %*]]
 			Compact = true,
 			Suffix = " studs",
 			Callback = function(saimHitbox)
-				tbl9.SAIMHitbox = saimHitbox
+				settings.SAIMHitbox = saimHitbox
 
-				if tbl8.SilentAim then
-					tbl12.RefreshSilentAim()
+				if toggleStates.SilentAim then
+					featureUtils.RefreshSilentAim()
 				end
 			end,
 		})
 	end
 
-	tbl12.SetSilentAim(tbl8.SilentAim)
+	featureUtils.SetSilentAim(toggleStates.SilentAim)
 
 	do
-		local Plots = tbl15.Misc:AddLeftGroupbox("Plots", "table")
+		local Plots = tabs.Misc:AddLeftGroupbox("Plots", "table")
 
 		Plots:AddDropdown("SelectedPlotDropdown", {
 			Values = { "Green House", "Yellow House", "Purple House", "Blue House", "Chinese House" },
@@ -42587,7 +42603,7 @@ Escape Timer: %*]]
 			Default = nil,
 			AllowNull = true,
 			Callback = function(arg)
-				tbl9.SelectedPlot = ({
+				settings.SelectedPlot = ({
 					["Green House"] = "Plot1",
 					["Yellow House"] = "Plot2",
 					["Purple House"] = "Plot3",
@@ -42602,12 +42618,12 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Automatically claims the plot you select if possible",
 			Callback = function(autoClaimPlot)
-				tbl8.AutoClaimPlot = autoClaimPlot
+				toggleStates.AutoClaimPlot = autoClaimPlot
 
 				task.spawn(function()
-					while tbl8.AutoClaimPlot and task.wait(0.1) do
-						if tbl9.SelectedPlot then
-							tbl12.ClaimPlot(tbl9.SelectedPlot)
+					while toggleStates.AutoClaimPlot and task.wait(0.1) do
+						if settings.SelectedPlot then
+							featureUtils.ClaimPlot(settings.SelectedPlot)
 						end
 					end
 				end)
@@ -42618,7 +42634,7 @@ Escape Timer: %*]]
 			Text = "Break Plot Area",
 			Tooltip = "Breaks the plot's area, making the game think that the players inside the plot are outside",
 			Callback = function()
-				tbl12.BreakPlot(workspace.Plots:FindFirstChild(tbl9.SelectedPlot))
+				featureUtils.BreakPlot(workspace.Plots:FindFirstChild(settings.SelectedPlot))
 			end,
 		})
 
@@ -42626,10 +42642,10 @@ Escape Timer: %*]]
 			Text = "Fix Plot Area",
 			Tooltip = "Fixes the plot area that was broken by using the button above",
 			Callback = function()
-				local v20 = tbl7.BrokenPlots[tbl9.SelectedPlot]
+				local v20 = sharedState.BrokenPlots[settings.SelectedPlot]
 
 				if v20 then
-					tbl12.DestroyToy(v20)
+					featureUtils.DestroyToy(v20)
 				end
 			end,
 		})
@@ -42638,19 +42654,19 @@ Escape Timer: %*]]
 			Text = "Fling all toys in plot",
 			Tooltip = "Flings all toys in the selected plot if possible",
 			Callback = function()
-				tbl12.DestroyPlot(tbl9.SelectedPlot)
+				featureUtils.DestroyPlot(settings.SelectedPlot)
 			end,
 		})
 	end
 
-	tbl15.Misc:AddLeftGroupbox("Cheaters", "drama"):AddButton({
+	tabs.Misc:AddLeftGroupbox("Cheaters", "drama"):AddButton({
 		Text = "Find Cheaters",
 		Func = function()
 			local tbl16 = {}
 
-			for _, v20 in tbl7.PlayerList, nil, nil do
-				if v20 ~= localPlayer then
-					local v21, v22, v23 = tbl12.Char(v20)
+			for _, v20 in sharedState.PlayerList, nil, nil do
+				if v20 ~= LocalPlayer then
+					local v21, v22, v23 = featureUtils.Char(v20)
 					local fn21, ragdollTouchedHitbox, firePlayerPart, v24, v25
 
 					if v23 then
@@ -42731,25 +42747,25 @@ Escape Timer: %*]]
 			end
 
 			if not next(tbl16) then
-				return fn18("Cheaters not found!")
+				return notify("Cheaters not found!")
 			end
 			local str5 = "Cheaters Found\n\n"
 
 			for k, v20 in pairs(tbl16) do
-				str5 ..= ("[%*]\n%*\n\n"):format(tbl12.FormatPlayer(k), v20)
+				str5 ..= ("[%*]\n%*\n\n"):format(featureUtils.FormatPlayer(k), v20)
 			end
 
-			fn18(str5:sub(1, -3))
+			notify(str5:sub(1, -3))
 		end,
 	})
 
 	do
-		local Whitelist = tbl15.Lists:AddLeftGroupbox("Whitelist", "shield-check")
-		local v20 = tbl12.CreatePlayerDropdown(Whitelist, "Whitelist", tbl7.Whitelisted)
+		local Whitelist = tabs.Lists:AddLeftGroupbox("Whitelist", "shield-check")
+		local v20 = featureUtils.CreatePlayerDropdown(Whitelist, "Whitelist", sharedState.Whitelisted)
 
 		v20:OnChanged(function()
-			if tbl8.SilentAim then
-				tbl12.RefreshSilentAim()
+			if toggleStates.SilentAim then
+				featureUtils.RefreshSilentAim()
 			end
 		end)
 
@@ -42757,11 +42773,11 @@ Escape Timer: %*]]
 		local friendStatusChanged = nil
 
 		pcall(function()
-			friendStatusChanged = localPlayer.FriendStatusChanged
+			friendStatusChanged = LocalPlayer.FriendStatusChanged
 		end)
 
 		local function fn21(arg, arg2)
-			if flag11 or not tbl8.AutoWhitelistFriends or arg == localPlayer or arg.Parent ~= Players or tbl12.IsProtectedPlayer(arg) then
+			if isUnloading or not toggleStates.AutoWhitelistFriends or arg == LocalPlayer or arg.Parent ~= Players or featureUtils.IsProtectedPlayer(arg) then
 				return
 			end
 			local flag12 = v20.Value[arg] == true
@@ -42797,10 +42813,10 @@ Escape Timer: %*]]
 		end
 
 		local function fn22(arg)
-			if arg == localPlayer or arg.Parent ~= Players or not tbl8.AutoWhitelistFriends then
+			if arg == LocalPlayer or arg.Parent ~= Players or not toggleStates.AutoWhitelistFriends then
 				return
 			end
-			local ok, result = pcall(localPlayer.IsFriendsWith, localPlayer, arg.UserId)
+			local ok, result = pcall(LocalPlayer.IsFriendsWith, LocalPlayer, arg.UserId)
 
 			if ok then
 				fn21(arg, result)
@@ -42814,14 +42830,14 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Adds your friends to the whitelist",
 			Callback = function(autoWhitelistFriends)
-				if tbl8.AutoWhitelistFriends == autoWhitelistFriends then
+				if toggleStates.AutoWhitelistFriends == autoWhitelistFriends then
 					return
 				end
-				tbl8.AutoWhitelistFriends = autoWhitelistFriends
-				tbl12.SetRuntimeConnection("AutoWhitelistFriends", Players.PlayerAdded, autoWhitelistFriends, fn22)
+				toggleStates.AutoWhitelistFriends = autoWhitelistFriends
+				featureUtils.SetRuntimeConnection("AutoWhitelistFriends", Players.PlayerAdded, autoWhitelistFriends, fn22)
 
 				if friendStatusChanged then
-					pcall(tbl12.SetRuntimeConnection, "AutoWhitelistStatus", friendStatusChanged, autoWhitelistFriends, function(arg, arg2)
+					pcall(featureUtils.SetRuntimeConnection, "AutoWhitelistStatus", friendStatusChanged, autoWhitelistFriends, function(arg, arg2)
 						if arg2 == Enum.FriendStatus.Friend or arg2 == Enum.FriendStatus.NotFriend then
 							fn21(arg, arg2 == Enum.FriendStatus.Friend)
 						end
@@ -42834,7 +42850,7 @@ Escape Timer: %*]]
 
 				task.spawn(function()
 					for _, v21 in Players:GetPlayers() do
-						if flag11 or not tbl8.AutoWhitelistFriends then
+						if isUnloading or not toggleStates.AutoWhitelistFriends then
 							return
 						end
 						fn22(v21)
@@ -42848,10 +42864,10 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Prevents server-wide features from affecting people in the list above",
 			Callback = function(whitelistedBypass)
-				tbl8.WhitelistedBypass = whitelistedBypass
+				toggleStates.WhitelistedBypass = whitelistedBypass
 
-				if tbl8.SilentAim then
-					tbl12.RefreshSilentAim()
+				if toggleStates.SilentAim then
+					featureUtils.RefreshSilentAim()
 				end
 			end,
 		})
@@ -42861,8 +42877,8 @@ Escape Timer: %*]]
 	toggles.AutoWhitelistFriends:SetValue(true)
 
 	do
-		local Immunity = tbl15.Lists:AddRightGroupbox("Immunity", "shield-user")
-		tbl12.CreatePlayerDropdown(Immunity, "Immunity", tbl7.ImmunePlayers)
+		local Immunity = tabs.Lists:AddRightGroupbox("Immunity", "shield-user")
+		featureUtils.CreatePlayerDropdown(Immunity, "Immunity", sharedState.ImmunePlayers)
 		Immunity:AddDivider("Modes")
 
 		Immunity:AddToggle("ImmunityAGToggle", {
@@ -42870,8 +42886,8 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Makes sure that selected players will not get grabbed",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("ImmunityAntiGrab", arg)
-				tbl12.WakeRuntimeGate("ImmunityPosition")
+				featureUtils.SetRuntimeToggle("ImmunityAntiGrab", arg)
+				featureUtils.WakeRuntimeGate("ImmunityPosition")
 			end,
 		})
 
@@ -42880,7 +42896,7 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Makes sure that selected players will not get kicked",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("ImmunityAntiKick", arg)
+				featureUtils.SetRuntimeToggle("ImmunityAntiKick", arg)
 			end,
 		})
 
@@ -42889,16 +42905,16 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Restores selected players if an explosion moves them",
 			Callback = function(arg)
-				tbl12.SetRuntimeToggle("ImmunityAntiExplosion", arg)
-				tbl12.WakeRuntimeGate("ImmunityPosition")
+				featureUtils.SetRuntimeToggle("ImmunityAntiExplosion", arg)
+				featureUtils.WakeRuntimeGate("ImmunityPosition")
 			end,
 		})
 	end
 
 	do
-		local Menu = tbl15.Settings:AddLeftGroupbox("Menu", "wrench")
+		local Menu = tabs.Settings:AddLeftGroupbox("Menu", "wrench")
 		Menu:AddLabel("Menu Keybind"):AddKeyPicker("menukey", { Text = "Menu Keybind", Mode = "Toggle", Default = "RightShift", NoUI = false })
-		lib.ToggleKeybind = options.menukey
+		uiLibrary.ToggleKeybind = options.menukey
 
 		Menu:AddToggle("WatermarkT", {
 			Default = true,
@@ -42914,17 +42930,17 @@ Escape Timer: %*]]
 			Default = false,
 			Text = "Open Keybind Menu",
 			Callback = function(visible)
-				lib.KeybindFrame.Visible = visible
+				uiLibrary.KeybindFrame.Visible = visible
 			end,
 		})
 
-		if not lib.IsMobile then
+		if not uiLibrary.IsMobile then
 			Menu:AddToggle("OnlyAssignedKeybinds", {
 				Default = false,
 				Text = "Only Show Assigned",
 				Callback = function(onlyAssignedKeybinds)
-					tbl8.OnlyAssignedKeybinds = onlyAssignedKeybinds
-					tbl12.UpdateKeybindMenu()
+					toggleStates.OnlyAssignedKeybinds = onlyAssignedKeybinds
+					featureUtils.UpdateKeybindMenu()
 				end,
 			})
 		end
@@ -42944,8 +42960,8 @@ Escape Timer: %*]]
 			Default = false,
 			Text = "Mouse-Lock",
 			Callback = function(arg)
-				local shiftLockKey = tbl9.ShiftLockKey
-				local playerModule = localPlayer.PlayerScripts:FindFirstChild("PlayerModule")
+				local shiftLockKey = settings.ShiftLockKey
+				local playerModule = LocalPlayer.PlayerScripts:FindFirstChild("PlayerModule")
 				if not playerModule then
 					return
 				end
@@ -42981,10 +42997,10 @@ Escape Timer: %*]]
 			Default = "LeftAlt",
 			NoUI = true,
 			ChangedCallback = function(arg)
-				tbl9.ShiftLockKey = arg.Name
+				settings.ShiftLockKey = arg.Name
 
 				if toggles.MouseLockT and toggles.MouseLockT.Value then
-					local mouseLockController = localPlayer.PlayerScripts:FindFirstChild("PlayerModule") and localPlayer.PlayerScripts.PlayerModule:FindFirstChild("CameraModule") and localPlayer.PlayerScripts.PlayerModule.CameraModule:FindFirstChild("MouseLockController")
+					local mouseLockController = LocalPlayer.PlayerScripts:FindFirstChild("PlayerModule") and LocalPlayer.PlayerScripts.PlayerModule:FindFirstChild("CameraModule") and LocalPlayer.PlayerScripts.PlayerModule.CameraModule:FindFirstChild("MouseLockController")
 					local boundKeys = mouseLockController and mouseLockController:FindFirstChild("BoundKeys")
 
 					if boundKeys then
@@ -42996,14 +43012,14 @@ Escape Timer: %*]]
 	end
 
 	do
-		local Network = tbl15.Settings:AddRightGroupbox("Network", "radio-tower")
+		local Network = tabs.Settings:AddRightGroupbox("Network", "radio-tower")
 
 		Network:AddToggle("PositionPrediction", {
 			Text = "Position Prediction",
 			Default = false,
 			Tooltip = "Predicts the next server position of the target before teleporting to them and trying to grab them. This can cause issues if target's movement sequence isn't linear",
 			Callback = function(positionPrediction)
-				tbl8.PositionPrediction = positionPrediction
+				toggleStates.PositionPrediction = positionPrediction
 			end,
 		})
 
@@ -43012,39 +43028,39 @@ Escape Timer: %*]]
 			Default = false,
 			Tooltip = "Changes the position of the second argument to use direct part position instead of your head's LookAt CFrame. This can either help or just reduce your grab distance",
 			Callback = function(directGrab)
-				tbl8.DirectGrab = directGrab
+				toggleStates.DirectGrab = directGrab
 			end,
 		})
 	end
 
 	do
-		local Display = tbl15.Settings:AddLeftGroupbox("Display", "monitor")
+		local Display = tabs.Settings:AddLeftGroupbox("Display", "monitor")
 		Display:AddDivider("Cursor")
 
 		Display:AddToggle("ShowCustomCursor", {
 			Text = "Custom Cursor",
 			Default = true,
 			Callback = function(showCustomCursor)
-				lib.ShowCustomCursor = showCustomCursor
+				uiLibrary.ShowCustomCursor = showCustomCursor
 			end,
 		}):AddColorPicker("CursorIconColor", {
-			Default = tbl9.CursorIconColor,
+			Default = settings.CursorIconColor,
 			Title = "Cursor Color",
-			Callback = tbl12.SetCursorIconColor,
+			Callback = featureUtils.SetCursorIconColor,
 		})
 
 		Display:AddInput("CursorImage", {
 			Text = "Image Link/ID",
 			ClearTextOnFocus = false,
 			Callback = function(arg)
-				tbl12.ResolveAssetInput(arg, "CursorIcon", "image", function(cursorIcon)
-					tbl9.CursorIcon = cursorIcon
+				featureUtils.ResolveAssetInput(arg, "CursorIcon", "image", function(cursorIcon)
+					settings.CursorIcon = cursorIcon
 
 					if cursorIcon then
-						lib:ChangeCursorIcon(cursorIcon)
-						lib:ChangeCursorIconSize(UDim2.fromOffset(tbl9.CursorIconSize, tbl9.CursorIconSize))
+						uiLibrary:ChangeCursorIcon(cursorIcon)
+						uiLibrary:ChangeCursorIconSize(UDim2.fromOffset(settings.CursorIconSize, settings.CursorIconSize))
 					else
-						lib:ResetCursorIcon()
+						uiLibrary:ResetCursorIcon()
 					end
 				end)
 			end,
@@ -43052,15 +43068,15 @@ Escape Timer: %*]]
 
 		Display:AddSlider("CursorIconSize", {
 			Text = "Custom Cursor Size",
-			Default = tbl9.CursorIconSize,
+			Default = settings.CursorIconSize,
 			Min = 8,
 			Max = 64,
 			Rounding = 0,
 			Suffix = " px",
 			Compact = true,
 			Callback = function(cursorIconSize)
-				tbl9.CursorIconSize = cursorIconSize
-				lib:ChangeCursorIconSize(UDim2.fromOffset(cursorIconSize, cursorIconSize))
+				settings.CursorIconSize = cursorIconSize
+				uiLibrary:ChangeCursorIconSize(UDim2.fromOffset(cursorIconSize, cursorIconSize))
 			end,
 		})
 
@@ -43070,7 +43086,7 @@ Escape Timer: %*]]
 				options.CursorImage:SetValue("")
 				options.CursorIconSize:SetValue(20)
 				options.CursorIconColor:SetValue(Color3.new(1, 1, 1))
-				lib:ResetCursorIcon()
+				uiLibrary:ResetCursorIcon()
 			end,
 		})
 
@@ -43083,24 +43099,24 @@ Escape Timer: %*]]
 			Callback = function(arg)
 				local str5 = arg:gsub("%%", "")
 				local num = tonumber(str5)
-				lib:SetDPIScale(num)
+				uiLibrary:SetDPIScale(num)
 			end,
 		})
 
 		Display:AddSlider("UICornerSlider", {
 			Text = "Corner Radius",
-			Default = lib.CornerRadius,
+			Default = uiLibrary.CornerRadius,
 			Min = 0,
 			Max = 20,
 			Rounding = 0,
 			Callback = function(arg)
-				v19:SetCornerRadius(arg)
+				window:SetCornerRadius(arg)
 			end,
 		})
 	end
 
 	do
-		local Notifications = tbl15.Settings:AddRightGroupbox("Notifications", "bell-ring")
+		local Notifications = tabs.Settings:AddRightGroupbox("Notifications", "bell-ring")
 
 		local tbl16 = {
 			Default = 97643101798871,
@@ -43115,7 +43131,7 @@ Escape Timer: %*]]
 			Default = true,
 			Tooltip = "Enables or disables every Meowixa notification",
 			Callback = function(enabled)
-				tbl7.NotificationSettings.Enabled = enabled
+				sharedState.NotificationSettings.Enabled = enabled
 			end,
 		})
 
@@ -43126,8 +43142,8 @@ Escape Timer: %*]]
 			Multi = true,
 			AllowNull = true,
 			Callback = function(arg)
-				for k in pairs(tbl7.NotificationSettings.Events) do
-					tbl7.NotificationSettings.Events[k] = arg[k] == true
+				for k in pairs(sharedState.NotificationSettings.Events) do
+					sharedState.NotificationSettings.Events[k] = arg[k] == true
 				end
 			end,
 		})
@@ -43142,7 +43158,7 @@ Escape Timer: %*]]
 			Callback = function(arg)
 				if tbl16[arg] then
 					options.CustomNotificationSound:SetValue(tbl16[arg])
-					fn18("Successfully set sound!")
+					notify("Successfully set sound!")
 				end
 			end,
 		})
@@ -43153,13 +43169,13 @@ Escape Timer: %*]]
 			Default = "97643101798871",
 			ClearTextOnFocus = false,
 			Callback = function(arg)
-				tbl9.CustomNotificationSound = tostring(arg or "")
+				settings.CustomNotificationSound = tostring(arg or "")
 
-				tbl12.ResolveAssetInput(tbl9.CustomNotificationSound, "NotificationSound", "sound", function(arg2, arg3)
-					n34 = arg2 or 97643101798871
+				featureUtils.ResolveAssetInput(settings.CustomNotificationSound, "NotificationSound", "sound", function(arg2, arg3)
+					defaultNotificationSound = arg2 or 97643101798871
 
 					if arg3 then
-						fn18("Successfully loaded notification MP3!")
+						notify("Successfully loaded notification MP3!")
 					end
 				end, 97643101798871, true)
 			end,
@@ -43170,25 +43186,25 @@ Escape Timer: %*]]
 			Default = "Right",
 			Text = "Notification Side",
 			Callback = function(arg)
-				lib:SetNotifySide(arg)
+				uiLibrary:SetNotifySide(arg)
 			end,
 		})
 
 		Notifications:AddSlider("NotifVolumeSlider", {
 			Text = "Volume",
-			Default = n35,
+			Default = notificationVolume,
 			Min = 0,
 			Max = 10,
 			Rounding = 1,
 			Callback = function(arg)
-				n35 = arg
+				notificationVolume = arg
 			end,
 		})
 
 		Notifications:AddButton({
 			Text = "Test Notification",
 			Func = function()
-				fn18("This is how your notifications currently look.", "Notification Test", nil, nil, true)
+				notify("This is how your notifications currently look.", "Notification Test", nil, nil, true)
 			end,
 		})
 
@@ -43204,34 +43220,34 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 
 		Notifications:AddInput("KickedPlayerNotification", {
 			Text = "Kicked Player Message",
-			Default = tbl7.NotificationSettings.Templates["Kicked Player"],
+			Default = sharedState.NotificationSettings.Templates["Kicked Player"],
 			ClearTextOnFocus = false,
 			AllowEmpty = false,
 			EmptyReset = "%kickedPlayer% has been kicked.",
 			Callback = function(arg)
-				tbl7.NotificationSettings.Templates["Kicked Player"] = tostring(arg)
+				sharedState.NotificationSettings.Templates["Kicked Player"] = tostring(arg)
 			end,
 		})
 
 		Notifications:AddInput("LeftPlayerNotification", {
 			Text = "Player Left Message",
-			Default = tbl7.NotificationSettings.Templates["Player Left"],
+			Default = sharedState.NotificationSettings.Templates["Player Left"],
 			ClearTextOnFocus = false,
 			AllowEmpty = false,
 			EmptyReset = "%leftPlayer% left and was removed from %listCount% list(s).",
 			Callback = function(arg)
-				tbl7.NotificationSettings.Templates["Player Left"] = tostring(arg)
+				sharedState.NotificationSettings.Templates["Player Left"] = tostring(arg)
 			end,
 		})
 
 		Notifications:AddInput("RejoinedPlayerNotification", {
 			Text = "Player Rejoined Message",
-			Default = tbl7.NotificationSettings.Templates["Player Rejoined"],
+			Default = sharedState.NotificationSettings.Templates["Player Rejoined"],
 			ClearTextOnFocus = false,
 			AllowEmpty = false,
 			EmptyReset = "%rejoinedPlayer% rejoined and was restored to %listCount% list(s).",
 			Callback = function(arg)
-				tbl7.NotificationSettings.Templates["Player Rejoined"] = tostring(arg)
+				sharedState.NotificationSettings.Templates["Player Rejoined"] = tostring(arg)
 			end,
 		})
 	end
@@ -43325,8 +43341,8 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 		end
 
 		local function fn26()
-			local mainFrame = v19.MainFrame
-			local sidebarWidth = v19:GetSidebarWidth()
+			local mainFrame = window.MainFrame
+			local sidebarWidth = window:GetSidebarWidth()
 
 			local tbl16 = {
 				Position = mainFrame and fn21(mainFrame.Position),
@@ -43339,7 +43355,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 				MobileButtons = {},
 			}
 
-			for k, v20 in tbl7.ActiveDraggableButtons, nil, nil do
+			for k, v20 in sharedState.ActiveDraggableButtons, nil, nil do
 				if v20 and v20.Button and v20.Button.Parent then
 					tbl16.MobileButtons[k] = { Position = fn21(v20.Button.Position), ScreenPosition = fn23(v20.Button) }
 				end
@@ -43352,7 +43368,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			if typeof(arg) ~= "table" then
 				return
 			end
-			local mainFrame = v19.MainFrame
+			local mainFrame = window.MainFrame
 			local v20 = fn22(arg.Size)
 			local v21 = fn22(arg.Position)
 			local v22 = fn22(arg.WatermarkPosition)
@@ -43368,17 +43384,17 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			end
 
 			if typeof(n36) == "number" then
-				v19:SetSidebarWidth(n36)
+				window:SetSidebarWidth(n36)
 			end
 
 			local tbl16 = {}
 
-			for k in tbl7.ActiveDraggableButtons, nil, nil do
+			for k in sharedState.ActiveDraggableButtons, nil, nil do
 				table.insert(tbl16, k)
 			end
 
 			for _, v23 in tbl16, nil, nil do
-				tbl12.RemoveMobileButton(v23)
+				featureUtils.RemoveMobileButton(v23)
 			end
 
 			if typeof(arg.MobileButtons) ~= "table" then
@@ -43387,7 +43403,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 
 			for k, v23 in arg.MobileButtons, nil, nil do
 				if typeof(v23) == "table" then
-					local v24 = tbl12.AddMobileButton(k, fn22(v23.Position or v23))
+					local v24 = featureUtils.AddMobileButton(k, fn22(v23.Position or v23))
 
 					if v24 then
 						fn24(v24.Button, v23.ScreenPosition)
@@ -43396,13 +43412,13 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			end
 		end
 
-		lib2:SetLibrary(lib)
-		lib2:SetFolder("Meowixa")
-		lib3:SetLibrary(lib)
-		local saveJSON = lib3.SaveJSON
-		local loadJSON = lib3.LoadJSON
+		themeManager:SetLibrary(uiLibrary)
+		themeManager:SetFolder("Meowixa")
+		saveManager:SetLibrary(uiLibrary)
+		local saveJSON = saveManager.SaveJSON
+		local loadJSON = saveManager.LoadJSON
 
-		lib3.SaveJSON = function(arg, arg2)
+		saveManager.SaveJSON = function(arg, arg2)
 			local v20, v21, v22 = saveJSON(arg, arg2)
 			if not v21 then
 				return v20, v21, v22
@@ -43419,7 +43435,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			return v20, v21, v22
 		end
 
-		lib3.LoadJSON = function(arg, arg2)
+		saveManager.LoadJSON = function(arg, arg2)
 			local ok, result = pcall(HttpService.JSONDecode, HttpService, arg2)
 			local v20, v21 = loadJSON(arg, arg2)
 
@@ -43431,9 +43447,9 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 		end
 	end
 
-	lib3:IgnoreThemeSettings()
+	saveManager:IgnoreThemeSettings()
 
-	lib3:SetIgnoreIndexes({
+	saveManager:SetIgnoreIndexes({
 		"WhitelistDropdown",
 		"ObjectGroup",
 		"GroupNoclip",
@@ -43442,16 +43458,16 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 		"GroupOutline",
 	})
 
-	lib3:SetFolder("Meowixa/FTAP")
-	lib3:BuildConfigSection(tbl15.Settings)
-	lib3:LoadAutoloadConfig()
+	saveManager:SetFolder("Meowixa/FTAP")
+	saveManager:BuildConfigSection(tabs.Settings)
+	saveManager:LoadAutoloadConfig()
 
-	if lib.IsMobile then
+	if uiLibrary.IsMobile then
 		toggles.AlwaysOnToggleAB:SetValue(true)
 		toggles.AlwaysOnToggleAB:SetDisabled(true)
 	end
 
-	lib2:SetDefaultTheme({
+	themeManager:SetDefaultTheme({
 		BackgroundColor = Color3.fromRGB(15, 15, 15),
 		MainColor = Color3.fromRGB(25, 25, 25),
 		AccentColor = Color3.fromRGB(255, 170, 255),
@@ -43461,7 +43477,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 	})
 
 	task.spawn(function()
-		lib2:ApplyToTab(tbl15.Settings)
+		themeManager:ApplyToTab(tabs.Settings)
 	end)
 
 	task.defer(function()
@@ -43500,7 +43516,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 						changed(...)
 					end
 
-					tbl12.UpdateKeybindMenu()
+					featureUtils.UpdateKeybindMenu()
 					local v23 = fn21(v20)
 					local v24 = tbl16
 					local tbl17 = {}
@@ -43522,7 +43538,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 						return
 					end
 					v21 = v23
-					if flag12 or not v23 or flag11 then
+					if flag12 or not v23 or isUnloading then
 						return
 					end
 					local tbl18 = {}
@@ -43536,7 +43552,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 					if #tbl18 > 0 then
 						table.sort(tbl18)
 
-						v19:AddDialog("KeybindConflict", {
+						window:AddDialog("KeybindConflict", {
 							Title = "Keybind already assigned",
 							Description = "This binding is also assigned to: " .. table.concat(tbl18, ", ") .. ". What would you like to do?",
 							OutsideClickDismiss = false,
@@ -43546,7 +43562,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 									Order = 1,
 									Variant = "Secondary",
 									Callback = function()
-										if flag11 or fn21(v20) ~= v23 then
+										if isUnloading or fn21(v20) ~= v23 then
 											return
 										end
 										flag12 = true
@@ -43558,7 +43574,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 									Title = "Replace",
 									Order = 2,
 									Callback = function()
-										if flag11 or fn21(v20) ~= v23 then
+										if isUnloading or fn21(v20) ~= v23 then
 											return
 										end
 
@@ -43579,57 +43595,57 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 
 		for _, v20 in toggles, nil, nil do
 			if v20 and v20.OnChanged then
-				v20:OnChanged(tbl12.UpdateEnabledToggleCount)
+				v20:OnChanged(featureUtils.UpdateEnabledToggleCount)
 			end
 		end
 
-		tbl12.UpdateKeybindMenu()
-		tbl12.UpdateEnabledToggleCount()
+		featureUtils.UpdateKeybindMenu()
+		featureUtils.UpdateEnabledToggleCount()
 	end)
 
-	lib:OnUnload(function()
+	uiLibrary:OnUnload(function()
 		local now2 = os.clock()
-		flag11 = true
-		pcall(tbl12.SetGucciAntiGrab, false)
-		pcall(tbl12.CancelServerHop)
-		pcall(tbl12.SetSilentAim, false)
-		pcall(tbl12.SetDesync, false)
-		pcall(tbl12.SetLookFigures, false)
-		pcall(tbl12.SetAntiShurikenLag, false)
-		pcall(tbl12.SetBrokenPartHighlights, false)
-		pcall(tbl12.ClearFling)
+		isUnloading = true
+		pcall(featureUtils.SetGucciAntiGrab, false)
+		pcall(featureUtils.CancelServerHop)
+		pcall(featureUtils.SetSilentAim, false)
+		pcall(featureUtils.SetDesync, false)
+		pcall(featureUtils.SetLookFigures, false)
+		pcall(featureUtils.SetAntiShurikenLag, false)
+		pcall(featureUtils.SetBrokenPartHighlights, false)
+		pcall(featureUtils.ClearFling)
 
 		pcall(function()
-			tbl12.DestroyToy(v17:FindFirstChild("RSCMicrowave"))
+			featureUtils.DestroyToy(spawnedToysFolder:FindFirstChild("RSCMicrowave"))
 		end)
 
-		pcall(tbl12.CleanupAutoClicker)
-		pcall(tbl12.SetCharacterHighlight, false)
-		pcall(tbl12.SetBoostFPS, false)
-		pcall(tbl12.SetChinaHat, false)
-		pcall(tbl12.SetCustomCrosshair, false)
-		pcall(tbl12.SetCameraNoclip, false)
-		pcall(tbl12.ClearDestroyObjects)
-		pcall(tbl12.ClearObjectGroups)
-		pcall(tbl12.ClearAnchors)
-		pcall(tbl12.ClearAuraVisuals)
-		pcall(tbl12.ClearCoconutForms)
-		pcall(tbl12.CleanupESP)
-		pcall(tbl12.ClearMutedSounds)
-		pcall(tbl12.WakeRuntimeGates)
-		pcall(tbl12.DisconnectRuntimeConnections)
-		pcall(tbl12.StopControlCharacter)
-		pcall(tbl12.StopFly)
-		pcall(tbl10.CancelAll)
-		pcall(tbl13.ClearModels, true)
-		pcall(tbl13.CleanupCandidates)
+		pcall(featureUtils.CleanupAutoClicker)
+		pcall(featureUtils.SetCharacterHighlight, false)
+		pcall(featureUtils.SetBoostFPS, false)
+		pcall(featureUtils.SetChinaHat, false)
+		pcall(featureUtils.SetCustomCrosshair, false)
+		pcall(featureUtils.SetCameraNoclip, false)
+		pcall(featureUtils.ClearDestroyObjects)
+		pcall(featureUtils.ClearObjectGroups)
+		pcall(featureUtils.ClearAnchors)
+		pcall(featureUtils.ClearAuraVisuals)
+		pcall(featureUtils.ClearCoconutForms)
+		pcall(featureUtils.CleanupESP)
+		pcall(featureUtils.ClearMutedSounds)
+		pcall(featureUtils.WakeRuntimeGates)
+		pcall(featureUtils.DisconnectRuntimeConnections)
+		pcall(featureUtils.StopControlCharacter)
+		pcall(featureUtils.StopFly)
+		pcall(runtimeWorkers.CancelAll)
+		pcall(modelState.ClearModels, true)
+		pcall(modelState.CleanupCandidates)
 
 		if v18 then
-			pcall(tbl12.DestroyToy, v18)
+			pcall(featureUtils.DestroyToy, v18)
 			v18 = nil
 		end
 
-		tbl12.ClearCustomAssets()
+		featureUtils.ClearCustomAssets()
 
 		pcall(function()
 			RunService:UnbindFromRenderStep("RSCZoom")
@@ -43647,11 +43663,11 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			end
 		end
 
-		table.clear(tbl7.AutoClicker)
-		table.clear(tbl7.AutoClickerTargetPoses)
+		table.clear(sharedState.AutoClicker)
+		table.clear(sharedState.AutoClickerTargetPoses)
 
-		for k in pairs(tbl8) do
-			tbl8[k] = false
+		for k in pairs(toggleStates) do
+			toggleStates[k] = false
 		end
 
 		for _, option in pairs(options) do
@@ -43662,8 +43678,8 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 			end
 		end
 
-		pcall(tbl12.RestoreWaterSettings)
-		pcall(tbl12.RestoreSkySettings)
+		pcall(featureUtils.RestoreWaterSettings)
+		pcall(featureUtils.RestoreSkySettings)
 
 		if Watermark and typeof(Watermark.Label) == "Instance" then
 			Watermark.Label:Destroy()
@@ -43689,7 +43705,7 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 	end)
 
 	task.spawn(function()
-		for _, v20 in lib.Tabs, nil, nil do
+		for _, v20 in uiLibrary.Tabs, nil, nil do
 			for _, v21 in v20.Groupboxes, nil, nil do
 				v21:Resize()
 			end
@@ -43700,18 +43716,18 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 		local tbl16 = {}
 
 		Players.PlayerRemoving:Connect(function(player)
-			if flag11 then
+			if isUnloading then
 				return
 			end
 
-			if tbl9.SelectedACPoseCenter == player then
-				tbl9.SelectedACPoseCenter = nil
+			if settings.SelectedACPoseCenter == player then
+				settings.SelectedACPoseCenter = nil
 			end
 
 			local tbl17 = {}
-			local flag12 = tbl7.SelectedPlayersAC[player] == true
+			local flag12 = sharedState.SelectedPlayersAC[player] == true
 
-			for _, playerDropdown in ipairs(tbl7.PlayerDropdowns) do
+			for _, playerDropdown in ipairs(sharedState.PlayerDropdowns) do
 				if playerDropdown.Selected[player] then
 					playerDropdown.Selected[player] = nil
 					playerDropdown.Values[player] = nil
@@ -43719,20 +43735,20 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 				end
 			end
 
-			if flag12 and tbl12.SyncACPoseTargets then
-				task.defer(tbl12.SyncACPoseTargets)
+			if flag12 and featureUtils.SyncACPoseTargets then
+				task.defer(featureUtils.SyncACPoseTargets)
 			end
 
 			if #tbl17 == 0 then
 				return
 			end
-			tbl12.NotifyEvent("Player Left", { leftPlayer = tbl12.FormatPlayer(player), listCount = #tbl17 }, "Player Left")
+			featureUtils.NotifyEvent("Player Left", { leftPlayer = featureUtils.FormatPlayer(player), listCount = #tbl17 }, "Player Left")
 			tbl16[player.UserId] = tbl17
 		end)
 
 		Players.PlayerAdded:Connect(function(player)
 			local v20 = tbl16[player.UserId]
-			if not v20 or flag11 or not getgenv().MeowixaRunning then
+			if not v20 or isUnloading or not getgenv().MeowixaRunning then
 				return
 			end
 			tbl16[player.UserId] = nil
@@ -43767,11 +43783,11 @@ Rejoined: %rejoinedPlayer%, %listCount%]],
 				end
 			end
 
-			tbl12.NotifyEvent("Player Rejoined", { rejoinedPlayer = tbl12.FormatPlayer(player), listCount = #v20 }, "Player Rejoined")
+			featureUtils.NotifyEvent("Player Rejoined", { rejoinedPlayer = featureUtils.FormatPlayer(player), listCount = #v20 }, "Player Rejoined")
 		end)
 	end
 
-	fn18("Script loaded in " .. math.round((tick() - getgenv().LoadTime) * 100) / 100 .. " seconds", "Meowixa", 71450094482101)
+	notify("Script loaded in " .. math.round((tick() - getgenv().LoadTime) * 100) / 100 .. " seconds", "Meowixa", 71450094482101)
 	getgenv().LoadTime = nil
 
 	return {
