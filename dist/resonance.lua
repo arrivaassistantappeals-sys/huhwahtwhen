@@ -197,12 +197,12 @@ local function bringSelfToOwner(speaker)
 end
 
 local function revealSelf(speaker)
-	sysMsg("I'm using a private script provided by arrivabus415!")
+	sysMsg("I'm using Meowixa 3.0 by Arriva!")
 end
 
 local function srevealSelf(speaker)
 	
-	sysMsg("/w "..speakerLabel(speaker).. " \' I'm using a private script provided by arrivabus415!")
+	sysMsg("/w "..speakerLabel(speaker).. " \' I'm using Meowixa 3.0 by Arriva!")
 end
 
 local function killSelf(speaker)
