@@ -3,6 +3,211 @@ local sources = {}
 sources.Intro = [====[
 local Intro = {}
 
+--// Owner
+local HUB_OWNER_ID = 1325117607
+
+--// Whitelist
+local WHITELIST = {
+	[1325117607] = "arrivabus415",
+	[115211703] = "00FSwedish",
+	[9225934804] = "imagine2v1_L",
+	[1485161889] = "noirofknights",
+}
+
+--// Whitelist check
+if WHITELIST[LocalPlayer.UserId] == nil then
+	LocalPlayer:Kick("Nah not today bruh. find ur own shit to use.")
+	return
+end
+
+--// Debounce for sysMsg to prevent spam
+local lastMessages = {}
+local DEBOUNCE_TIME = 0.5
+
+local function sysMsg(text)
+	-- Check if this exact message was sent recently
+	local now = tick()
+	if lastMessages[text] and (now - lastMessages[text]) < DEBOUNCE_TIME then
+		return -- Ignore duplicate
+	end
+	lastMessages[text] = now
+
+	pcall(function()
+		local chatVersion = TextChatService.ChatVersion
+
+		if chatVersion == Enum.ChatVersion.TextChatService then
+			local channels = TextChatService:FindFirstChild("TextChannels")
+			if channels then
+				local generalChannel = channels:FindFirstChild("RBXGeneral")
+				if generalChannel and generalChannel:IsA("TextChannel") then
+					generalChannel:SendAsync(text)
+				end
+			end
+		end
+	end)
+end
+
+--// Get all whitelisted players currently in-game
+--// Get all players currently in-game
+local function getAllPlayers()
+	return Players:GetPlayers()
+end
+
+--// Enhanced player finder
+local function findTarget(targetStr)
+	if not targetStr then return nil end
+
+	targetStr = targetStr:lower():gsub("^@", "")
+
+	-- "me" = LocalPlayer
+	if targetStr == "me" then
+		return {LocalPlayer}
+	end
+
+	-- "all" = all players
+	if targetStr == "all" then
+		return getAllPlayers()
+	end
+
+	-- Partial match (username or display name)
+	local matches = {}
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr.Name:lower():find(targetStr, 1, true) or plr.DisplayName:lower():find(targetStr, 1, true) then
+			table.insert(matches, plr)
+		end
+	end
+
+	return #matches > 0 and matches or nil
+end
+
+--// Actions
+local function bringSelfToOwner()
+	local owner = Players:GetPlayerByUserId(HUB_OWNER_ID)
+	if not owner or not owner.Character then return end
+
+	local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	local ownerRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+
+	if myRoot and ownerRoot then
+		Hub.teleportPart(myRoot, ownerRoot.CFrame * CFrame.new(0, 5, 0))
+		sysMsg("Brought to hub owner")
+	end
+end
+
+local function revealSelf()
+	sysMsg("I'm using a script provided by arrivabus415!")
+end
+
+local function killSelf()
+	local char = LocalPlayer.Character
+	if char then
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.Health = 0
+			sysMsg("You were killed by hub owner")
+		end
+	end
+end
+
+local function kickSelf()
+	sysMsg("You were removed by hub owner")
+	task.wait(0.5)
+	LocalPlayer:Kick("Removed by hub owner")
+end
+
+--// Command handler
+local function processCommand(speaker, text)
+	-- Remote control is opt-in; the hub owner cannot control this client by default.
+	if Hub.env.ArrivaAllowOwnerCommands ~= true then return end
+	if speaker.UserId ~= HUB_OWNER_ID then return end
+
+	-- Only process messages that start with "!" to prevent loops
+	if type(text)~="string" then return end
+	text=text:match("^%s*(.-)%s*$")
+	if not text:match("^[!:]") then
+		return
+	end
+
+	local args = {}
+	for word in text:gmatch("%S+") do table.insert(args,word) end
+	local cmd = args[1] and args[1]:lower():gsub("^:","!")
+
+	if cmd == "!bring" then
+		local targetStr = args[2]
+		local targets = findTarget(targetStr)
+
+		if targets then
+			for _, target in ipairs(targets) do
+				if target == LocalPlayer then
+					bringSelfToOwner()
+					break
+				end
+			end
+		end
+
+	elseif cmd == "!reveal" then
+		local targetStr = args[2]
+		local targets = findTarget(targetStr)
+
+		if targets then
+			for _, target in ipairs(targets) do
+				if target == LocalPlayer then
+					revealSelf()
+					break
+				end
+			end
+		end
+
+	elseif cmd == "!kill" then
+		local targetStr = args[2]
+		local targets = findTarget(targetStr)
+
+		if targets then
+			for _, target in ipairs(targets) do
+				if target == LocalPlayer then
+					killSelf()
+					break
+				end
+			end
+		end
+
+	elseif cmd == "!kick" then
+		local targetStr = args[2]
+		local targets = findTarget(targetStr)
+
+		if targets then
+			for _, target in ipairs(targets) do
+				if target == LocalPlayer then
+					kickSelf()
+					break
+				end
+			end
+		end
+
+	elseif cmd == "!announce" then
+		local msg = table.concat(args, " ", 2)
+		if msg ~= "" then
+			sysMsg("[Hub Owner] " .. msg)
+		end
+	end
+end
+
+-- Owner commands: subscribe without replacing the game's chat formatting callback.
+if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+	Hub.connect(TextChatService.MessageReceived, function(message)
+		local speaker = message.TextSource and Players:GetPlayerByUserId(message.TextSource.UserId)
+		if speaker then processCommand(speaker, message.Text) end
+	end)
+else
+	local function hookPlayer(plr)
+		Hub.connect(plr.Chatted, function(msg) processCommand(plr, msg) end)
+	end
+	for _, player in ipairs(Players:GetPlayers()) do hookPlayer(player) end
+	Hub.connect(Players.PlayerAdded, hookPlayer)
+end
+
+print("Arriva Core Hub owner command core loaded")
+
 function Intro.Play()
     local gui
     local watchdog
