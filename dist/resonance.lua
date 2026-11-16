@@ -201,12 +201,8 @@ local function revealSelf(speaker)
 end
 
 local function srevealSelf(speaker)
-	local message = "I'm using a private script provided by arrivabus415!"
-	if speaker and tryLegacyWhisper(speaker, message) then
-		return
-	end
-	-- No legacy chat remote: post a whisper-styled public message instead.
-	sysMsg("[whisper -> " .. speakerLabel(speaker) .. "] " .. message)
+	
+	sysMsg("/w "..speakerLabel(speaker).. "I\'m using a private script provided by arrivabus415!")
 end
 
 local function killSelf(speaker)
