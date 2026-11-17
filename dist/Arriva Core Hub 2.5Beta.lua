@@ -1,5 +1,4 @@
 -- Arriva Core Hub 2.5Beta.
--- Packet/Line Lag flooders removed. Gameplay features retain their original scope.
 local Hub = {alive = true, connections = {}, threads = {}, cleanups = {}, ready = false}
 Hub.env = (getgenv and getgenv()) or shared or _G
 if type(Hub.env.ArrivaCoreStarting)=="number" and os.clock()-Hub.env.ArrivaCoreStarting>=0 and os.clock()-Hub.env.ArrivaCoreStarting<8 then
