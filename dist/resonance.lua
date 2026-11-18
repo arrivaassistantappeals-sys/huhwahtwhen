@@ -34246,7 +34246,7 @@ Escape Timer: %*]]
 
 						if toggleStates.AutoReset then
 							if settings.KickFlags >= 4 and toggleStates.AutoLeave then
-								return LocalPlayer:Kick("Meowixa (Auto Reset)\nAvoided Kick")
+								return LocalPlayer:Kick("Meowixa (Auto Leave)\nAvoided Kick")
 							end
 							local v22, v23, v24 = featureUtils.Char()
 
